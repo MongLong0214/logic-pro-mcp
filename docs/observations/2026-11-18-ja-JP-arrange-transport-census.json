@@ -1,0 +1,637 @@
+{
+  "id": "2026-11-18-ja-JP-arrange-transport-census",
+  "date": "2026-11-18",
+  "schema": 3,
+  "subject": "Every string the arrange.transport surface exposes to AX in ja-JP",
+  "question": "What labels does Logic show on arrange.transport in ja-JP, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "build": "7801",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "version": "13.0"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ja-JP",
+    "expected": "a census in ja-JP whose arrange.transport rows carry the same 60 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-11-18-ja-JP-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.transport",
+      "rows": 63,
+      "distinct_strings": 60,
+      "distinct_identifiers": 21
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "4/4",
+        "Cメジャー",
+        "Flashback Capture",
+        "Smart Control",
+        "Smart Control   Y, 「Smart Control」ボタン. チャンネルストリップやプラグインを個別に編集することなく、現在のパッチのサウンドを素早く変更できます。 ",
+        "bar",
+        "beat",
+        "“プロジェクトテンポ”メニュー, 「“プロジェクトテンポ”モード」ポップアップメニュー. プロジェクトのテンポを維持するか、録音または読み込んだオーディオファイルのテンポに合わせるか、あるいはプロジェクトのテンポに関する動作を自動的に決定するかどうかを選択します。 ",
+        "「クイックヘルプ」ボタン. クイックヘルプ領域を表示します。インスペクタが非表示の場合、クイックヘルプは個別のウインドウで開きます。 ",
+        "インスペクタ",
+        "インスペクタ   I, 「インスペクタ」ボタン. 作業中の領域や選択中の項目に基づいて、リージョンおよびトラック設定を表示/編集します。チャンネルストリップのパン/ボリュームを設定したり、エフェクトを追加したりすることもできます。 ",
+        "エディタ",
+        "エディタ   E, 「エディタ」ボタン. 選択したトラックのタイプに応じたエディタ（オーディオトラックエディタ、オーディオファイルエディタ、Session Playerエディタ、ピアノロールエディタ、スコアエディタ、ステップエディタ）を開きます。 ",
+        "カウントイン",
+        "カウントイン   ⇧K, 「カウントイン」ボタン. あらかじめ定義されたカウントインを再生してから録音が始まります。Controlキーを押しながらボタンをクリックすると、カウントインの長さを選択できるメニューが開きます。 ",
+        "キー",
+        "キー, キーディスプレイ. プロジェクトのキーを示します。ポップアップメニューからメジャーまたはマイナーのキーを選択できます。 ",
+        "クイックヘルプ",
+        "コントロールバー",
+        "コントロールバー. プロジェクトとアプリ機能を操作するボタンとディスプレイがあります。カスタマイズするには、ポインタをコントロールバーの任意のボタンの上に置いて、その他ボタンが表示されたらControlキーを押したままそのボタンをクリックし、ショートカットメニューから「コントロールバーとディスプレイをカスタマイズ」を選択します。 ",
+        "サイクル",
+        "サイクル   C, 「サイクル」ボタン. ルーラに表示された黄色いサイクル範囲内のプロジェクトセクションが繰り返し再生または録音されます。 ",
+        "ソロ",
+        "ソロ, ソロボタン. 選択したリージョンだけを再生します。 ",
+        "チューナー",
+        "チューナー, 「チューナー」ボタン. システムに接続された音源をチューニングできます。 ",
+        "ツールバー",
+        "ツールバー   ⌃⌥⌘T, 「ツールバー」ボタン. 主要な機能のボタンを含むツールバーを表示します。 ",
+        "テンポ",
+        "テンポ, テンポディスプレイ. 再生または録音の速度を示します。縦方向にドラッグしてテンポを調節できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "トランスポートディスプレイ",
+        "ノートパッド",
+        "ノートパッド   ⌃⇧P, 「ノートパッド」ボタン. プロジェクトやトラックのテキストノートを作成、表示、編集できます。 ",
+        "ビートとプロジェクト",
+        "フリーテンポ録音",
+        "フリーテンポ録音   ⌃⌥⌘R, フリーテンポ録音. 録音中に既存のすべてのコンテンツをミュートしてスマートテンポ解析を行います。 ",
+        "ブラウザ",
+        "ブラウザ   B, 「ブラウザ」ボタン. ループ、ワンショット、パッチ、プラグイン設定を探して読み込みます。 ",
+        "プロジェクトファイル",
+        "プロジェクトファイル, 「プロジェクトファイル」ボタン. オーディオやその他のメディアファイルにアクセスできます。ほかのプロジェクトからデータと設定を読み込むこともできます。 ",
+        "ミキサー",
+        "ミキサー   X, 「ミキサー」ボタン. ミキサーを開きます。各トラックのチャンネルストリップが表示されます。チャンネルストリップコントロールの編集、プラグインの追加と編集、ルーティングオプションのカスタマイズができます。 ",
+        "メトロノーム",
+        "メトロノームクリック   K, 「メトロノーム」ボタン. 再生または録音中にプロジェクトテンポを刻むクリック音を流します。その他のオプションを表示するには、クリックしたままにします。 ",
+        "ライブラリ",
+        "リストエディタ",
+        "リストエディタ   D, 「リストエディタ」ボタン. MIDIイベント、マーカー、テンポチェンジ、キー/拍子イベントを表示および編集できます。 ",
+        "先頭に移動   ↩",
+        "再生",
+        "再生   ⌅, 再生ボタン. 再生ヘッドの位置から、またはサイクルモードのときはルーラの左ロケータの位置から再生を開始します。 ",
+        "再生ヘッドの位置",
+        "再生ヘッドの位置（小節）, 再生ヘッド位置ディスプレイ. 再生ヘッドの位置を小節と拍の単位で示します。各要素を縦方向にドラッグして値を編集できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "拍子",
+        "拍子, 拍子ディスプレイ. 1小節あたりの拍数と1拍の音価を示します。縦方向にドラッグして値を編集できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "置き換える",
+        "置き換える   /, 「置き換える」ボタン. 既存の録音全体またはその一部を新しい録音に置き換えます。 ",
+        "表示モード",
+        "表示モード, 「表示モード」ポップアップメニュー. ルーラの表示を小節と拍単位にするか、時間、分、秒単位にするか、その両方を組み合わせるかを切り替えます。ディスプレイを拡大表示することもできます。 ",
+        "録音",
+        "録音   R, 録音ボタン. 選択したトラック、または録音可能になっている複数のトラックに録音します。 "
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": [
+        "controlBar/browsersButton",
+        "controlBar/captureRecordingButton",
+        "controlBar/countInButton",
+        "controlBar/cycleButton",
+        "controlBar/editorsButton",
+        "controlBar/freeTempoRecordingButton",
+        "controlBar/inspectorButton",
+        "controlBar/libraryButton",
+        "controlBar/listEditorsButton",
+        "controlBar/metronomeButton",
+        "controlBar/mixerButton",
+        "controlBar/notePadsButton",
+        "controlBar/playButton",
+        "controlBar/quickHelpButton",
+        "controlBar/recordButton",
+        "controlBar/replaceButton",
+        "controlBar/smartControlsButton",
+        "controlBar/soloButton",
+        "controlBar/stopButton",
+        "controlBar/toolbarButton",
+        "controlBar/tunerButton"
+      ]
+    }
+  ],
+  "conclusion": "On this host in ja-JP, arrange.transport exposes 63 elements carrying 60 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "170 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "4/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Flashback Capture",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Smart Control",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "bar",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "beat",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「クイックヘルプ」ボタン. クイックヘルプ領域を表示します。インスペクタが非表示の場合、クイックヘルプは個別のウインドウで開きます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "インスペクタ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "エディタ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "カウントイン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "キー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "クイックヘルプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "コントロールバー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "コントロールバー. プロジェクトとアプリ機能を操作するボタンとディスプレイがあります。カスタマイズするには、ポインタをコントロールバーの任意のボタンの上に置いて、その他ボタンが表示されたらControlキーを押したままそのボタンをクリックし、ショートカットメニューから「コントロールバーとディスプレイをカスタマイズ」を選択します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サイクル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ソロ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "チューナー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ツールバー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "テンポ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トランスポートディスプレイ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ノートパッド",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ビートとプロジェクト",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "フリーテンポ録音",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ブラウザ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクトファイル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ミキサー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "メトロノーム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ライブラリ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リストエディタ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "再生",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "再生ヘッドの位置",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "拍子",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "置き換える",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "表示モード",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "録音",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "canon_absent": [
+    {
+      "claim": "26 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "strings": [
+        "Cメジャー",
+        "Smart Control   Y, 「Smart Control」ボタン. チャンネルストリップやプラグインを個別に編集することなく、現在のパッチのサウンドを素早く変更できます。 ",
+        "“プロジェクトテンポ”メニュー, 「“プロジェクトテンポ”モード」ポップアップメニュー. プロジェクトのテンポを維持するか、録音または読み込んだオーディオファイルのテンポに合わせるか、あるいはプロジェクトのテンポに関する動作を自動的に決定するかどうかを選択します。 ",
+        "インスペクタ   I, 「インスペクタ」ボタン. 作業中の領域や選択中の項目に基づいて、リージョンおよびトラック設定を表示/編集します。チャンネルストリップのパン/ボリュームを設定したり、エフェクトを追加したりすることもできます。 ",
+        "エディタ   E, 「エディタ」ボタン. 選択したトラックのタイプに応じたエディタ（オーディオトラックエディタ、オーディオファイルエディタ、Session Playerエディタ、ピアノロールエディタ、スコアエディタ、ステップエディタ）を開きます。 ",
+        "カウントイン   ⇧K, 「カウントイン」ボタン. あらかじめ定義されたカウントインを再生してから録音が始まります。Controlキーを押しながらボタンをクリックすると、カウントインの長さを選択できるメニューが開きます。 ",
+        "キー, キーディスプレイ. プロジェクトのキーを示します。ポップアップメニューからメジャーまたはマイナーのキーを選択できます。 ",
+        "サイクル   C, 「サイクル」ボタン. ルーラに表示された黄色いサイクル範囲内のプロジェクトセクションが繰り返し再生または録音されます。 ",
+        "ソロ, ソロボタン. 選択したリージョンだけを再生します。 ",
+        "チューナー, 「チューナー」ボタン. システムに接続された音源をチューニングできます。 ",
+        "ツールバー   ⌃⌥⌘T, 「ツールバー」ボタン. 主要な機能のボタンを含むツールバーを表示します。 ",
+        "テンポ, テンポディスプレイ. 再生または録音の速度を示します。縦方向にドラッグしてテンポを調節できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "ノートパッド   ⌃⇧P, 「ノートパッド」ボタン. プロジェクトやトラックのテキストノートを作成、表示、編集できます。 ",
+        "フリーテンポ録音   ⌃⌥⌘R, フリーテンポ録音. 録音中に既存のすべてのコンテンツをミュートしてスマートテンポ解析を行います。 ",
+        "ブラウザ   B, 「ブラウザ」ボタン. ループ、ワンショット、パッチ、プラグイン設定を探して読み込みます。 ",
+        "プロジェクトファイル, 「プロジェクトファイル」ボタン. オーディオやその他のメディアファイルにアクセスできます。ほかのプロジェクトからデータと設定を読み込むこともできます。 ",
+        "ミキサー   X, 「ミキサー」ボタン. ミキサーを開きます。各トラックのチャンネルストリップが表示されます。チャンネルストリップコントロールの編集、プラグインの追加と編集、ルーティングオプションのカスタマイズができます。 ",
+        "メトロノームクリック   K, 「メトロノーム」ボタン. 再生または録音中にプロジェクトテンポを刻むクリック音を流します。その他のオプションを表示するには、クリックしたままにします。 ",
+        "リストエディタ   D, 「リストエディタ」ボタン. MIDIイベント、マーカー、テンポチェンジ、キー/拍子イベントを表示および編集できます。 ",
+        "先頭に移動   ↩",
+        "再生   ⌅, 再生ボタン. 再生ヘッドの位置から、またはサイクルモードのときはルーラの左ロケータの位置から再生を開始します。 ",
+        "再生ヘッドの位置（小節）, 再生ヘッド位置ディスプレイ. 再生ヘッドの位置を小節と拍の単位で示します。各要素を縦方向にドラッグして値を編集できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "拍子, 拍子ディスプレイ. 1小節あたりの拍数と1拍の音価を示します。縦方向にドラッグして値を編集できます。ダブルクリックして新しい値を入力することもできます。 ",
+        "置き換える   /, 「置き換える」ボタン. 既存の録音全体またはその一部を新しい録音に置き換えます。 ",
+        "表示モード, 「表示モード」ポップアップメニュー. ルーラの表示を小節と拍単位にするか、時間、分、秒単位にするか、その両方を組み合わせるかを切り替えます。ディスプレイを拡大表示することもできます。 ",
+        "録音   R, 録音ボタン. 選択したトラック、または録音可能になっている複数のトラックに録音します。 "
+      ],
+      "searched": [
+        {
+          "source": "madsp",
+          "locale": "-"
+        },
+        {
+          "source": "nib",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "nibstrings",
+          "locale": "en"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
+        },
+        {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "de"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "en"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "es"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "fr"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "it"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ja"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ko"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "pt"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "strings",
+          "locale": "-"
+        },
+        {
+          "source": "strings",
+          "locale": "de"
+        },
+        {
+          "source": "strings",
+          "locale": "en"
+        },
+        {
+          "source": "strings",
+          "locale": "es"
+        },
+        {
+          "source": "strings",
+          "locale": "fr"
+        },
+        {
+          "source": "strings",
+          "locale": "it"
+        },
+        {
+          "source": "strings",
+          "locale": "ja"
+        },
+        {
+          "source": "strings",
+          "locale": "ko"
+        },
+        {
+          "source": "strings",
+          "locale": "pt"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        }
+      ],
+      "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census reading itself: they are project content, numbers and runtime text"
+    }
+  ]
+}

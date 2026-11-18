@@ -1,0 +1,442 @@
+{
+  "id": "2026-11-18-ja-JP-arrange-track_headers-census",
+  "date": "2026-11-18",
+  "schema": 3,
+  "subject": "Every string the arrange.track_headers surface exposes to AX in ja-JP",
+  "question": "What labels does Logic show on arrange.track_headers in ja-JP, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "build": "7801",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "version": "13.0"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ja-JP",
+    "expected": "a census in ja-JP whose arrange.track_headers rows carry the same 26 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-11-18-ja-JP-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.track_headers",
+      "rows": 49,
+      "distinct_strings": 26,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "0のパン",
+        "Deluxe Classic",
+        "Studio Grand",
+        "「M」ボタン. プロジェクト再生からトラックの信号を取り除いて、そのトラックの信号を無音にします。ミキサーのチャンネルストリップの「ミュート」ボタンと対応しています。一方を変更すると他方も変更されます。 ",
+        "「入力モニタリング」ボタン. 録音可能な状態でないオーディオトラックやソフトウェア音源トラックの入力信号を再生します。録音前のレベル調整やパートの練習に便利です。 ",
+        "「録音可能」ボタン. トラックを録音可能な状態にするか、録音可能な状態になっているトラックを無効にします。ボタンが変わり、トラックが非アクティブ、録音可能状態、または録音中であることを示します。 ",
+        "ソロ",
+        "ソロボタン. トラックの信号を切り離して、その音だけが聞こえるようにします。このパートを切り離すにはAuxまたは出力のものを使います。 ",
+        "トラック1の“오디오 1”",
+        "トラック2の“오디오 2”",
+        "トラック3の“Deluxe Classic”",
+        "トラック4の“Studio Grand”",
+        "トラックヘッダ",
+        "トラックヘッダ. トラックのチャンネルストリップ信号をミュート/ソロにする、トラックを録音可能な状態にする、ボリューム/パンを調整するといった操作ができます。Controlキーを押しながら「トラックヘッダコンポーネント」をクリックして選択し、どのコントロールを表示または非表示にするかを選択します。 ",
+        "パン/バランスノブ. 縦方向にドラッグして、ステレオ音場でのトラック信号の位置を設定します。 ",
+        "フォーカスされている",
+        "ボリューム",
+        "ボリュームフェーダー. トラックの再生ボリュームを設定します。ミックスのこのパートのボリュームを調整するにはAuxまたは出力チャンネルストリップを、プロジェクト全体のボリュームを設定するには出力チャンネルストリップを使います。 ",
+        "ミュート",
+        "個々のトラックをズーム. トラック下部の分割線をドラッグして、垂直トラックのズームレベルを調整します。Commandキーを押しながらドラッグすると、同じトラックタイプのすべてのトラックを調整できます。Shiftキー＋クリックですべてのトラックがデフォルトのズームレベルにリセットされます。 ",
+        "個々のトラックをズームします",
+        "入力モニタリング",
+        "名前フィールド. ダブルクリックしてトラック名を変更します。 ",
+        "録音を可能にする",
+        "오디오 1",
+        "오디오 2"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in ja-JP, arrange.track_headers exposes 49 elements carrying 26 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "170 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Deluxe Classic",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Studio Grand",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「M」ボタン. プロジェクト再生からトラックの信号を取り除いて、そのトラックの信号を無音にします。ミキサーのチャンネルストリップの「ミュート」ボタンと対応しています。一方を変更すると他方も変更されます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「入力モニタリング」ボタン. 録音可能な状態でないオーディオトラックやソフトウェア音源トラックの入力信号を再生します。録音前のレベル調整やパートの練習に便利です。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「録音可能」ボタン. トラックを録音可能な状態にするか、録音可能な状態になっているトラックを無効にします。ボタンが変わり、トラックが非アクティブ、録音可能状態、または録音中であることを示します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ソロ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ソロボタン. トラックの信号を切り離して、その音だけが聞こえるようにします。このパートを切り離すにはAuxまたは出力のものを使います。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トラックヘッダ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トラックヘッダ. トラックのチャンネルストリップ信号をミュート/ソロにする、トラックを録音可能な状態にする、ボリューム/パンを調整するといった操作ができます。Controlキーを押しながら「トラックヘッダコンポーネント」をクリックして選択し、どのコントロールを表示または非表示にするかを選択します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "パン/バランスノブ. 縦方向にドラッグして、ステレオ音場でのトラック信号の位置を設定します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "フォーカスされている",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ボリューム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ボリュームフェーダー. トラックの再生ボリュームを設定します。ミックスのこのパートのボリュームを調整するにはAuxまたは出力チャンネルストリップを、プロジェクト全体のボリュームを設定するには出力チャンネルストリップを使います。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ミュート",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "個々のトラックをズーム. トラック下部の分割線をドラッグして、垂直トラックのズームレベルを調整します。Commandキーを押しながらドラッグすると、同じトラックタイプのすべてのトラックを調整できます。Shiftキー＋クリックですべてのトラックがデフォルトのズームレベルにリセットされます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "個々のトラックをズームします",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "入力モニタリング",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "名前フィールド. ダブルクリックしてトラック名を変更します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "録音を可能にする",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "canon_absent": [
+    {
+      "claim": "7 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "strings": [
+        "0のパン",
+        "トラック1の“오디오 1”",
+        "トラック2の“오디오 2”",
+        "トラック3の“Deluxe Classic”",
+        "トラック4の“Studio Grand”",
+        "오디오 1",
+        "오디오 2"
+      ],
+      "searched": [
+        {
+          "source": "madsp",
+          "locale": "-"
+        },
+        {
+          "source": "nib",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "nibstrings",
+          "locale": "en"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
+        },
+        {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "de"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "en"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "es"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "fr"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "it"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ja"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ko"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "pt"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "strings",
+          "locale": "-"
+        },
+        {
+          "source": "strings",
+          "locale": "de"
+        },
+        {
+          "source": "strings",
+          "locale": "en"
+        },
+        {
+          "source": "strings",
+          "locale": "es"
+        },
+        {
+          "source": "strings",
+          "locale": "fr"
+        },
+        {
+          "source": "strings",
+          "locale": "it"
+        },
+        {
+          "source": "strings",
+          "locale": "ja"
+        },
+        {
+          "source": "strings",
+          "locale": "ko"
+        },
+        {
+          "source": "strings",
+          "locale": "pt"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        }
+      ],
+      "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census reading itself: they are project content, numbers and runtime text"
+    }
+  ]
+}

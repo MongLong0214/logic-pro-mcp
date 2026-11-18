@@ -1,0 +1,5049 @@
+{
+  "id": "2026-11-18-ja-JP-arrange-menus-census",
+  "date": "2026-11-18",
+  "schema": 3,
+  "subject": "Every string the arrange.menus surface exposes to AX in ja-JP",
+  "question": "What labels does Logic show on arrange.menus in ja-JP, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.menus",
+  "host": {
+    "app": "Logic Pro",
+    "build": "7801",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "version": "13.0"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ja-JP",
+    "expected": "a census in ja-JP whose arrange.menus rows carry the same 602 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-11-18-ja-JP-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.menus",
+      "rows": 778,
+      "distinct_strings": 602,
+      "distinct_identifiers": 81
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "03 Drum Machine Designer",
+        "03 Drum Machine Designer.logicx",
+        "1",
+        "1/1 - 音符",
+        "1/16 - 3連符（1/24）",
+        "1/16 -音符",
+        "1/2 - 3連符（1/3）",
+        "1/2 - 音符",
+        "1/2にする",
+        "1/2フレーム",
+        "1/32 - 3連符（1/48）",
+        "1/32 -音符",
+        "1/4",
+        "1/4 - 3連符（1/6）",
+        "1/4 - 音符",
+        "1/64 - 音符",
+        "1/64- 3連符（1/96）",
+        "1/8 - 3連符（1/12）",
+        "1/8 -音符",
+        "10ティック",
+        "10ミリ秒",
+        "1つのグローバルトラックを表示",
+        "1ミリ秒",
+        "1回",
+        "1小節",
+        "2/4",
+        "2倍",
+        "2分割",
+        "2小節",
+        "3/4",
+        "3小節",
+        "4/4",
+        "4分割",
+        "4小節",
+        "5/4",
+        "5フレーム",
+        "5小節",
+        "6/4",
+        "6小節",
+        "7/4",
+        "8/4",
+        "9/4",
+        "AAF…",
+        "ADM BWFからプロジェクトを作成…",
+        "AH-200HZBに移動",
+        "AirDrop…",
+        "App Store",
+        "App Store…、5개의 업데이트",
+        "Apple",
+        "Apple Creator Studioについての詳しい情報…",
+        "Aside",
+        "Assign Track Icon…",
+        "Aux",
+        "DELL P2425Hに移動",
+        "Discord",
+        "Final Cut Pro XML…",
+        "Finderに表示",
+        "Finderに表示…",
+        "Finder에서 ‘03 Drum Machine Designer.logicx’ 보기",
+        "Finder에서 ‘03 Drum Machine Designer’ 보기",
+        "Finder에서 ‘App Store’ 보기",
+        "Finder에서 ‘Aside’ 보기",
+        "Finder에서 ‘Discord’ 보기",
+        "Finder에서 ‘Google Chrome’ 보기",
+        "Finder에서 ‘Logic Pro’ 보기",
+        "Finder에서 ‘NativeLogic13-9995.logicx’ 보기",
+        "Finder에서 ‘OrbStack’ 보기",
+        "Finder에서 ‘QualFixtureR11’ 보기",
+        "Finder에서 ‘ROLI Connect’ 보기",
+        "Finder에서 ‘Warp’ 보기",
+        "Finder에서 ‘en-final’ 보기",
+        "Finder에서 ‘logic-claude-handoff.command’ 보기",
+        "Finder에서 ‘qualification’ 보기",
+        "Finder에서 ‘텍스트-4B34-8C6B-9E-0.txt’ 보기",
+        "Finder에서 ‘시스템 설정’ 보기",
+        "Finder에서 ‘터미널’ 보기",
+        "Flex Pitch/Flex Time",
+        "Google Chrome",
+        "I/Oラベル…",
+        "I/O割り当て…",
+        "Isaac 로그아웃",
+        "Isaac 로그아웃…",
+        "Live Loopsグリッド…",
+        "Logic Pro",
+        "Logic Pro 강제 종료",
+        "Logic Proについて",
+        "Logic ProのWebサイト",
+        "Logic Proのディスカッション",
+        "Logic Proのフィードバックを送信",
+        "Logic Proの新機能",
+        "Logic Proを終了",
+        "Logic Proを非表示",
+        "Logic Proエフェクト",
+        "Logic Proコントロールサーフェスサポート",
+        "Logic Proサポート",
+        "Logic Proヘルプ",
+        "Logic Pro音源",
+        "Logic Remoteに関する情報…",
+        "Logicプロジェクト…",
+        "MIDI",
+        "MIDI…",
+        "MIDIイベントをコピー…",
+        "MIDIイベントを分離",
+        "MIDIイベントを削除",
+        "MIDIチャンネル",
+        "MIDIチャンネルで分離",
+        "MIDIトランスフォームを開く",
+        "MIDIファイル…",
+        "MIDIリージョンへ",
+        "MIDIループをエイリアスに",
+        "MIDI録音が重複する場合",
+        "Macintosh HD",
+        "MainStageセットとして選択したトラック…",
+        "MainStageパッチとして選択したトラック…",
+        "Mastering Assistant…",
+        "MusicXML…",
+        "NativeLogic13-9995.logicx",
+        "OrbStack",
+        "QualFixtureR11",
+        "QualFixtureR11 - トラック",
+        "ROLI Connect",
+        "Readモードでオートメーションパラメータを自動選択",
+        "SMPTEビット",
+        "SMPTEロックリージョン",
+        "Session Playerリージョンに",
+        "Smart Control",
+        "Smart Controlを開く",
+        "Track Stackを作成…",
+        "Warp",
+        "en-final",
+        "en-final —  native-fixture",
+        "en-final —  release-3.19-7c125b11-native-rerun-20261113",
+        "en-final —  release-3.19-7c125b11-pre-rerun-mutated-20261113",
+        "ko-rerun2",
+        "ko-rerun2-logic13",
+        "logic-claude-handoff.command",
+        "qualification",
+        "텍스트-4B34-8C6B-9E-0.txt",
+        "しまう",
+        "すべて",
+        "すべてのMIDIトラックをMIDIファイルとして…",
+        "すべてのコントロールサーフェスをバイパス",
+        "すべてのシーンマーカー",
+        "すべてのトラックのハイドモードを解除",
+        "すべてのトラックをオーディオファイルとして…",
+        "すべてのトラックを置き換える…",
+        "すべてのトラックオートメーションをリージョンオートメーションに変換",
+        "すべてのトラックオートメーションを削除",
+        "すべてのプラグインウインドウ",
+        "すべてのリージョンオートメーションをトラックオートメーションに変換",
+        "すべての選択を解除",
+        "すべてをしまう",
+        "すべてを手前に移動",
+        "すべてを拡大/縮小",
+        "すべてを表示",
+        "その他",
+        "その他…",
+        "なし",
+        "ほかを非表示",
+        "やり直しできません",
+        "アレンジメントトラック",
+        "アーティキュレーションで分離",
+        "イベントフロート",
+        "イベントリストを開く",
+        "インスペクタ",
+        "インスペクタパネル",
+        "ウインドウ",
+        "ウインドウをセットから削除",
+        "ウインドウを巡回",
+        "ウインドウを整理",
+        "エディタ",
+        "オリジナルの位置にペースト",
+        "オーディオ",
+        "オーディオ…",
+        "オーディオをムービーに書き出す…",
+        "オーディオチャンネル",
+        "オーディオトラックエディタを開く",
+        "オーディオファイル…",
+        "オーディオファイルからマーカーを取り除く",
+        "オーディオファイルからマーカーを読み込む",
+        "オーディオファイルを別名で…",
+        "オーディオファイルエディタを開く",
+        "オーディオリージョンを新規オーディオファイルに変換",
+        "オーディオリージョンを新規リージョンに変換",
+        "オーディオ録音が重複する場合",
+        "オートメーション…",
+        "オートメーションを削除",
+        "オートメーションを変換",
+        "オートメーションを表示",
+        "オートメーションクイックアクセスを有効にする",
+        "オートメーション設定…",
+        "オーバーラップ",
+        "カウントイン",
+        "カット",
+        "カラー",
+        "キットピースで分離",
+        "キー/拍子トラック",
+        "キー/拍子リストを開く",
+        "キーコマンド",
+        "キーコマンドの割り当て以外のすべての設定をリセット…",
+        "クイックパンチインを許可",
+        "クイックヘルプ",
+        "クイックヘルプの表示形式",
+        "グループをアクティブに",
+        "グループを作成",
+        "グループ設定",
+        "グローバルトラック",
+        "グローバルトラックの選択を解除",
+        "グローバルトラックを設定…",
+        "コピー",
+        "コピーを保存…",
+        "コンテンツのパンチ",
+        "コンテンツの消去",
+        "コントローラアサインメント…",
+        "コントロールサーフェス",
+        "コントロールサーフェス…",
+        "コントロールバー",
+        "コントロールバーとディスプレイをカスタマイズ…",
+        "コードグリッドライブラリ…",
+        "コードトラック",
+        "サイクルの範囲",
+        "サイクルの長さの分ロケータを前に移動",
+        "サイクルの長さの分ロケータを後ろに移動",
+        "サイクルオフ",
+        "サイクルオン",
+        "サイクル開始位置から再生",
+        "サウンドライブラリ…",
+        "サブ/VCA",
+        "サポートプロファイルを作成…",
+        "サミングトラック",
+        "サンプル",
+        "サービス",
+        "サービスは適用できません",
+        "サービス設定…",
+        "シャッフル右",
+        "シャッフル左",
+        "シーンを再生ヘッド位置にコピー",
+        "スクリーンセット1 (トラック/ミキサー/イベント)",
+        "スコア…",
+        "スコアをMusicXMLとして…",
+        "スコアエディタを開く",
+        "スタックをフラット化",
+        "ステップインプット",
+        "ステップインプットキーボード",
+        "ステップエディタを開く",
+        "ステップシーケンサーを開く",
+        "スマートテンポ…",
+        "スマートテンポのマルチトラックセットを作成",
+        "スマートテンポエディタ",
+        "スマートテンポエディタを開く",
+        "ソロ",
+        "タイムストレッチ",
+        "タイムストレッチアルゴリズム",
+        "チューニング…",
+        "ツールバー",
+        "ツールバーをカスタマイズ…",
+        "ティック",
+        "テイクフォルダを作成",
+        "テンプレートから新規作成…",
+        "テンプレートとして保存…",
+        "テンポ",
+        "テンポインタープリタ…",
+        "テンポオペレーション…",
+        "テンポトラック",
+        "テンポリストを表示",
+        "テンポ情報を削除",
+        "ディビジョン",
+        "デフォルトに戻す",
+        "トラック",
+        "トラックごとに結合",
+        "トラックをオーディオファイルとして…",
+        "トラックを並べ替える",
+        "トラックを作成",
+        "トラックを作成してミュート",
+        "トラックを削除",
+        "トラックを所定の場所に…",
+        "トラックを検索して選択…",
+        "トラックを選択",
+        "トラックオートメーションを作成",
+        "トラックカラーを割り当て…",
+        "トラックヘッダを設定…",
+        "トラック名",
+        "トラック名を変更",
+        "トランスポートフロートを開く",
+        "トリム",
+        "ドラムトラックを置き換え/ダブリング…",
+        "ドルビーアトモス…",
+        "ナッジ値を設定",
+        "ノートパッド",
+        "ノートピッチで分離",
+        "バウンス",
+        "バウンスまたは結合",
+        "パターンリージョンへ",
+        "パーカッシブ",
+        "ビート",
+        "ビートに",
+        "ビートマッピングトラック",
+        "ビートマッピングトラックを表示",
+        "ピアノロールを開く",
+        "ファイル",
+        "フォルダ",
+        "フォルダスタック",
+        "フォルダスタックをサミングスタックに変換",
+        "フォーカストラックへ",
+        "フリーズ済み",
+        "フルスクリーンにする",
+        "フルスクリーンのタイル表示",
+        "フレーム",
+        "フローティングウインドウ",
+        "ブラウザ",
+        "ブラウザに追加…",
+        "プラグインの検索と追加…",
+        "プラグインマネージャ…",
+        "プリフェーダーメーター表示",
+        "プリント",
+        "プレイサーフェス",
+        "プロジェクトまたは選択範囲…",
+        "プロジェクトをAAFファイルとして…",
+        "プロジェクトをFinal Cut Pro XMLに…",
+        "プロジェクトをiOS用GarageBandに…",
+        "プロジェクトを空間オーディオとして…",
+        "プロジェクトを閉じる",
+        "プロジェクトオーディオを開く",
+        "プロジェクトテンポをオーディオファイルに書き込む",
+        "プロジェクトテンポをリージョンとダウンビートに適用",
+        "プロジェクトファイル",
+        "プロジェクト管理",
+        "プロジェクト設定",
+        "プロジェクト設定を読み込む…",
+        "ヘルプ",
+        "ページ設定…",
+        "ペースト",
+        "ボリューム、パン、センドにオートメーションポイントを1つずつ作成",
+        "ボリューム、パン、センドにオートメーションポイントを2つずつ作成",
+        "ポインタの位置に吹き出し",
+        "マスタートラック",
+        "マーカーの名前を変更",
+        "マーカーの選択範囲で/選択したコードで",
+        "マーカーをオーディオファイルに書き出す",
+        "マーカーを作成",
+        "マーカーテキストを開く",
+        "マーカートラック",
+        "マーカーリストを開く",
+        "マーカー番号…",
+        "マーキーの選択範囲",
+        "マーキーの選択範囲で",
+        "マーキー選択範囲から再生",
+        "ミキサー",
+        "ミキサーを開く",
+        "ミックス",
+        "ミュージックグリッドを使用",
+        "ミュージックタイピング",
+        "ミュートされたリージョン",
+        "ミュート中",
+        "ムービー",
+        "ムービー…",
+        "ムービーからオーディオを読み込む",
+        "ムービーを削除",
+        "ムービーを開く…",
+        "ムービーウインドウ",
+        "ムービーシーンのカットマーカーを作成",
+        "ムービーシーンのカットマーカーを取り除く",
+        "ムービートラック",
+        "ムービーファイルをプロジェクトから取り除く…",
+        "ムービー全体",
+        "メインウインドウを開く",
+        "メイン出力でボリュームフェードアウトを作成",
+        "メトロノーム…",
+        "メトロノーム設定…",
+        "メニューを消去",
+        "メール…",
+        "ユニバーサル",
+        "リストエディタ",
+        "リピート",
+        "リリースノート",
+        "リージョン/マーキー選択範囲のマーカーを作成",
+        "リージョンと一緒にトラックオートメーションを移動",
+        "リージョンのテンポをプロジェクトテンポに適用…",
+        "リージョンのパンチ",
+        "リージョンの両端にオートメーションポイントを1つずつ作成",
+        "リージョンの両端にオートメーションポイントを2つずつ作成",
+        "リージョンの境界外",
+        "リージョンの消去",
+        "リージョンの選択範囲をLive Loopsシーンにコピー",
+        "リージョンの長さとロケータを使ってテンポを調整",
+        "リージョンの長さをロケータ位置までタイムストレッチ",
+        "リージョンの長さを最も近い小節までタイムストレッチ",
+        "リージョンをオーディオファイルとして…",
+        "リージョンをロケータ位置で",
+        "リージョンを再生ヘッド位置で",
+        "リージョンを所定の場所に…",
+        "リージョンを所定の場所にバウンス…",
+        "リージョンを新規サンプラートラックに変換…",
+        "リージョンインスペクタフロート",
+        "リージョン終了を前のトランジェントまで",
+        "リージョン終了を次のトランジェントまで",
+        "リージョン終了を次のリージョンまで",
+        "リージョン開始を前のトランジェントまで",
+        "リージョン開始を前のリージョンまで",
+        "リージョン開始を次のトランジェントまで",
+        "ループをリージョンに",
+        "レガシーアルゴリズム",
+        "ロケータの位置に無音を挿入",
+        "ロケータの範囲内",
+        "ロケータの範囲内すべて",
+        "ロケータの範囲外",
+        "ロケータの範囲外を切り取る",
+        "ロケータの間のセクションを繰り返す",
+        "ロケータを自動設定",
+        "ロケータを選択範囲で設定してサイクルを有効にする",
+        "ロケータ内を埋める",
+        "ロケータ範囲外の選択を解除",
+        "ロケータ間のセクションをカット",
+        "ロケータ間のセクションをコピー",
+        "ロック",
+        "一般…",
+        "上",
+        "上と4分割",
+        "上と下",
+        "下",
+        "下と4分割",
+        "下と上",
+        "中央に配置",
+        "代替トラック",
+        "代替トラックを作成",
+        "代替プロジェクト",
+        "似たリージョン",
+        "位置…",
+        "低レイテンシモニタリングモード",
+        "作成日",
+        "使用、不使用",
+        "使用されていないトラックを削除",
+        "保存",
+        "停止",
+        "停止した場合、サイクル開始とプロジェクト開始の間をジャンプ",
+        "停止した場合、マーキー開始とプロジェクト開始の間をジャンプ",
+        "停止した場合、最後に指定した位置とプロジェクト開始の間をジャンプ",
+        "停止した場合、選択したリージョン開始とプロジェクト開始の間をジャンプ",
+        "停止して左ロケータに移動",
+        "停止して最後に指定した位置に移動",
+        "停止ボタンオプション",
+        "共有",
+        "再生ヘッドの位置にシーンを挿入",
+        "再生ヘッドの位置にセクションを挿入",
+        "再生ヘッド位置に",
+        "再生ヘッド位置のマーカーを削除",
+        "再生ボタンオプション",
+        "冗長なオートメーションポイントを削除",
+        "出力チャンネル",
+        "分割",
+        "別名で保存…",
+        "削除",
+        "削除して移動",
+        "前のサイズに戻す",
+        "前のマーカー",
+        "前のリージョン",
+        "反時計回りに回転",
+        "取り消し履歴…",
+        "取り消し履歴を削除",
+        "取り消す- 템포 변경",
+        "右",
+        "右と4分割",
+        "右と左",
+        "右にナッジ",
+        "右へスリップ",
+        "右ロケータ",
+        "右上",
+        "右下",
+        "同じチャンネルを使った新規トラック",
+        "同じトラックの後続のものすべて",
+        "同じリージョン",
+        "同じ色",
+        "同じ色のリージョン",
+        "同期…",
+        "名称変更…",
+        "変換",
+        "変更…",
+        "外部サンプルエディタで開く",
+        "小節",
+        "左",
+        "左と4分割",
+        "左と右",
+        "左にナッジ",
+        "左へスリップ",
+        "左ロケータ",
+        "左上",
+        "左下",
+        "常に",
+        "後続のものすべて",
+        "戻す",
+        "拡大/縮小",
+        "整理…",
+        "新規",
+        "新規Session Playerソフトウェア音源トラック…",
+        "新規オーディオトラック",
+        "新規ソフトウェア音源トラック",
+        "新規トラック…",
+        "新規トラックを作成",
+        "新規外部MIDIトラック",
+        "時計回りに回転",
+        "時間をカット/挿入",
+        "曲をiTunesに…",
+        "曲をボイスメモに…",
+        "書き出す",
+        "最初のトランジェントを最も近い拍に",
+        "最後に保存した状態に戻す",
+        "最後に指定した位置から再生",
+        "最近使った項目を開く",
+        "未使用",
+        "次のチャンネルを使った新規トラック",
+        "次のマーカー",
+        "次のリージョン",
+        "正確に作成",
+        "現在の録音のみを結合",
+        "画面全体に表示",
+        "画面右側",
+        "画面左側",
+        "確認",
+        "移動",
+        "移動とサイズ変更",
+        "空のリージョン",
+        "素材…",
+        "結合",
+        "統合…",
+        "編集",
+        "繰り返しをループに",
+        "置き換えてペースト",
+        "置き換える",
+        "自分の情報…",
+        "自動入力モニタリング",
+        "自動範囲",
+        "自動設定ロケータを有効にする",
+        "表示",
+        "表示…",
+        "表示されているパラメータにオートメーションポイントを1つ作成",
+        "表示されているパラメータにオートメーションポイントを2つ作成",
+        "表示しない",
+        "表示中のトラックオートメーションをリージョンオートメーションに変換",
+        "表示中のリージョンオートメーションをトラックオートメーションに変換",
+        "複数…",
+        "複製…",
+        "複雑",
+        "設定",
+        "設定…",
+        "設定およびコンテンツの複製を使った新規トラック",
+        "設定の複製を使った新規トラック",
+        "読み込む",
+        "選択",
+        "選択したトラックのすべてのオートメーションを削除",
+        "選択したトラックの参照元不明のオートメーションを削除",
+        "選択したトラックを表示/非表示",
+        "選択したトラック上で表示されているオートメーションを削除",
+        "選択したノートで",
+        "選択したリージョン",
+        "選択したリージョンから再生",
+        "選択したリージョンで",
+        "選択したリージョンをオーバーラップ/結合",
+        "選択したリージョン用の新規トラック",
+        "選択していないトラックを表示/非表示",
+        "選択範囲でおおよその位置にロケータを設定してサイクルを有効にする",
+        "選択範囲の始まり",
+        "選択範囲の終わり",
+        "選択範囲をMIDIファイルとして…",
+        "選択範囲をオーディオファイルとして…",
+        "選択範囲内の選択されていない項目",
+        "選択部分へジャンプ",
+        "選択項目を反転",
+        "配置",
+        "重なったオブジェクトを削除",
+        "重なったリージョン",
+        "重なったリージョン用の新規トラック",
+        "重複したオブジェクト",
+        "録音",
+        "録音/繰り返し録音",
+        "録音/録音を切り替え",
+        "録音…",
+        "録音ボタンオプション",
+        "録音位置に",
+        "録音設定…",
+        "長さ",
+        "閉じる",
+        "開く…",
+        "非表示を切り替え",
+        "音源",
+        "音源名",
+        "강제 종료...",
+        "메뉴 지우기",
+        "문서",
+        "서버",
+        "시스템 설정",
+        "시스템 설정…",
+        "시스템 정보",
+        "시스템 종료",
+        "시스템 종료…",
+        "응용 프로그램",
+        "이 Mac에 관하여",
+        "잠금 화면",
+        "잠자기",
+        "재시동",
+        "재시동…",
+        "최근 사용 항목",
+        "터미널"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": [
+        "_aboutThisMacRequested:",
+        "_appStoreRequested:",
+        "_clearRecentItemsRequested:",
+        "_configureServicesMenu:",
+        "_cycleWindows:",
+        "_forceQuitPanelRequested:",
+        "_forceQuitRequested:",
+        "_lockScreenRequested:",
+        "_logOutNowRequested:",
+        "_logOutRequested:",
+        "_moveToDisplay:",
+        "_noServicesApplyAction:",
+        "_openRecentDocument:",
+        "_recentItemRequested:",
+        "_recentsRequested:",
+        "_removeWindowFromStageManagerSet:",
+        "_restartNowRequested:",
+        "_restartRequested:",
+        "_shutDownNowRequested:",
+        "_shutDownRequested:",
+        "_sleepRequested:",
+        "_systemInformationRequested:",
+        "_systemSettingsRequested:",
+        "_tileLeft:",
+        "_tileRight:",
+        "_zoomBottom:",
+        "_zoomBottomAndTop:",
+        "_zoomBottomLeft:",
+        "_zoomBottomRight:",
+        "_zoomBottomThreeUp:",
+        "_zoomCenter:",
+        "_zoomFill:",
+        "_zoomLeft:",
+        "_zoomLeftAndRight:",
+        "_zoomLeftThreeUp:",
+        "_zoomQuarters:",
+        "_zoomRight:",
+        "_zoomRightAndLeft:",
+        "_zoomRightThreeUp:",
+        "_zoomTop:",
+        "_zoomTopAndBottom:",
+        "_zoomTopLeft:",
+        "_zoomTopRight:",
+        "_zoomTopThreeUp:",
+        "_zoomUntile:",
+        "alternateArrangeInFront:",
+        "arrangeInFront:",
+        "clearRecentDocuments:",
+        "copy:",
+        "cut:",
+        "delete:",
+        "deselectAll:",
+        "doScreensetsMenuCall:",
+        "globalCreateSupportProfile:",
+        "globalHelpMenuItemCall:",
+        "globalMenuItemCall:",
+        "hide:",
+        "hideOtherApplications:",
+        "invertSelection:",
+        "localMenuItemAction:",
+        "makeKeyAndOrderFront:",
+        "miniaturizeAll:",
+        "newDocument:",
+        "openAboutPanel:",
+        "openDocument:",
+        "paste:",
+        "performClose:",
+        "performMiniaturize:",
+        "performZoom:",
+        "print:",
+        "redo:",
+        "runPageLayout:",
+        "saveDocument:",
+        "saveDocumentAs:",
+        "saveDocumentTo:",
+        "selectAll:",
+        "terminate:",
+        "toggleFullScreen:",
+        "undo:",
+        "unhideAllApplications:",
+        "zoomAll:"
+      ]
+    }
+  ],
+  "conclusion": "On this host in ja-JP, arrange.menus exposes 778 elements carrying 602 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "170 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic.",
+    "2 strings are neither cited nor proved absent: each is absent from Apple's corpora as bytes and a shipped label folds to it (a colon, an ellipsis, a case), so the spelling Logic ships is not something this census read: 시스템 설정…; 최근 사용 항목"
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "1",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/1 - 音符",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/16 - 3連符（1/24）",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/16 -音符",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/2 - 3連符（1/3）",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/2 - 音符",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "1/2にする",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/2フレーム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/32 - 3連符（1/48）",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/32 -音符",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "1/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/4 - 3連符（1/6）",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/4 - 音符",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/64 - 音符",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/64- 3連符（1/96）",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/8 - 3連符（1/12）",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1/8 -音符",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "10ティック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "10ミリ秒",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1つのグローバルトラックを表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1ミリ秒",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1回",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "1小節",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "2/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "2倍",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "2小節",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "3/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "3小節",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "4/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "4分割",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "4小節",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "5/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "5フレーム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "5小節",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "6/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "6小節",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "7/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "8/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "9/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "AAF…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ADM BWFからプロジェクトを作成…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "AirDrop…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Assign Track Icon…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Aux",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Final Cut Pro XML…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "Finderに表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Finderに表示…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Flex Pitch/Flex Time",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "I/Oラベル…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "I/O割り当て…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Live Loopsグリッド…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Logic Pro",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "Logic Proについて",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "Logic Proの新機能",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "Logic Proヘルプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Logicプロジェクト…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "MIDI",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDI…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDIイベントをコピー…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDIイベントを分離",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDIイベントを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "MIDIチャンネル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "MIDIチャンネルで分離",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "MIDIトランスフォームを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDIファイル…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDIリージョンへ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDIループをエイリアスに",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDI録音が重複する場合",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MainStageセットとして選択したトラック…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MainStageパッチとして選択したトラック…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Mastering Assistant…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MusicXML…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "Readモードでオートメーションパラメータを自動選択",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "SMPTEビット",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "SMPTEロックリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Session Playerリージョンに",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Smart Control",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "Smart Controlを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "Track Stackを作成…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "しまう",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "すべて",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "すべてのMIDIトラックをMIDIファイルとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "すべてのコントロールサーフェスをバイパス",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "すべてのシーンマーカー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "すべてのトラックのハイドモードを解除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "すべてのトラックをオーディオファイルとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "すべてのトラックを置き換える…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "すべてのトラックオートメーションをリージョンオートメーションに変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "すべてのトラックオートメーションを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "すべてのプラグインウインドウ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "すべてのリージョンオートメーションをトラックオートメーションに変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "すべての選択を解除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "すべてをしまう",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "すべてを手前に移動",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "すべてを表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "その他",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "その他…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "なし",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ほかを非表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "やり直しできません",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "アレンジメントトラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "アーティキュレーションで分離",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "イベントフロート",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "イベントリストを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "インスペクタ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "インスペクタパネル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ウインドウ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ウインドウを巡回",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "エディタ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オリジナルの位置にペースト",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "オーディオ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオ…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオをムービーに書き出す…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオチャンネル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオトラックエディタを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオファイル…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オーディオファイルからマーカーを取り除く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オーディオファイルからマーカーを読み込む",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオファイルを別名で…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オーディオファイルエディタを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オーディオリージョンを新規オーディオファイルに変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオリージョンを新規リージョンに変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオ録音が重複する場合",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オートメーション…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オートメーションを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オートメーションを変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オートメーションを表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オートメーションクイックアクセスを有効にする",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オートメーション設定…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オーバーラップ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "カウントイン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "カット",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "カラー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "キットピースで分離",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "キー/拍子トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "キー/拍子リストを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "キーコマンド",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "キーコマンドの割り当て以外のすべての設定をリセット…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "クイックパンチインを許可",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "クイックヘルプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "クイックヘルプの表示形式",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "グループをアクティブに",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "グループを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "グループ設定",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "グローバルトラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "グローバルトラックの選択を解除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "グローバルトラックを設定…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "コピー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "コピーを保存…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "コンテンツのパンチ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "コンテンツの消去",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "コントローラアサインメント…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "コントロールサーフェス",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "コントロールサーフェス…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "コントロールバー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "コントロールバーとディスプレイをカスタマイズ…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "コードグリッドライブラリ…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "コードトラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "サイクルの範囲",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "サイクルの長さの分ロケータを前に移動",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "サイクルの長さの分ロケータを後ろに移動",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サイクルオフ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サイクルオン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サイクル開始位置から再生",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サウンドライブラリ…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サブ/VCA",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サポートプロファイルを作成…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サミングトラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "サンプル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "サービス",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "シャッフル右",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "シャッフル左",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "シーンを再生ヘッド位置にコピー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "スコア…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "スコアをMusicXMLとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "スコアエディタを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "スタックをフラット化",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ステップインプット",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ステップインプットキーボード",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ステップエディタを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ステップシーケンサーを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "スマートテンポ…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "スマートテンポのマルチトラックセットを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "スマートテンポエディタ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "スマートテンポエディタを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ソロ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "タイムストレッチ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "タイムストレッチアルゴリズム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "チューニング…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ツールバー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ツールバーをカスタマイズ…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ティック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "テイクフォルダを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "テンプレートから新規作成…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "テンプレートとして保存…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "テンポ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "テンポインタープリタ…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "テンポオペレーション…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "テンポトラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "テンポリストを表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "テンポ情報を削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ディビジョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "デフォルトに戻す",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックごとに結合",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックをオーディオファイルとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックを並べ替える",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トラックを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トラックを作成してミュート",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トラックを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックを所定の場所に…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックを検索して選択…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックを選択",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックオートメーションを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックカラーを割り当て…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックヘッダを設定…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラック名",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トラック名を変更",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トランスポートフロートを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トリム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ドラムトラックを置き換え/ダブリング…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ドルビーアトモス…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ナッジ値を設定",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ノートパッド",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ノートピッチで分離",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "バウンス",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "バウンスまたは結合",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "パターンリージョンへ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "パーカッシブ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ビート",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ビートに",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ビートマッピングトラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ビートマッピングトラックを表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ピアノロールを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ファイル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "フォルダ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "フォルダスタック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "フォルダスタックをサミングスタックに変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "フォーカストラックへ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "フリーズ済み",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "フレーム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "フローティングウインドウ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ブラウザ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ブラウザに追加…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プラグインの検索と追加…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プラグインマネージャ…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "プリフェーダーメーター表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "プリント",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プレイサーフェス",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクトまたは選択範囲…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクトをAAFファイルとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクトをFinal Cut Pro XMLに…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクトをiOS用GarageBandに…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクトを空間オーディオとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "プロジェクトを閉じる",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "プロジェクトオーディオを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "プロジェクトテンポをオーディオファイルに書き込む",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "プロジェクトテンポをリージョンとダウンビートに適用",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクトファイル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクト管理",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクト設定",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "プロジェクト設定を読み込む…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ヘルプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ページ設定…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ペースト",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ボリューム、パン、センドにオートメーションポイントを1つずつ作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ボリューム、パン、センドにオートメーションポイントを2つずつ作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ポインタの位置に吹き出し",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "マスタートラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "マーカーの名前を変更",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "マーカーの選択範囲で/選択したコードで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "マーカーをオーディオファイルに書き出す",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "マーカーを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "マーカーテキストを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "マーカートラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "マーカーリストを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "マーカー番号…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "マーキーの選択範囲",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "マーキーの選択範囲で",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "マーキー選択範囲から再生",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ミキサー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ミキサーを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ミックス",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ミュージックグリッドを使用",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ミュージックタイピング",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ミュートされたリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ミュート中",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ムービー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ムービー…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ムービーからオーディオを読み込む",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ムービーを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ムービーを開く…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ムービーウインドウ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ムービーシーンのカットマーカーを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ムービーシーンのカットマーカーを取り除く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ムービートラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ムービーファイルをプロジェクトから取り除く…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ムービー全体",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "メインウインドウを開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "メイン出力でボリュームフェードアウトを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "メトロノーム…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "メトロノーム設定…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "メール…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ユニバーサル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リストエディタ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リピート",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョン/マーキー選択範囲のマーカーを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "リージョンと一緒にトラックオートメーションを移動",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンのテンポをプロジェクトテンポに適用…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "リージョンのパンチ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "リージョンの両端にオートメーションポイントを1つずつ作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "リージョンの両端にオートメーションポイントを2つずつ作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンの境界外",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "リージョンの消去",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンの選択範囲をLive Loopsシーンにコピー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "リージョンの長さとロケータを使ってテンポを調整",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "リージョンの長さをロケータ位置までタイムストレッチ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "リージョンの長さを最も近い小節までタイムストレッチ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンをオーディオファイルとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンをロケータ位置で",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンを再生ヘッド位置で",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンを所定の場所に…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンを所定の場所にバウンス…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンを新規サンプラートラックに変換…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョンインスペクタフロート",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョン終了を前のトランジェントまで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョン終了を次のトランジェントまで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョン終了を次のリージョンまで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョン開始を前のトランジェントまで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョン開始を前のリージョンまで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リージョン開始を次のトランジェントまで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ループをリージョンに",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "レガシーアルゴリズム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ロケータの位置に無音を挿入",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ロケータの範囲内",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ロケータの範囲内すべて",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ロケータの範囲外",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ロケータの範囲外を切り取る",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ロケータの間のセクションを繰り返す",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ロケータを自動設定",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ロケータを選択範囲で設定してサイクルを有効にする",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ロケータ内を埋める",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ロケータ範囲外の選択を解除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ロケータ間のセクションをカット",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ロケータ間のセクションをコピー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ロック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "一般…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "上",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "下",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "代替トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "代替トラックを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "代替プロジェクト",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "似たリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "位置…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "低レイテンシモニタリングモード",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "作成日",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "使用、不使用",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "使用されていないトラックを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "保存",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "停止",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "停止した場合、サイクル開始とプロジェクト開始の間をジャンプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "停止した場合、マーキー開始とプロジェクト開始の間をジャンプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "停止した場合、最後に指定した位置とプロジェクト開始の間をジャンプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "停止した場合、選択したリージョン開始とプロジェクト開始の間をジャンプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "停止して左ロケータに移動",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "停止して最後に指定した位置に移動",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "停止ボタンオプション",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "共有",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "再生ヘッドの位置にシーンを挿入",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "再生ヘッドの位置にセクションを挿入",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "再生ヘッド位置に",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "再生ヘッド位置のマーカーを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "再生ボタンオプション",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "冗長なオートメーションポイントを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "出力チャンネル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "分割",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "別名で保存…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "削除して移動",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "前のマーカー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "前のリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "反時計回りに回転",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "取り消し履歴…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "取り消し履歴を削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "右",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "右にナッジ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "右へスリップ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "右ロケータ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "右上",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "右下",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "同じチャンネルを使った新規トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "同じトラックの後続のものすべて",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "同じリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "同じ色",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "同じ色のリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "同期…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "名称変更…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "変更…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "外部サンプルエディタで開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "小節",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "左",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "左にナッジ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "左へスリップ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "左ロケータ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "左上",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "左下",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "常に",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "後続のものすべて",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "戻す",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "拡大/縮小",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "整理…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "新規",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "新規Session Playerソフトウェア音源トラック…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "新規オーディオトラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "新規ソフトウェア音源トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "新規トラック…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "新規トラックを作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "新規外部MIDIトラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "時計回りに回転",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "時間をカット/挿入",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "曲をiTunesに…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "曲をボイスメモに…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "書き出す",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "最初のトランジェントを最も近い拍に",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "最後に保存した状態に戻す",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "最後に指定した位置から再生",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "未使用",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "次のチャンネルを使った新規トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "次のマーカー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "次のリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "正確に作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "現在の録音のみを結合",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "確認",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "移動",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "空のリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "素材…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "結合",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "統合…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "編集",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "繰り返しをループに",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "置き換えてペースト",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "置き換える",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "自分の情報…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "自動入力モニタリング",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "自動範囲",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "自動設定ロケータを有効にする",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "表示…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "表示されているパラメータにオートメーションポイントを1つ作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "表示されているパラメータにオートメーションポイントを2つ作成",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "表示しない",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "表示中のトラックオートメーションをリージョンオートメーションに変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "表示中のリージョンオートメーションをトラックオートメーションに変換",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "複数…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "複製…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "複雑",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "設定",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "設定…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "設定およびコンテンツの複製を使った新規トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "設定の複製を使った新規トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "読み込む",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択したトラックのすべてのオートメーションを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択したトラックの参照元不明のオートメーションを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択したトラックを表示/非表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択したトラック上で表示されているオートメーションを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択したノートで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択したリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択したリージョンから再生",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択したリージョンで",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択したリージョンをオーバーラップ/結合",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択したリージョン用の新規トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択していないトラックを表示/非表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択範囲でおおよその位置にロケータを設定してサイクルを有効にする",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択範囲の始まり",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択範囲の終わり",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択範囲をMIDIファイルとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択範囲をオーディオファイルとして…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択範囲内の選択されていない項目",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "選択部分へジャンプ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "選択項目を反転",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "配置",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "重なったオブジェクトを削除",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "重なったリージョン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "重なったリージョン用の新規トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "重複したオブジェクト",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "録音",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "録音/繰り返し録音",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "録音/録音を切り替え",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "録音…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "録音ボタンオプション",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "録音位置に",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "録音設定…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "長さ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "閉じる",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "開く…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "非表示を切り替え",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "音源",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "音源名",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "시스템 설정",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "canon_absent": [
+    {
+      "claim": "99 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "strings": [
+        "03 Drum Machine Designer",
+        "03 Drum Machine Designer.logicx",
+        "2分割",
+        "AH-200HZBに移動",
+        "App Store",
+        "App Store…、5개의 업데이트",
+        "Apple",
+        "Apple Creator Studioについての詳しい情報…",
+        "Aside",
+        "DELL P2425Hに移動",
+        "Discord",
+        "Finder에서 ‘03 Drum Machine Designer.logicx’ 보기",
+        "Finder에서 ‘03 Drum Machine Designer’ 보기",
+        "Finder에서 ‘App Store’ 보기",
+        "Finder에서 ‘Aside’ 보기",
+        "Finder에서 ‘Discord’ 보기",
+        "Finder에서 ‘Google Chrome’ 보기",
+        "Finder에서 ‘Logic Pro’ 보기",
+        "Finder에서 ‘NativeLogic13-9995.logicx’ 보기",
+        "Finder에서 ‘OrbStack’ 보기",
+        "Finder에서 ‘QualFixtureR11’ 보기",
+        "Finder에서 ‘ROLI Connect’ 보기",
+        "Finder에서 ‘Warp’ 보기",
+        "Finder에서 ‘en-final’ 보기",
+        "Finder에서 ‘logic-claude-handoff.command’ 보기",
+        "Finder에서 ‘qualification’ 보기",
+        "Finder에서 ‘텍스트-4B34-8C6B-9E-0.txt’ 보기",
+        "Finder에서 ‘시스템 설정’ 보기",
+        "Finder에서 ‘터미널’ 보기",
+        "Google Chrome",
+        "Isaac 로그아웃",
+        "Isaac 로그아웃…",
+        "Logic Pro 강제 종료",
+        "Logic ProのWebサイト",
+        "Logic Proのディスカッション",
+        "Logic Proのフィードバックを送信",
+        "Logic Proを終了",
+        "Logic Proを非表示",
+        "Logic Proエフェクト",
+        "Logic Proコントロールサーフェスサポート",
+        "Logic Proサポート",
+        "Logic Pro音源",
+        "Logic Remoteに関する情報…",
+        "Macintosh HD",
+        "NativeLogic13-9995.logicx",
+        "OrbStack",
+        "QualFixtureR11",
+        "QualFixtureR11 - トラック",
+        "ROLI Connect",
+        "Warp",
+        "en-final",
+        "en-final —  native-fixture",
+        "en-final —  release-3.19-7c125b11-native-rerun-20261113",
+        "en-final —  release-3.19-7c125b11-pre-rerun-mutated-20261113",
+        "ko-rerun2",
+        "ko-rerun2-logic13",
+        "logic-claude-handoff.command",
+        "qualification",
+        "텍스트-4B34-8C6B-9E-0.txt",
+        "すべてを拡大/縮小",
+        "ウインドウをセットから削除",
+        "ウインドウを整理",
+        "サービスは適用できません",
+        "サービス設定…",
+        "スクリーンセット1 (トラック/ミキサー/イベント)",
+        "フルスクリーンにする",
+        "フルスクリーンのタイル表示",
+        "メニューを消去",
+        "リリースノート",
+        "上と4分割",
+        "上と下",
+        "下と4分割",
+        "下と上",
+        "中央に配置",
+        "前のサイズに戻す",
+        "取り消す- 템포 변경",
+        "右と4分割",
+        "右と左",
+        "左と4分割",
+        "左と右",
+        "最近使った項目を開く",
+        "画面全体に表示",
+        "画面右側",
+        "画面左側",
+        "移動とサイズ変更",
+        "강제 종료...",
+        "메뉴 지우기",
+        "문서",
+        "서버",
+        "시스템 정보",
+        "시스템 종료",
+        "시스템 종료…",
+        "응용 프로그램",
+        "이 Mac에 관하여",
+        "잠금 화면",
+        "잠자기",
+        "재시동",
+        "재시동…",
+        "터미널"
+      ],
+      "searched": [
+        {
+          "source": "madsp",
+          "locale": "-"
+        },
+        {
+          "source": "nib",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "nibstrings",
+          "locale": "en"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
+        },
+        {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "de"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "en"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "es"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "fr"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "it"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ja"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ko"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "pt"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "strings",
+          "locale": "-"
+        },
+        {
+          "source": "strings",
+          "locale": "de"
+        },
+        {
+          "source": "strings",
+          "locale": "en"
+        },
+        {
+          "source": "strings",
+          "locale": "es"
+        },
+        {
+          "source": "strings",
+          "locale": "fr"
+        },
+        {
+          "source": "strings",
+          "locale": "it"
+        },
+        {
+          "source": "strings",
+          "locale": "ja"
+        },
+        {
+          "source": "strings",
+          "locale": "ko"
+        },
+        {
+          "source": "strings",
+          "locale": "pt"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        }
+      ],
+      "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census reading itself: they are project content, numbers and runtime text"
+    }
+  ]
+}

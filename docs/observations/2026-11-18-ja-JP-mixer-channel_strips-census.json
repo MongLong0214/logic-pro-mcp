@@ -1,0 +1,1032 @@
+{
+  "id": "2026-11-18-ja-JP-mixer-channel_strips-census",
+  "date": "2026-11-18",
+  "schema": 3,
+  "subject": "Every string the mixer.channel_strips surface exposes to AX in ja-JP",
+  "question": "What labels does Logic show on mixer.channel_strips in ja-JP, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "build": "7801",
+    "locale": "ja-JP",
+    "os": "macOS 26.3 (25D125)",
+    "version": "13.0"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ja-JP",
+    "expected": "a census in ja-JP whose mixer.channel_strips rows carry the same 97 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-11-18-ja-JP-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on mixer.channel_strips",
+      "rows": 233,
+      "distinct_strings": 97,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "Channel EQ",
+        "ChromaVerb",
+        "Compressor",
+        "Deluxe Classic",
+        "E-Piano",
+        "EQ",
+        "EQディスプレイ. クリックしてChannel EQを追加するか、挿入したChannel EQまたはLinear Phase EQを開きます。Shiftキーを押しながらクリックするとLinear Phase EQが追加されます。EQでは、特定の周波数帯のレベルを調整してオーディオ信号を整形できます。 ",
+        "Gain",
+        "MIDIエフェクトスロット. MIDIエフェクトを挿入します。挿入済みのスロットをクリックすると、プラグインが開きます。 ",
+        "MIDIプラグイン",
+        "Master",
+        "Mastering Assistant",
+        "Mastering Assistant. クリックするとMastering Assistantが挿入されます。 ",
+        "Piano",
+        "Read, オートメーションが有効になりました",
+        "Read, オートメーションが無効になりました",
+        "Stereo Out",
+        "Studio Grand",
+        "fader knob",
+        "knob readout",
+        "「Dim」ボタン. 「オーディオ」の「一般」設定で設定されているディム値に従ってボリュームを設定します。無効にしたときは、ボリュームはマスターボリュームフェーダーに従います。 ",
+        "「M」ボタン. チャンネルストリップを無音にして、音が聞こえないようにします。このパートを無音にするにはAuxまたは出力のものを、プロジェクトをミュートするにはマスターのものを使います。 ",
+        "「チャンネルモード」ボタン. クリックして、チャンネルストリップの入力フォーマットをモノラルとステレオの間で切り替えます。長くクリックしてから、ポップアップメニューでモノラル、ステレオ、左、右、またはサラウンドを選択します。 ",
+        "「バウンス」ボタン. 1つ以上の出力チャンネルストリップの信号をレンダリングして1つまたは複数のオーディオファイルを作成します。 ",
+        "「ブラウザフォーカス」の三角形. クリックすると、ハイライトしたスロットのブラウザコンテンツを表示できます。ブラウザが閉じている場合は、ブラウザが開きます。 ",
+        "「入力モニタリング」ボタン. 録音可能な状態でないオーディオトラックやソフトウェア音源トラックの入力信号を再生します。録音前のレベル調整やパートの練習に便利です。 ",
+        "「出力チャンネルモード」ボタン. リンクしている出力のペアを1つのステレオチャンネルストリップと2つのモノラルチャンネルストリップのいずれかに切り替えます。 ",
+        "「設定」ボタン. プラグインなどの設定情報を含むチャンネルストリップ設定を読み込んだり保存したりします。 ",
+        "「録音可能」ボタン. トラックを録音可能な状態にするか、録音可能な状態になっているトラックを無効にします。ボタンが変わり、トラックが非アクティブ、録音可能状態、または録音中であることを示します。 ",
+        "すべて",
+        "すべてのチャンネルストリップを表示",
+        "インスペクタの右チャンネルストリップ. インスペクタの左チャンネルストリップの出力チャンネルストリップが表示されます。Shiftキーを押しながら、インスペクタの左チャンネルストリップのセンドスロットをクリックすると、ここにセンドリターンが表示されます。また、Shiftキーを押しながら、インスペクタの左チャンネルストリップのVCAスロットをクリックすると、ここにVCAチャンネルストリップが表示されます。 ",
+        "インスペクタの左チャンネルストリップ. 選択したトラックの信号をコントロールします。ミキサーを開く手間を省きます。 ",
+        "オフ",
+        "オフ, 「フェーダーのセンド」ポップアップメニュー. チャンネルストリップでパンノブとフェーダーを割り当てて、選択したセンドのパンニングとボリュームを制御します。 ",
+        "オプション",
+        "オン",
+        "オン、0 dB",
+        "オーディオエフェクトスロット. オーディオエフェクトを挿入します。挿入済みのスロットをクリックすると、プラグインが開きます。エフェクトを使用すると、音源をリアルタイムで変化させることができます。 ",
+        "オーディオプラグイン",
+        "オートメーション",
+        "グループ",
+        "グループ, Group",
+        "グループスロット. チャンネルストリップをグループに追加します。グループ単位で同時に編集するチャンネルストリップコントロールを指定することもできます。 ",
+        "ゲインリダクションメーター",
+        "ゲインリダクションメーター. 最初のCompressorプラグインのゲインリダクションを示します。Compressorが1つも挿入されていない場合は、挿入されているLimiter / Adaptive Limiterのゲインリダクションが示されます。 ",
+        "シングル",
+        "ステレオ",
+        "ステレオ出力",
+        "スナップ",
+        "スナップの種類",
+        "センドスロット. Auxチャンネルストリップに信号をルーティングします。センドを使用すると、複数トラックの出力信号を処理またはサブミックスできます。 ",
+        "センドボタン",
+        "ソロ",
+        "ソロボタン. チャンネルストリップの信号を切り離して、その音だけが聞こえるようにします。このパートを切り離すにはAuxまたは出力のものを使います。 ",
+        "チャンネルストリップの幅を広げる",
+        "チャンネルストリップの幅を狭める",
+        "チャンネルモード",
+        "ディム",
+        "トラック",
+        "トラックで使用されているすべてのチャンネルストリップを表示",
+        "バイパス",
+        "バウンス",
+        "バランス/パンノブ. 縦方向にドラッグして、ステレオ音場でのチャンネルストリップ信号の定位を設定します。 ",
+        "パン",
+        "ピークレベルディスプレイ. 再生中の信号のピークを示します。0 dBを超える値は赤くなります。信号のクリッピングが発生していることを示します。0 dBを超えるオレンジ色の値では、内部浮動小数点演算の関係で、クリッピングは発生していません。 ",
+        "ピークレベルメーター",
+        "フェーダーのセンド-オン/オフ. チャンネルストリップのパンノブとフェーダーを切り替えて、選択したセンドのパンニングとボリュームを制御できるようにします。 ",
+        "フォルダから抜ける",
+        "ボリュームディスプレイ. ミキサーの左側に対するdBスケールを基準として、ボリュームフェーダーの位置を表示します。正の値では信号レベルが増加し、負の値では減少します。0 dBでは変更されないままです。 ",
+        "ボリュームフェーダー",
+        "ボリュームフェーダー. トラックの再生ボリュームを設定します。Auxまたは出力のチャンネルストリップを使って、ミックスのその部分のボリュームを調整します。ほとんどの場合、マスターチャンネルストリップのボリュームフェーダーは0 dbのままでかまいません。 ",
+        "ボリュームフェーダーレベル",
+        "ボリュームフェーダーレベル, 0.0 dB",
+        "ミキサー",
+        "ミュート",
+        "モニタリング",
+        "モノラル",
+        "ライブラリインジケータ, (null)",
+        "ライブラリインジケータ, Deluxe Classic",
+        "ライブラリインジケータ, E-Piano",
+        "リスト",
+        "信号のクリッピングオフ",
+        "入力 1",
+        "入力スロット. チャンネルストリップの入力ソースを選択します。これは、オーディオデバイスの入力（マイクまたは音源の接続先）または内部バス（別のチャンネルストリップからの信号を受信するもの）でもかまいません。 ",
+        "出力スロット. クリックしたままにして、チャンネルストリップの出力先（信号の送信先）を選択します。 ",
+        "名前",
+        "名前フィールド. ダブルクリックするとチャンネルストリップ名を変更できます。 ",
+        "挿入バー",
+        "編集",
+        "表示",
+        "設定",
+        "選択したトラックの信号フローを表示",
+        "録音",
+        "開く",
+        "오디오 1",
+        "오디오 2"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in ja-JP, mixer.channel_strips exposes 233 elements carrying 97 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "170 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic.",
+    "1 strings are neither cited nor proved absent: each is absent from Apple's corpora as bytes and a shipped label folds to it (a colon, an ellipsis, a case), so the spelling Logic ships is not something this census read: 入力 1"
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://plugin_names/-#value",
+      "value": "Channel EQ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://plugin_names/-#value",
+      "value": "ChromaVerb",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Compressor",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Deluxe Classic",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/de#value",
+      "value": "E-Piano",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "EQ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "EQディスプレイ. クリックしてChannel EQを追加するか、挿入したChannel EQまたはLinear Phase EQを開きます。Shiftキーを押しながらクリックするとLinear Phase EQが追加されます。EQでは、特定の周波数帯のレベルを調整してオーディオ信号を整形できます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Gain",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "MIDIエフェクトスロット. MIDIエフェクトを挿入します。挿入済みのスロットをクリックすると、プラグインが開きます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "MIDIプラグイン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Master",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Mastering Assistant",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "Mastering Assistant. クリックするとMastering Assistantが挿入されます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Piano",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Stereo Out",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Studio Grand",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「Dim」ボタン. 「オーディオ」の「一般」設定で設定されているディム値に従ってボリュームを設定します。無効にしたときは、ボリュームはマスターボリュームフェーダーに従います。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「M」ボタン. チャンネルストリップを無音にして、音が聞こえないようにします。このパートを無音にするにはAuxまたは出力のものを、プロジェクトをミュートするにはマスターのものを使います。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「チャンネルモード」ボタン. クリックして、チャンネルストリップの入力フォーマットをモノラルとステレオの間で切り替えます。長くクリックしてから、ポップアップメニューでモノラル、ステレオ、左、右、またはサラウンドを選択します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「バウンス」ボタン. 1つ以上の出力チャンネルストリップの信号をレンダリングして1つまたは複数のオーディオファイルを作成します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「ブラウザフォーカス」の三角形. クリックすると、ハイライトしたスロットのブラウザコンテンツを表示できます。ブラウザが閉じている場合は、ブラウザが開きます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「入力モニタリング」ボタン. 録音可能な状態でないオーディオトラックやソフトウェア音源トラックの入力信号を再生します。録音前のレベル調整やパートの練習に便利です。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「出力チャンネルモード」ボタン. リンクしている出力のペアを1つのステレオチャンネルストリップと2つのモノラルチャンネルストリップのいずれかに切り替えます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「設定」ボタン. プラグインなどの設定情報を含むチャンネルストリップ設定を読み込んだり保存したりします。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "「録音可能」ボタン. トラックを録音可能な状態にするか、録音可能な状態になっているトラックを無効にします。ボタンが変わり、トラックが非アクティブ、録音可能状態、または録音中であることを示します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "すべて",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "すべてのチャンネルストリップを表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "インスペクタの右チャンネルストリップ. インスペクタの左チャンネルストリップの出力チャンネルストリップが表示されます。Shiftキーを押しながら、インスペクタの左チャンネルストリップのセンドスロットをクリックすると、ここにセンドリターンが表示されます。また、Shiftキーを押しながら、インスペクタの左チャンネルストリップのVCAスロットをクリックすると、ここにVCAチャンネルストリップが表示されます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "インスペクタの左チャンネルストリップ. 選択したトラックの信号をコントロールします。ミキサーを開く手間を省きます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オフ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オプション",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "オン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オーディオエフェクトスロット. オーディオエフェクトを挿入します。挿入済みのスロットをクリックすると、プラグインが開きます。エフェクトを使用すると、音源をリアルタイムで変化させることができます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "オーディオプラグイン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "オートメーション",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "グループ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "グループスロット. チャンネルストリップをグループに追加します。グループ単位で同時に編集するチャンネルストリップコントロールを指定することもできます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ゲインリダクションメーター",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ゲインリダクションメーター. 最初のCompressorプラグインのゲインリダクションを示します。Compressorが1つも挿入されていない場合は、挿入されているLimiter / Adaptive Limiterのゲインリダクションが示されます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "シングル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ステレオ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ステレオ出力",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "スナップ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "スナップの種類",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "センドスロット. Auxチャンネルストリップに信号をルーティングします。センドを使用すると、複数トラックの出力信号を処理またはサブミックスできます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "センドボタン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ソロ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ソロボタン. チャンネルストリップの信号を切り離して、その音だけが聞こえるようにします。このパートを切り離すにはAuxまたは出力のものを使います。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "チャンネルストリップの幅を広げる",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "チャンネルストリップの幅を狭める",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "チャンネルモード",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ディム",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "トラック",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "トラックで使用されているすべてのチャンネルストリップを表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "バイパス",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "バウンス",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "バランス/パンノブ. 縦方向にドラッグして、ステレオ音場でのチャンネルストリップ信号の定位を設定します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "パン",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ピークレベルディスプレイ. 再生中の信号のピークを示します。0 dBを超える値は赤くなります。信号のクリッピングが発生していることを示します。0 dBを超えるオレンジ色の値では、内部浮動小数点演算の関係で、クリッピングは発生していません。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ピークレベルメーター",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "フェーダーのセンド-オン/オフ. チャンネルストリップのパンノブとフェーダーを切り替えて、選択したセンドのパンニングとボリュームを制御できるようにします。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "フォルダから抜ける",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ボリュームディスプレイ. ミキサーの左側に対するdBスケールを基準として、ボリュームフェーダーの位置を表示します。正の値では信号レベルが増加し、負の値では減少します。0 dBでは変更されないままです。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ボリュームフェーダー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "ボリュームフェーダー. トラックの再生ボリュームを設定します。Auxまたは出力のチャンネルストリップを使って、ミックスのその部分のボリュームを調整します。ほとんどの場合、マスターチャンネルストリップのボリュームフェーダーは0 dbのままでかまいません。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ボリュームフェーダーレベル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "ミキサー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "ミュート",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "モニタリング",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "モノラル",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "リスト",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "信号のクリッピングオフ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "入力スロット. チャンネルストリップの入力ソースを選択します。これは、オーディオデバイスの入力（マイクまたは音源の接続先）または内部バス（別のチャンネルストリップからの信号を受信するもの）でもかまいません。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "出力スロット. クリックしたままにして、チャンネルストリップの出力先（信号の送信先）を選択します。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "名前",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ja#value",
+      "value": "名前フィールド. ダブルクリックするとチャンネルストリップ名を変更できます。 ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "挿入バー",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "編集",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "設定",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ja#value",
+      "value": "選択したトラックの信号フローを表示",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "録音",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ja#value",
+      "value": "開く",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "canon_absent": [
+    {
+      "claim": "13 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "strings": [
+        "Read, オートメーションが有効になりました",
+        "Read, オートメーションが無効になりました",
+        "fader knob",
+        "knob readout",
+        "オフ, 「フェーダーのセンド」ポップアップメニュー. チャンネルストリップでパンノブとフェーダーを割り当てて、選択したセンドのパンニングとボリュームを制御します。 ",
+        "オン、0 dB",
+        "グループ, Group",
+        "ボリュームフェーダーレベル, 0.0 dB",
+        "ライブラリインジケータ, (null)",
+        "ライブラリインジケータ, Deluxe Classic",
+        "ライブラリインジケータ, E-Piano",
+        "오디오 1",
+        "오디오 2"
+      ],
+      "searched": [
+        {
+          "source": "madsp",
+          "locale": "-"
+        },
+        {
+          "source": "nib",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "nibstrings",
+          "locale": "en"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
+        },
+        {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "de"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "en"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "es"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "fr"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "it"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ja"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ko"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "pt"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "strings",
+          "locale": "-"
+        },
+        {
+          "source": "strings",
+          "locale": "de"
+        },
+        {
+          "source": "strings",
+          "locale": "en"
+        },
+        {
+          "source": "strings",
+          "locale": "es"
+        },
+        {
+          "source": "strings",
+          "locale": "fr"
+        },
+        {
+          "source": "strings",
+          "locale": "it"
+        },
+        {
+          "source": "strings",
+          "locale": "ja"
+        },
+        {
+          "source": "strings",
+          "locale": "ko"
+        },
+        {
+          "source": "strings",
+          "locale": "pt"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        }
+      ],
+      "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census reading itself: they are project content, numbers and runtime text"
+    }
+  ]
+}
