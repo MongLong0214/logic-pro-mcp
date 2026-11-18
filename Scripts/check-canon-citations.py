@@ -906,6 +906,11 @@ def check_binding(where: str, citation: dict, record: dict, failures: list,
 
     substantive = canon.normalize(json.dumps(
         {k: v for k, v in record.items() if k in BINDING_RECORD_FIELDS}, ensure_ascii=False))
+    # The fields are searched as serialized JSON, where a `"`, a backslash or a control character
+    # inside a string is escaped. A value carrying one (de-DE QuickHelp quotes „…" with a straight
+    # closing quote) is in the record verbatim and was still reported decorative; the needle is
+    # searched in the same serialization as the haystack.
+    needles += [json.dumps(n, ensure_ascii=False)[1:-1] for n in needles]
     if not any(needle in substantive for needle in needles):
         failures.append(
             f"{where}: neither the cited value nor the key {ref.key!r} appears in any of this "

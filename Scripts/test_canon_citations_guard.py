@@ -1120,6 +1120,35 @@ class ABindingIsNotSatisfiedByAComment(unittest.TestCase):
         self.assertEqual(self.guard._without_comments("{\"a\": 1}", "x.json"), "{\"a\": 1}")
 
 
+class ARecordBindingReadsEscapedCharacters(unittest.TestCase):
+    """A `record` binding searches the record's fields as serialized JSON, where `"` and `\\` are
+    escaped. A de-DE census quoted QuickHelp text with a straight closing quote verbatim in its
+    observations and was refused as decorative. Mutant: drop the escaped needles and the first
+    case goes red."""
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("canon_guard_escapes", GUARD)
+        self.guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.guard)
+
+    def _bind(self, value, strings):
+        citation = {"ref": "logic-canon://quickhelp/de#value", "value": value, "used_for": "probe",
+                    "binding": {"kind": "record"}}
+        failures = []
+        self.guard.check_binding("probe", citation,
+                                 {"observations": [{"what": "the strings", "strings": strings}]},
+                                 failures)
+        return failures
+
+    def test_a_value_with_a_quote_and_a_backslash_in_the_record_passes(self):
+        value = 'Wähle „Spur-Header-Komponenten" aus dem Kontextmenü \\ jetzt. '
+        self.assertEqual(self._bind(value, ["other", value]), [])
+
+    def test_the_same_value_absent_from_the_record_is_still_refused(self):
+        value = 'Wähle „Spur-Header-Komponenten" aus dem Kontextmenü.'
+        self.assertTrue(self._bind(value, ["Wähle „Spur-Header-Komponenten“ aus dem Kontextmenü."]))
+
+
 class LogicFacingIsSelfMaintaining(unittest.TestCase):
     """Rule 14, driven against the real tree because that is what it is pointed at.
 
