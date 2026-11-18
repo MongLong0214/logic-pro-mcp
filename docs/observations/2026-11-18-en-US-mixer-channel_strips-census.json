@@ -1,0 +1,1039 @@
+{
+  "id": "2026-11-18-en-US-mixer-channel_strips-census",
+  "date": "2026-11-18",
+  "schema": 3,
+  "subject": "Every string the mixer.channel_strips surface exposes to AX in en-US",
+  "question": "What labels does Logic show on mixer.channel_strips in en-US, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "build": "7801",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "version": "13.0"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh en-US",
+    "expected": "a census in en-US whose mixer.channel_strips rows carry the same 97 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-11-18-en-US-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on mixer.channel_strips",
+      "rows": 233,
+      "distinct_strings": 97,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "All",
+        "Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ",
+        "Bounce button. Render the signal of one or more output channel strips to an audio file, or to multiple audio files. ",
+        "Browser Focus triangle. Click to view the Browser content for the highlighted slot. The Browser will open if it is closed. ",
+        "Channel EQ",
+        "Channel Mode button. Click to switch the channel strip input format between Mono and Stereo. Long-click, then choose Mono, Stereo, Left, Right, or Surround from the pop-up menu. ",
+        "ChromaVerb",
+        "Compressor",
+        "Deluxe Classic",
+        "Dim button. Set the volume according to the Dim value set in Audio General settings. Otherwise, the volume follows the master Volume fader. ",
+        "E-Piano",
+        "EQ",
+        "EQ display. Click to add a Channel EQ or open an inserted Channel or Linear Phase EQ. Shift-click to add a Linear Phase EQ. Use EQ to shape an audio signal by adjusting the levels of specific frequency ranges. ",
+        "Edit",
+        "Gain",
+        "Gain reduction meter. Shows the gain reduction of the first Compressor plug-in. If no Compressor is inserted, it shows the gain reduction of an inserted Limiter or Adaptive Limiter plug-in. ",
+        "Group slot. Add the channel strip to a group. You can also define which channel strip controls can be edited for the entire group at the same time. ",
+        "Input 1",
+        "Input Monitoring button. Hear incoming signals on audio or software instrument tracks that aren’t record enabled. This is useful when setting levels or practicing parts before recording. ",
+        "Input slot. Choose the channel strip input source. This can be an input of your audio device (your microphone or instrument is connected to) or an internal bus (to receive a signal from another channel strip). ",
+        "Leave Folder",
+        "Left inspector channel strip. Control the signal of the selected track without having to open the Mixer. ",
+        "MIDI Effect slot. Insert a MIDI effect. Click an occupied slot to open the plug-in. ",
+        "MIDI plug-in",
+        "Master",
+        "Mastering Assistant. Click to insert Mastering Assistant. ",
+        "Mixer",
+        "Mono",
+        "Mute button. Silence a channel strip so it’s no longer audible. Use on an aux or output channel strip to silence that part of the mix, or on the master channel strip to mute the project. ",
+        "Name field. Double-click to rename the channel strip. ",
+        "Narrow Channel Strips",
+        "Off",
+        "Off, Sends on Faders pop-up menu. Assigns the Pan knob and Fader on channel strips to control the panning and volume of the chosen send. ",
+        "Options",
+        "Output Channel Mode button. Switches a pair of linked outputs between one stereo channel strip and two mono channel strips. ",
+        "Output slot. Click and hold to choose the channel strip output destination—where the channel strip signal is sent. ",
+        "Pan/Balance knob. Drag vertically to position the channel strip signal in the stereo field. ",
+        "Peak Level display. Shows the signal peak during playback. Values above 0 dB turn red to indicate signal clipping. Orange values above 0 dB do not clip due to internal floating point calculations. ",
+        "Piano",
+        "Read, automation disabled",
+        "Read, automation enabled",
+        "Record Enable button. Prepare the track for recording, or deactivate a record-ready track. The button changes to indicate whether the track is inactive, record enabled, or currently recording. ",
+        "Right inspector channel strip. Shows the output channel strip for the left inspector channel strip. Shift-click the Send slot on the left inspector channel strip to show the Send Return here, or Shift-click a VCA slot in the left inspector channel strip to show the VCA channel strip here. ",
+        "Send slot. Route the signal to an aux channel strip. Use sends to process or submix multiple track output signals. ",
+        "Sends on Faders - On/Off. Swaps the Pan knob and Fader on channel strips so that they control the panning and volume of the chosen send. ",
+        "Setting button. Load and save channel strip settings, which contain setup information for a channel strip, including plug-ins. ",
+        "Show Signal Flow of Attentioned Track",
+        "Show all Channel Strips",
+        "Show all Channel Strips used by Tracks",
+        "Single",
+        "Snap",
+        "Snap type",
+        "Solo button. Isolate a channel strip’s signal so that it can be heard alone. Use on an aux or output channel strip to isolate that part of the mix. ",
+        "Stereo",
+        "Stereo Out",
+        "Studio Grand",
+        "Tracks",
+        "View",
+        "Volume display. Shows the position of the Volume fader referenced to the dB scale to the left of the Mixer. Positive values increase the signal level, negative values decrease it, and 0 dB leaves it unchanged. ",
+        "Volume fader. Set a track’s playback volume. Use on an aux or output channel strip to adjust the volume of that part of the mix. You can leave the Volume fader of the master channel strip at 0 dB in most cases. ",
+        "Wide Channel Strips",
+        "audio plug-in",
+        "automation",
+        "bounce",
+        "bypass",
+        "channel mode",
+        "dim",
+        "fader knob",
+        "gain reduction meter",
+        "group",
+        "group, Group",
+        "insert bar",
+        "knob readout",
+        "library indicator, (null)",
+        "library indicator, Deluxe Classic",
+        "library indicator, E-Piano",
+        "list",
+        "mastering assistant",
+        "monitoring",
+        "mute",
+        "name",
+        "off",
+        "on",
+        "on, 0 dB",
+        "open",
+        "pan",
+        "peak level meter",
+        "record",
+        "send button",
+        "setting",
+        "signal clipping off",
+        "solo",
+        "volume fader",
+        "volume fader level",
+        "volume fader level, 0.0 dB",
+        "오디오 1",
+        "오디오 2"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in en-US, mixer.channel_strips exposes 233 elements carrying 97 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "211 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "All",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Bounce button. Render the signal of one or more output channel strips to an audio file, or to multiple audio files. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Browser Focus triangle. Click to view the Browser content for the highlighted slot. The Browser will open if it is closed. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://plugin_names/-#value",
+      "value": "Channel EQ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Channel Mode button. Click to switch the channel strip input format between Mono and Stereo. Long-click, then choose Mono, Stereo, Left, Right, or Surround from the pop-up menu. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://plugin_names/-#value",
+      "value": "ChromaVerb",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Compressor",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Deluxe Classic",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Dim button. Set the volume according to the Dim value set in Audio General settings. Otherwise, the volume follows the master Volume fader. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/de#value",
+      "value": "E-Piano",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "EQ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "EQ display. Click to add a Channel EQ or open an inserted Channel or Linear Phase EQ. Shift-click to add a Linear Phase EQ. Use EQ to shape an audio signal by adjusting the levels of specific frequency ranges. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Edit",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Gain",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Gain reduction meter. Shows the gain reduction of the first Compressor plug-in. If no Compressor is inserted, it shows the gain reduction of an inserted Limiter or Adaptive Limiter plug-in. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Group slot. Add the channel strip to a group. You can also define which channel strip controls can be edited for the entire group at the same time. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Input 1",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Input Monitoring button. Hear incoming signals on audio or software instrument tracks that aren’t record enabled. This is useful when setting levels or practicing parts before recording. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Input slot. Choose the channel strip input source. This can be an input of your audio device (your microphone or instrument is connected to) or an internal bus (to receive a signal from another channel strip). ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Leave Folder",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Left inspector channel strip. Control the signal of the selected track without having to open the Mixer. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "MIDI Effect slot. Insert a MIDI effect. Click an occupied slot to open the plug-in. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "MIDI plug-in",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Master",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Mastering Assistant. Click to insert Mastering Assistant. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Mixer",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Mono",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Mute button. Silence a channel strip so it’s no longer audible. Use on an aux or output channel strip to silence that part of the mix, or on the master channel strip to mute the project. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Name field. Double-click to rename the channel strip. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Narrow Channel Strips",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Off",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Options",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Output Channel Mode button. Switches a pair of linked outputs between one stereo channel strip and two mono channel strips. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Output slot. Click and hold to choose the channel strip output destination—where the channel strip signal is sent. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Pan/Balance knob. Drag vertically to position the channel strip signal in the stereo field. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Peak Level display. Shows the signal peak during playback. Values above 0 dB turn red to indicate signal clipping. Orange values above 0 dB do not clip due to internal floating point calculations. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Piano",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Record Enable button. Prepare the track for recording, or deactivate a record-ready track. The button changes to indicate whether the track is inactive, record enabled, or currently recording. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Right inspector channel strip. Shows the output channel strip for the left inspector channel strip. Shift-click the Send slot on the left inspector channel strip to show the Send Return here, or Shift-click a VCA slot in the left inspector channel strip to show the VCA channel strip here. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Send slot. Route the signal to an aux channel strip. Use sends to process or submix multiple track output signals. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Sends on Faders - On/Off. Swaps the Pan knob and Fader on channel strips so that they control the panning and volume of the chosen send. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Setting button. Load and save channel strip settings, which contain setup information for a channel strip, including plug-ins. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Show Signal Flow of Attentioned Track",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Show all Channel Strips",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Show all Channel Strips used by Tracks",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Single",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Snap",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Snap type",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Solo button. Isolate a channel strip’s signal so that it can be heard alone. Use on an aux or output channel strip to isolate that part of the mix. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Stereo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Stereo Out",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Studio Grand",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Tracks",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "View",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Volume display. Shows the position of the Volume fader referenced to the dB scale to the left of the Mixer. Positive values increase the signal level, negative values decrease it, and 0 dB leaves it unchanged. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Volume fader. Set a track’s playback volume. Use on an aux or output channel strip to adjust the volume of that part of the mix. You can leave the Volume fader of the master channel strip at 0 dB in most cases. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Wide Channel Strips",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "audio plug-in",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "automation",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "bounce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "bypass",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "channel mode",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "dim",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "gain reduction meter",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "group",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "insert bar",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "list",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "mastering assistant",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "monitoring",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "mute",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "name",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "off",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "on",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "open",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "pan",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "peak level meter",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "record",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "send button",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "setting",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "signal clipping off",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "solo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "volume fader",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "volume fader level",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "canon_absent": [
+    {
+      "claim": "13 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "strings": [
+        "Off, Sends on Faders pop-up menu. Assigns the Pan knob and Fader on channel strips to control the panning and volume of the chosen send. ",
+        "Read, automation disabled",
+        "Read, automation enabled",
+        "fader knob",
+        "group, Group",
+        "knob readout",
+        "library indicator, (null)",
+        "library indicator, Deluxe Classic",
+        "library indicator, E-Piano",
+        "on, 0 dB",
+        "volume fader level, 0.0 dB",
+        "오디오 1",
+        "오디오 2"
+      ],
+      "searched": [
+        {
+          "source": "madsp",
+          "locale": "-"
+        },
+        {
+          "source": "nib",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "nibstrings",
+          "locale": "en"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
+        },
+        {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "de"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "en"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "es"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "fr"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "it"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ja"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ko"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "pt"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "strings",
+          "locale": "-"
+        },
+        {
+          "source": "strings",
+          "locale": "de"
+        },
+        {
+          "source": "strings",
+          "locale": "en"
+        },
+        {
+          "source": "strings",
+          "locale": "es"
+        },
+        {
+          "source": "strings",
+          "locale": "fr"
+        },
+        {
+          "source": "strings",
+          "locale": "it"
+        },
+        {
+          "source": "strings",
+          "locale": "ja"
+        },
+        {
+          "source": "strings",
+          "locale": "ko"
+        },
+        {
+          "source": "strings",
+          "locale": "pt"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        }
+      ],
+      "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census reading itself: they are project content, numbers and runtime text"
+    }
+  ]
+}

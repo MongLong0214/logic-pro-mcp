@@ -42,14 +42,14 @@
  ],
  "currency": {
   "en-US": {
-   "current": 0,
-   "superseded": 47,
+   "current": 38,
+   "superseded": 12,
    "unknown_version": 0,
    "unverified": 0,
-   "derived": 207,
+   "derived": 204,
    "unmeasured": 1,
    "retired": 1,
-   "not_measured_on_current": 255
+   "not_measured_on_current": 217
   },
   "ko-KR": {
    "current": 48,
@@ -275,7 +275,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -284,13 +284,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Todas las pistas como archivos de audio…",
@@ -301,7 +301,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:所有音軌為音訊檔案⋯"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -345,32 +345,32 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-12-en-US-arrange-menus-census",
     "ja-JP": "2026-09-05-ja-JP-arrange-menus-census",
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census",
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "en-US": "AXMenuBarItem",
     "ja-JP": "AXMenuBarItem",
-    "ko-KR": "AXMenuBarItem"
+    "ko-KR": "AXMenuBarItem",
+    "en-US": "AXMenuBarItem"
    },
    "coverage_attributes": {
-    "en-US": "title",
     "ja-JP": "title",
-    "ko-KR": "title"
+    "ko-KR": "title",
+    "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3",
+    "en-US": "13.0",
     "ko-KR": "12.3",
     "ja-JP": "12.3"
    },
    "coverage_logic_build": {
-    "en-US": "6674",
+    "en-US": "7801",
     "ko-KR": "6674",
     "ja-JP": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "92efce05b595be38b7963fde70003f3815a6922ec17c78a35a208ff693fc1f21",
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
     "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
     "ja-JP": "774c5d58d15774d9d704c969278b41ad68929ba51665aa31631b2d6c5270bd65"
    },
@@ -383,7 +383,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:Logic Pro"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "superseded",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -503,7 +503,7 @@
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "measured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "measured",
     "de-DE": "derived",
@@ -514,25 +514,8 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
-   "coverage_records": {
-    "en-US": "2026-09-05-en-US-mixer-channel_strips-census"
-   },
-   "coverage_roles": {
-    "en-US": "AXButton"
-   },
-   "coverage_attributes": {
-    "en-US": "description"
-   },
-   "coverage_logic_version": {
-    "en-US": "12.3"
-   },
-   "coverage_logic_build": {
-    "en-US": "6674"
-   },
-   "coverage_record_sha256": {
-    "en-US": "820bc68abe7801f3f24733562306d7260ce19b728db4d7a9b6c17c73fc43d7a8"
-   },
    "coverage_derived": {
+    "en-US": "quickhelp:en:ships_up_to_case:Audio Effect slot",
     "ko-KR": "niblabels:ko:ships_up_to_case:오디오 이펙트",
     "de-DE": "quickhelp:de:ships_up_to_case:Audioeffekt-Slot",
     "es-ES": "quickhelp:es:ships_up_to_case:Ranura de efectos de audio",
@@ -543,7 +526,6 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:音訊外掛模組"
    },
    "coverage_currency": {
-    "en-US": "superseded",
     "ja-JP": "superseded"
    }
   },
@@ -967,7 +949,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -976,13 +958,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Bounce",
@@ -993,7 +975,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:併軌"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -1204,7 +1186,8 @@
    ],
    "rationale": "Identifies the control-bar AXGroup by description; read-only locator. German read 2026-09-12 off the de-DE navigation-free census (#876): two AXGroups carry `Steuerungsleiste` as their AXDescription, the same count as the en-US `Control Bar` rows.",
    "roles": [
-    "AXGroup"
+    "AXGroup",
+    "AXMenuItem"
    ],
    "match": "exact_strict",
    "coverage": {
@@ -1221,7 +1204,6 @@
    },
    "coverage_records": {
     "de-DE": "2026-09-25-979-de-DE-main-window-areas-by-row",
-    "en-US": "2026-09-25-979-en-US-main-window-areas-by-row",
     "es-ES": "2026-09-25-979-es-ES-main-window-areas-by-row",
     "fr-FR": "2026-09-25-979-fr-FR-main-window-areas-by-row",
     "it-IT": "2026-09-25-979-it-IT-main-window-areas-by-row",
@@ -1229,11 +1211,11 @@
     "ko-KR": "2026-09-25-979-ko-KR-main-window-areas-by-row",
     "pt-BR": "2026-09-25-979-pt-BR-main-window-areas-by-row",
     "zh-CN": "2026-09-25-979-zh-CN-main-window-areas-by-row",
-    "zh-TW": "2026-09-25-979-zh-TW-main-window-areas-by-row"
+    "zh-TW": "2026-09-25-979-zh-TW-main-window-areas-by-row",
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "de-DE": "AXGroup",
-    "en-US": "AXGroup",
     "es-ES": "AXGroup",
     "fr-FR": "AXGroup",
     "it-IT": "AXGroup",
@@ -1241,11 +1223,11 @@
     "ko-KR": "AXGroup",
     "pt-BR": "AXGroup",
     "zh-CN": "AXGroup",
-    "zh-TW": "AXGroup"
+    "zh-TW": "AXGroup",
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
     "de-DE": "description",
-    "en-US": "description",
     "es-ES": "description",
     "fr-FR": "description",
     "it-IT": "description",
@@ -1253,11 +1235,11 @@
     "ko-KR": "description",
     "pt-BR": "description",
     "zh-CN": "description",
-    "zh-TW": "description"
+    "zh-TW": "description",
+    "en-US": "title"
    },
    "coverage_paths": {
     "de-DE": "AXWindow#1/AXGroup#5",
-    "en-US": "AXWindow#1/AXGroup#5",
     "es-ES": "AXWindow#0/AXGroup#5",
     "fr-FR": "AXWindow#1/AXGroup#5",
     "it-IT": "AXWindow#1/AXGroup#5",
@@ -1268,7 +1250,7 @@
     "zh-TW": "AXWindow#1/AXGroup#5"
    },
    "coverage_logic_version": {
-    "en-US": "12.3",
+    "en-US": "13.0",
     "ko-KR": "12.3",
     "ja-JP": "12.3",
     "de-DE": "12.3",
@@ -1280,7 +1262,7 @@
     "zh-TW": "12.3"
    },
    "coverage_logic_build": {
-    "en-US": "6674",
+    "en-US": "7801",
     "ko-KR": "6674",
     "ja-JP": "6674",
     "de-DE": "6674",
@@ -1292,7 +1274,7 @@
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "fd8362e741fd6f7c4c50c7f1f76c138187d1633d07f8579c961aaf222dcacecd",
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
     "ko-KR": "2e9525408d71ee3cbfea8abe74e1097f5fb713720d49d8af2ee13b6090b8e408",
     "ja-JP": "54a66a517a4e2b166a03dcaa87dee9b41499efe07c2944e28ef971a1c8d79591",
     "de-DE": "efed9d933ab83d0d4018b4e6d89badb837086af1432b90b6ec3bab3d41168a34",
@@ -1304,7 +1286,7 @@
     "zh-TW": "e042faa84864d92fdc4e04f0c3cb5ec07eec226a7a473548e214b2259d685648"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "superseded",
     "ja-JP": "superseded",
     "de-DE": "superseded",
@@ -1883,7 +1865,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-12-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -1892,13 +1874,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "92efce05b595be38b7963fde70003f3815a6922ec17c78a35a208ff693fc1f21"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Ajustes…",
@@ -1909,7 +1891,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:設定⋯"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -1988,7 +1970,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-12-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -1997,13 +1979,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "92efce05b595be38b7963fde70003f3815a6922ec17c78a35a208ff693fc1f21"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Configuración…",
@@ -2014,7 +1996,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:設定⋯"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -2152,7 +2134,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-12-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -2161,13 +2143,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "92efce05b595be38b7963fde70003f3815a6922ec17c78a35a208ff693fc1f21"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Superficies de control",
@@ -2178,7 +2160,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:控制表面"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -2297,7 +2279,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -2306,13 +2288,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "quickhelp:es:ships_up_to_case:Crear marcador",
@@ -2323,7 +2305,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:製作標記"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -2666,7 +2648,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuBarItem"
@@ -2675,13 +2657,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Editar",
@@ -2692,7 +2674,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:編輯"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -3956,7 +3938,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -3965,13 +3947,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Exportar",
@@ -3982,7 +3964,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸出"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -4059,7 +4041,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuBarItem"
@@ -4068,13 +4050,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Archivo",
@@ -4085,7 +4067,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:檔案"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -4162,7 +4144,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -4171,13 +4153,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Ir a",
@@ -4188,7 +4170,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:移動"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -4323,7 +4305,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -4332,13 +4314,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Posición…",
@@ -4349,7 +4331,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:位置⋯"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -4458,7 +4440,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -4467,13 +4449,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Todas las ventanas de módulos",
@@ -4484,7 +4466,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:所有外掛模組視窗"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "superseded",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -4604,7 +4586,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -4613,13 +4595,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Importar",
@@ -4630,7 +4612,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸入"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -5348,7 +5330,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -5357,13 +5339,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Archivo MIDI…",
@@ -5374,7 +5356,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:MIDI 檔案⋯"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -5739,40 +5721,39 @@
    },
    "coverage_records": {
     "de-DE": "2026-09-25-979-de-DE-main-window-areas-by-row",
-    "en-US": "2026-09-25-979-en-US-main-window-areas-by-row",
     "es-ES": "2026-09-25-979-es-ES-main-window-areas-by-row",
     "fr-FR": "2026-09-25-979-fr-FR-main-window-areas-by-row",
     "it-IT": "2026-09-25-979-it-IT-main-window-areas-by-row",
     "ja-JP": "2026-09-25-979-ja-JP-main-window-areas-by-row",
     "pt-BR": "2026-09-25-979-pt-BR-main-window-areas-by-row",
     "zh-CN": "2026-09-25-979-zh-CN-main-window-areas-by-row",
-    "zh-TW": "2026-09-25-979-zh-TW-main-window-areas-by-row"
+    "zh-TW": "2026-09-25-979-zh-TW-main-window-areas-by-row",
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "de-DE": "AXGroup",
-    "en-US": "AXGroup",
     "es-ES": "AXGroup",
     "fr-FR": "AXGroup",
     "it-IT": "AXGroup",
     "ja-JP": "AXGroup",
     "pt-BR": "AXGroup",
     "zh-CN": "AXGroup",
-    "zh-TW": "AXGroup"
+    "zh-TW": "AXGroup",
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
     "de-DE": "description",
-    "en-US": "description",
     "es-ES": "description",
     "fr-FR": "description",
     "it-IT": "description",
     "ja-JP": "description",
     "pt-BR": "description",
     "zh-CN": "description",
-    "zh-TW": "description"
+    "zh-TW": "description",
+    "en-US": "title"
    },
    "coverage_paths": {
     "de-DE": "AXWindow#1/AXGroup#6",
-    "en-US": "AXWindow#1/AXGroup#6",
     "es-ES": "AXWindow#0/AXGroup#6",
     "fr-FR": "AXWindow#1/AXGroup#6",
     "it-IT": "AXWindow#1/AXGroup#6",
@@ -5782,7 +5763,7 @@
     "zh-TW": "AXWindow#1/AXGroup#6"
    },
    "coverage_logic_version": {
-    "en-US": "12.3",
+    "en-US": "13.0",
     "ja-JP": "12.3",
     "de-DE": "12.3",
     "es-ES": "12.3",
@@ -5793,7 +5774,7 @@
     "zh-TW": "12.3"
    },
    "coverage_logic_build": {
-    "en-US": "6674",
+    "en-US": "7801",
     "ja-JP": "6674",
     "de-DE": "6674",
     "es-ES": "6674",
@@ -5804,7 +5785,7 @@
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "fd8362e741fd6f7c4c50c7f1f76c138187d1633d07f8579c961aaf222dcacecd",
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
     "ja-JP": "54a66a517a4e2b166a03dcaa87dee9b41499efe07c2944e28ef971a1c8d79591",
     "de-DE": "efed9d933ab83d0d4018b4e6d89badb837086af1432b90b6ec3bab3d41168a34",
     "es-ES": "0f565be08a03e2f1162e93e344cd5544be624e81eeb961b58ef963b8c5a7ab11",
@@ -5815,7 +5796,7 @@
     "zh-TW": "e042faa84864d92fdc4e04f0c3cb5ec07eec226a7a473548e214b2259d685648"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded",
@@ -5976,8 +5957,9 @@
     }
    },
    "roles": [
-    "AXLayoutArea",
     "AXGroup",
+    "AXLayoutArea",
+    "AXMenuItem",
     "AXScrollArea"
    ],
    "match": "exact",
@@ -5994,49 +5976,48 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "en-US": "2026-09-25-977-en-US-mixer-area-by-description",
     "de-DE": "2026-09-25-977-de-DE-mixer-area-by-description",
     "it-IT": "2026-09-25-977-it-IT-mixer-area-by-description",
     "pt-BR": "2026-09-25-977-pt-BR-mixer-area-by-description",
-    "zh-TW": "2026-09-25-977-zh-TW-mixer-area-by-description"
+    "zh-TW": "2026-09-25-977-zh-TW-mixer-area-by-description",
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "en-US": "AXLayoutArea",
     "de-DE": "AXLayoutArea",
     "it-IT": "AXLayoutArea",
     "pt-BR": "AXLayoutArea",
-    "zh-TW": "AXLayoutArea"
+    "zh-TW": "AXLayoutArea",
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "en-US": "description",
     "de-DE": "description",
     "it-IT": "description",
     "pt-BR": "description",
-    "zh-TW": "description"
+    "zh-TW": "description",
+    "en-US": "title"
    },
    "coverage_paths": {
-    "en-US": "/AXWindow/AXGroup/AXLayoutArea",
     "de-DE": "/AXWindow/AXGroup/AXLayoutArea",
     "it-IT": "/AXWindow/AXGroup/AXLayoutArea",
     "pt-BR": "/AXWindow/AXGroup/AXLayoutArea",
     "zh-TW": "/AXWindow/AXGroup/AXLayoutArea"
    },
    "coverage_logic_version": {
-    "en-US": "12.3",
+    "en-US": "13.0",
     "de-DE": "12.3",
     "it-IT": "12.3",
     "pt-BR": "12.3",
     "zh-TW": "12.3"
    },
    "coverage_logic_build": {
-    "en-US": "6674",
+    "en-US": "7801",
     "de-DE": "6674",
     "it-IT": "6674",
     "pt-BR": "6674",
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "94aa5393c7ebbbb8be3ae79852a12a832443ffd721818e82efbd69d6b1dfe9e3",
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
     "de-DE": "46d85bc34794f0ca9c28afb3b5d61c0c4b715737239ca542d5e1604ace2adb32",
     "it-IT": "805b24117e890d858f11cbdbe8cffffbe7f537c438fce84d108384b517b1fb31",
     "pt-BR": "16c13e2efeb1501446367e81db1ff7c0f870114ed21ebc3085c3260e0b06ec08",
@@ -6046,7 +6027,7 @@
     "ko-KR": "strings:ko:ships_up_to_case:믹서"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded",
     "es-ES": "superseded",
@@ -6719,7 +6700,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuBarItem"
@@ -6728,13 +6709,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Navegar",
@@ -6745,7 +6726,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:移動"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -6969,7 +6950,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -6978,13 +6959,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Nuevo",
@@ -6995,7 +6976,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:新增"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -7470,7 +7451,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -7479,13 +7460,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "quickhelp:es:ships_up_to_case:Abrir lista de marcadores",
@@ -7496,7 +7477,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:打開標記列表"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -7752,22 +7733,22 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-transport-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "en-US": "AXGroup"
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "en-US": "description"
+    "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "37b79ee0db594ed11491014487b12da2b77c10d9b9b0f0173e34e5d0d262f793"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "de-DE": "quickhelp:de:ships_up_to_case:Position der Abspielposition",
@@ -7779,7 +7760,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:播放磁頭位置"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded"
    }
@@ -8000,35 +7981,34 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "en-US": "2026-09-25-977-en-US-insert-slot-bypass-and-open",
-    "pt-BR": "2026-09-25-977-pt-BR-insert-slot-bypass-and-open"
+    "pt-BR": "2026-09-25-977-pt-BR-insert-slot-bypass-and-open",
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "en-US": "AXCheckBox",
-    "pt-BR": "AXCheckBox"
+    "pt-BR": "AXCheckBox",
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "en-US": "description",
-    "pt-BR": "description"
+    "pt-BR": "description",
+    "en-US": "title"
    },
    "coverage_paths": {
-    "en-US": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
     "pt-BR": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox"
    },
    "coverage_logic_version": {
-    "en-US": "12.3",
+    "en-US": "13.0",
     "pt-BR": "12.3"
    },
    "coverage_logic_build": {
-    "en-US": "6674",
+    "en-US": "7801",
     "pt-BR": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "baa35591ca45562061398a06bf6dcb8051793166c81c19c987e6b931727b9ceb",
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
     "pt-BR": "8c26366c0d38002b3bbfa68b4473e2f8942c7fca845eca78ab94d14eabeb58c9"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded",
@@ -8144,7 +8124,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "measured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -8156,45 +8136,38 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "en-US": "2026-09-25-977-en-US-plugin-editor-is-not-a-blocking-modal",
     "de-DE": "2026-09-25-977-de-DE-plugin-editor-is-not-a-blocking-modal",
     "pt-BR": "2026-09-25-977-pt-BR-plugin-editor-is-not-a-blocking-modal"
    },
    "coverage_roles": {
-    "en-US": "AXCheckBox",
     "de-DE": "AXCheckBox",
     "pt-BR": "AXCheckBox"
    },
    "coverage_attributes": {
-    "en-US": "description",
     "de-DE": "description",
     "pt-BR": "description"
    },
    "coverage_paths": {
-    "en-US": "/AXWindow/AXCheckBox",
     "de-DE": "/AXWindow/AXCheckBox",
     "pt-BR": "/AXWindow/AXCheckBox"
    },
    "coverage_logic_version": {
-    "en-US": "12.3",
     "de-DE": "12.3",
     "pt-BR": "12.3"
    },
    "coverage_logic_build": {
-    "en-US": "6674",
     "de-DE": "6674",
     "pt-BR": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "6a2a07ca8365de8fc7569d9fa0e9532975b4e56a99f1f7b817360be520e106a5",
     "de-DE": "095485978df18bc7ec5a3f44afea18b70b9ee055fb4767625134ac90a4cd5664",
     "pt-BR": "09ca13c5cfb5e512b5aa7058b3a2db3ce26151ed96d5c9602aeac05849ce660a"
    },
    "coverage_derived": {
+    "en-US": "quickhelp:en:ships_up_to_case:bypass",
     "ko-KR": "quickhelp:ko:ships_up_to_case:바이패스"
    },
    "coverage_currency": {
-    "en-US": "superseded",
     "ja-JP": "superseded",
     "de-DE": "superseded",
     "es-ES": "superseded",
@@ -8981,7 +8954,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -8990,13 +8963,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Proyecto o sección…",
@@ -9007,7 +8980,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:計畫案或段落⋯"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -9834,7 +9807,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -9843,13 +9816,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Guardar como…",
@@ -9860,7 +9833,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:儲存為⋯"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -10389,7 +10362,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -10398,13 +10371,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Teclado de introducción por pasos",
@@ -10415,7 +10388,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:循步輸入鍵盤"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "superseded",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -10766,12 +10739,27 @@
     "聲道"
    ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+   "provenance": {
+    "Audio Channel": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Audio Channel",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10801,7 +10789,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Audio Channel",
     "ja-JP": "strings:ja:ships_up_to_case:オーディオチャンネル",
     "de-DE": "strings:de:ships_up_to_case:Audiokanal",
     "es-ES": "strings:es:ships_up_to_case:Canal de audio",
@@ -10812,6 +10799,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:聲道"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current"
    }
   },
@@ -10829,12 +10817,27 @@
     "製作日期"
    ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+   "provenance": {
+    "Creation Date": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Creation Date",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10864,7 +10867,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Creation Date",
     "ja-JP": "strings:ja:ships_up_to_case:作成日",
     "de-DE": "strings:de:ships_up_to_case:Erstellungsdatum",
     "es-ES": "strings:es:ships_up_to_case:Fecha de creación",
@@ -10875,6 +10877,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:製作日期"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current"
    }
   },
@@ -10896,16 +10899,15 @@
    "provenance": {
     "Instrument Name": {
      "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "en-US",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "Instrument Name",
-     "path_contains": "AXMenuBar/AXMenuBarItem[Track]/AXMenu/AXMenuItem[Sort Tracks by]/AXMenu/AXMenuItem[Instrument Name]",
-     "record": "2026-09-12-en-US-arrange-menus-census",
-     "record_sha256": "92efce05b595be38b7963fde70003f3815a6922ec17c78a35a208ff693fc1f21",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
      "role": "AXMenuItem"
     }
    },
@@ -10954,7 +10956,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:樂器名稱"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current"
    }
   },
@@ -10976,16 +10978,15 @@
    "provenance": {
     "MIDI Channel": {
      "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "en-US",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "MIDI Channel",
-     "path_contains": "AXMenuBar/AXMenuBarItem[Track]/AXMenu/AXMenuItem[Sort Tracks by]/AXMenu/AXMenuItem[MIDI Channel]",
-     "record": "2026-09-12-en-US-arrange-menus-census",
-     "record_sha256": "92efce05b595be38b7963fde70003f3815a6922ec17c78a35a208ff693fc1f21",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
      "role": "AXMenuItem"
     }
    },
@@ -11034,7 +11035,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:MIDI 聲道"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current"
    }
   },
@@ -11051,12 +11052,27 @@
     "按以下方式排列音軌"
    ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3: Track > Sort Tracks By submenu title. No other locale is measured; never translate this menu label.",
+   "provenance": {
+    "Sort Tracks by": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Sort Tracks by",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11086,7 +11102,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Sort Tracks by",
     "ja-JP": "strings:ja:ships_up_to_case:トラックを並べ替える",
     "de-DE": "strings:de:ships_up_to_case:Spuren sortieren nach",
     "es-ES": "strings:es:ships_up_to_case:Ordenar pistas por",
@@ -11097,6 +11112,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:按以下方式排列音軌"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current"
    }
   },
@@ -11114,12 +11130,27 @@
     "輸出聲道"
    ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+   "provenance": {
+    "Output Channel": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Output Channel",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11149,7 +11180,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Output Channel",
     "ja-JP": "strings:ja:ships_up_to_case:出力チャンネル",
     "de-DE": "strings:de:ships_up_to_case:Output-Kanal",
     "es-ES": "strings:es:ships_up_to_case:Canal de salida",
@@ -11160,6 +11190,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:輸出聲道"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current"
    }
   },
@@ -11177,12 +11208,27 @@
     "音軌名稱"
    ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+   "provenance": {
+    "Track Name": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Track Name",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11212,7 +11258,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Track Name",
     "ja-JP": "strings:ja:ships_up_to_case:トラック名",
     "de-DE": "strings:de:ships_up_to_case:Spurname",
     "es-ES": "strings:es:ships_up_to_case:Nombre de pista",
@@ -11223,6 +11268,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:音軌名稱"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current"
    }
   },
@@ -11240,12 +11286,27 @@
     "已使用、未使用"
    ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+   "provenance": {
+    "Used, Unused": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Used, Unused",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11275,7 +11336,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Used, Unused",
     "ja-JP": "strings:ja:ships_up_to_case:使用、不使用",
     "de-DE": "strings:de:ships_up_to_case:Benutzt, Unbenutzt",
     "es-ES": "strings:es:ships_up_to_case:En uso, Sin usar",
@@ -11286,6 +11346,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:已使用、未使用"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current"
    }
   },
@@ -11987,17 +12048,6 @@
    ],
    "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier. German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
    "provenance": {
-    "tracks contents": {
-     "attribute": "description",
-     "date": "2026-09-05",
-     "locale": "en-US",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "observed": "Tracks contents",
-     "record": "2026-09-05-en-US-arrange-regions-census",
-     "record_sha256": "7358280ed4d9e304df863d3be3d20baa404dfd7722c019f138eb91e9115390cd",
-     "role": "AXGroup"
-    },
     "トラックコンテンツ": {
      "attribute": "description",
      "date": "2026-09-05",
@@ -12015,7 +12065,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "measured",
+    "en-US": "derived",
     "ko-KR": "derived",
     "ja-JP": "measured",
     "de-DE": "derived",
@@ -12027,6 +12077,7 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
+    "en-US": "niblabels:en:composed_value:트랙 콘텐츠",
     "ko-KR": "niblabels:ko:composed_value:트랙 콘텐츠",
     "de-DE": "niblabels:de:composed_value:트랙 콘텐츠",
     "es-ES": "niblabels:es:composed_value:트랙 콘텐츠",
@@ -12037,7 +12088,6 @@
     "zh-TW": "niblabels:zh_TW:composed_value:트랙 콘텐츠"
    },
    "coverage_currency": {
-    "en-US": "superseded",
     "ja-JP": "superseded"
    }
   },
@@ -12329,7 +12379,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuBarItem"
@@ -12338,13 +12388,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Pista",
@@ -12355,7 +12405,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:音軌"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -13388,7 +13438,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuItem"
@@ -13397,13 +13447,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "ko-KR": "strings:ko:ships_up_to_case:%@ 실행 취소",
@@ -13417,7 +13467,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:還原「%@」"
    },
    "coverage_currency": {
-    "en-US": "superseded"
+    "en-US": "current"
    }
   },
   "undoPluginInsertMenuItem": {
@@ -13571,7 +13621,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuBarItem"
@@ -13580,13 +13630,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Visualización",
@@ -13597,7 +13647,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:顯示方式"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
@@ -13675,7 +13725,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "en-US": "2026-09-05-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "en-US": "AXMenuBarItem"
@@ -13684,13 +13734,13 @@
     "en-US": "title"
    },
    "coverage_logic_version": {
-    "en-US": "12.3"
+    "en-US": "13.0"
    },
    "coverage_logic_build": {
-    "en-US": "6674"
+    "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "ea4b860c2cdfa91a5d985a90a47dad6db5e35ee8bb9aed270554b6f3f5f73c71"
+    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Window",
@@ -13701,7 +13751,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:Window"
    },
    "coverage_currency": {
-    "en-US": "superseded",
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"

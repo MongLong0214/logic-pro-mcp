@@ -1,0 +1,646 @@
+{
+  "id": "2026-11-18-en-US-arrange-transport-census",
+  "date": "2026-11-18",
+  "schema": 3,
+  "subject": "Every string the arrange.transport surface exposes to AX in en-US",
+  "question": "What labels does Logic show on arrange.transport in en-US, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "build": "7801",
+    "locale": "en-US",
+    "os": "macOS 26.3 (25D125)",
+    "version": "13.0"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh en-US",
+    "expected": "a census in en-US whose arrange.transport rows carry the same 61 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-11-18-en-US-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.transport",
+      "rows": 63,
+      "distinct_strings": 61,
+      "distinct_identifiers": 21
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "4/4",
+        "Beats & Project",
+        "Browser",
+        "Browser   B, Browser button. Find and load loops, one-shots, patches, and plug-in settings. ",
+        "C Major",
+        "Control Bar",
+        "Control bar. Contains buttons and displays for project and app functions. To customize, hold the pointer over any control bar button, Control-click the More button when it appears, then choose Customize Control Bar and Display from the shortcut menu. ",
+        "Count In",
+        "Count In   ⇧K, Count-in button. Play a predefined count-in before recording starts. Control-click the button to open a menu where you can choose the count-in length. ",
+        "Cycle",
+        "Cycle   C, Cycle button. Use Cycle to repeatedly play, or record over, the project section within the yellow cycle area that appears in the ruler. ",
+        "Display Mode",
+        "Display Mode, Display Mode pop-up menu. Switch the ruler display between bars and beats, or hours, minutes, and seconds, or a combination of both. You can also open giant displays. ",
+        "Editors",
+        "Editors   E, Editors button. Access editors—Audio Track, Audio File, Session Players, Piano Roll, Score, or Step Editor—based on the selected track type. ",
+        "Flashback Capture",
+        "Free Tempo Recording",
+        "Free Tempo Recording   ⌃⌥⌘R, Free Tempo Recording. Mutes all existing content during recording and performs a Smart Tempo analysis. ",
+        "Go to Beginning   ↩",
+        "Inspector",
+        "Inspector   I, Inspector button. View and edit region and track settings, based on where you’re working and the item selected. You can also set channel strip pan and volume, or add effects. ",
+        "Key Signature",
+        "Key Signature, Key Signature display. Indicates the key signature of the project. Choose a major or minor key signature from the pop-up menu. ",
+        "Library",
+        "List Editors",
+        "List Editors   D, List Editors button. View and edit MIDI events, markers, tempo changes, and signature events. ",
+        "Metronome",
+        "Metronome Click   K, Metronome button. Hear a click at the project tempo during playback or recording. Click and hold for further options. ",
+        "Mixer",
+        "Mixer   X, Mixer button. Open the Mixer, which shows channel strips for each track in the project. You can edit channel strip controls, add and edit plug-ins, and customize routing options. ",
+        "Note Pad",
+        "Note Pads",
+        "Note Pads   ⌃⇧P, Note Pads button. Create, view, and edit project and track text notes. ",
+        "Play",
+        "Play   ⌅, Play button. Start playback from the playhead position, or from the left locator shown in the ruler when in Cycle mode. ",
+        "Playhead Position",
+        "Playhead Position (Bars), Playhead Position display. Indicates the playhead position in bars and beats. Drag each element vertically to edit it, or double-click and enter a new value. ",
+        "Project Files",
+        "Project Files, Project Files button. Access audio and other media files. You can also import data and settings from other projects. ",
+        "Project Tempo menu, Project Tempo mode pop-up menu. Choose whether the project tempo is maintained, adapts to the tempo of audio recordings and imported audio files, or if Logic Pro determines the project tempo behavior. ",
+        "Quick Help",
+        "Quick Help button. Show the Quick Help area. If the inspector is closed, Quick Help opens as a separate window. ",
+        "Record",
+        "Record   R, Record button. Record to the selected track, or to multiple record-ready tracks. ",
+        "Replace",
+        "Replace   /, Replace button. Replace an existing recording, or a portion of it, with a new recording. ",
+        "Smart Controls",
+        "Smart Controls   Y, Smart Controls button. Quickly modify the sound of the current patch without having to edit individual channel strips or plug-ins. ",
+        "Solo",
+        "Solo, Solo button. Only hear selected regions during playback. ",
+        "Tempo",
+        "Tempo, Tempo display. Indicates the playback or recording speed. Drag vertically to speed up or slow down the tempo, or double-click and enter a new value. ",
+        "Time Signature",
+        "Time Signature, Time Signature display. Indicates the number of beats in a bar and the note value for one beat. Drag vertically to edit the value, or double-click and enter a new value. ",
+        "Toolbar",
+        "Toolbar   ⌃⌥⌘T, Toolbar button. Show the toolbar, which contains buttons for key functions. ",
+        "Transport Display",
+        "Tuner",
+        "Tuner, Tuner button. Tune instruments connected to your system. ",
+        "bar",
+        "beat"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": [
+        "controlBar/browsersButton",
+        "controlBar/captureRecordingButton",
+        "controlBar/countInButton",
+        "controlBar/cycleButton",
+        "controlBar/editorsButton",
+        "controlBar/freeTempoRecordingButton",
+        "controlBar/inspectorButton",
+        "controlBar/libraryButton",
+        "controlBar/listEditorsButton",
+        "controlBar/metronomeButton",
+        "controlBar/mixerButton",
+        "controlBar/notePadsButton",
+        "controlBar/playButton",
+        "controlBar/quickHelpButton",
+        "controlBar/recordButton",
+        "controlBar/replaceButton",
+        "controlBar/smartControlsButton",
+        "controlBar/soloButton",
+        "controlBar/stopButton",
+        "controlBar/toolbarButton",
+        "controlBar/tunerButton"
+      ]
+    }
+  ],
+  "conclusion": "On this host in en-US, arrange.transport exposes 63 elements carrying 61 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "211 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "4/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Beats & Project",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Browser",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Control Bar",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Control bar. Contains buttons and displays for project and app functions. To customize, hold the pointer over any control bar button, Control-click the More button when it appears, then choose Customize Control Bar and Display from the shortcut menu. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Count In",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Cycle",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Display Mode",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Editors",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Flashback Capture",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Free Tempo Recording",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Inspector",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Key Signature",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Library",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "List Editors",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Metronome",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Mixer",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Note Pad",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Note Pads",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Play",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Playhead Position",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Project Files",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Quick Help",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Quick Help button. Show the Quick Help area. If the inspector is closed, Quick Help opens as a separate window. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Record",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Replace",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Smart Controls",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Solo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Tempo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Time Signature",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Toolbar",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Transport Display",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Tuner",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "bar",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "beat",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "canon_absent": [
+    {
+      "claim": "26 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "strings": [
+        "Browser   B, Browser button. Find and load loops, one-shots, patches, and plug-in settings. ",
+        "C Major",
+        "Count In   ⇧K, Count-in button. Play a predefined count-in before recording starts. Control-click the button to open a menu where you can choose the count-in length. ",
+        "Cycle   C, Cycle button. Use Cycle to repeatedly play, or record over, the project section within the yellow cycle area that appears in the ruler. ",
+        "Display Mode, Display Mode pop-up menu. Switch the ruler display between bars and beats, or hours, minutes, and seconds, or a combination of both. You can also open giant displays. ",
+        "Editors   E, Editors button. Access editors—Audio Track, Audio File, Session Players, Piano Roll, Score, or Step Editor—based on the selected track type. ",
+        "Free Tempo Recording   ⌃⌥⌘R, Free Tempo Recording. Mutes all existing content during recording and performs a Smart Tempo analysis. ",
+        "Go to Beginning   ↩",
+        "Inspector   I, Inspector button. View and edit region and track settings, based on where you’re working and the item selected. You can also set channel strip pan and volume, or add effects. ",
+        "Key Signature, Key Signature display. Indicates the key signature of the project. Choose a major or minor key signature from the pop-up menu. ",
+        "List Editors   D, List Editors button. View and edit MIDI events, markers, tempo changes, and signature events. ",
+        "Metronome Click   K, Metronome button. Hear a click at the project tempo during playback or recording. Click and hold for further options. ",
+        "Mixer   X, Mixer button. Open the Mixer, which shows channel strips for each track in the project. You can edit channel strip controls, add and edit plug-ins, and customize routing options. ",
+        "Note Pads   ⌃⇧P, Note Pads button. Create, view, and edit project and track text notes. ",
+        "Play   ⌅, Play button. Start playback from the playhead position, or from the left locator shown in the ruler when in Cycle mode. ",
+        "Playhead Position (Bars), Playhead Position display. Indicates the playhead position in bars and beats. Drag each element vertically to edit it, or double-click and enter a new value. ",
+        "Project Files, Project Files button. Access audio and other media files. You can also import data and settings from other projects. ",
+        "Project Tempo menu, Project Tempo mode pop-up menu. Choose whether the project tempo is maintained, adapts to the tempo of audio recordings and imported audio files, or if Logic Pro determines the project tempo behavior. ",
+        "Record   R, Record button. Record to the selected track, or to multiple record-ready tracks. ",
+        "Replace   /, Replace button. Replace an existing recording, or a portion of it, with a new recording. ",
+        "Smart Controls   Y, Smart Controls button. Quickly modify the sound of the current patch without having to edit individual channel strips or plug-ins. ",
+        "Solo, Solo button. Only hear selected regions during playback. ",
+        "Tempo, Tempo display. Indicates the playback or recording speed. Drag vertically to speed up or slow down the tempo, or double-click and enter a new value. ",
+        "Time Signature, Time Signature display. Indicates the number of beats in a bar and the note value for one beat. Drag vertically to edit the value, or double-click and enter a new value. ",
+        "Toolbar   ⌃⌥⌘T, Toolbar button. Show the toolbar, which contains buttons for key functions. ",
+        "Tuner, Tuner button. Tune instruments connected to your system. "
+      ],
+      "searched": [
+        {
+          "source": "madsp",
+          "locale": "-"
+        },
+        {
+          "source": "nib",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "nibstrings",
+          "locale": "en"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
+        },
+        {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "de"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "en"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "es"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "fr"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "it"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ja"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ko"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "pt"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "strings",
+          "locale": "-"
+        },
+        {
+          "source": "strings",
+          "locale": "de"
+        },
+        {
+          "source": "strings",
+          "locale": "en"
+        },
+        {
+          "source": "strings",
+          "locale": "es"
+        },
+        {
+          "source": "strings",
+          "locale": "fr"
+        },
+        {
+          "source": "strings",
+          "locale": "it"
+        },
+        {
+          "source": "strings",
+          "locale": "ja"
+        },
+        {
+          "source": "strings",
+          "locale": "ko"
+        },
+        {
+          "source": "strings",
+          "locale": "pt"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        }
+      ],
+      "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census reading itself: they are project content, numbers and runtime text"
+    }
+  ]
+}
