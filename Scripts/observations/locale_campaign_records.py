@@ -17,6 +17,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -191,6 +192,46 @@ def canon_blocks(strings, host_locale, canon):
     return fields, near, unconfirmed
 
 
+def unconfirmed_path(repo, date, locale):
+    """Where a refused census leaves the strings it could not place: beside the census it would file.
+
+    Deterministic, so the operator (or a rule-following runner) can run the printed command, and the
+    next run of the same census on the same day finds and replaces the same file.
+    """
+    return os.path.join(repo, "docs", "observations", "evidence",
+                        f"{date}-{locale}-navigation-free.unconfirmed.txt")
+
+
+def write_unconfirmed(repo, date, locale, texts):
+    """Write the unplaced strings for `logic_canon.py confirm --stdin`; return `(path, command)`.
+
+    `confirm --stdin` reads one string per line, so a string carrying a line break cannot travel
+    through the file: it is passed as a quoted argument on the same command instead, which `confirm`
+    also accepts. The command names absolute paths so it runs from any directory.
+    """
+    path = unconfirmed_path(repo, date, locale)
+    one_line = sorted({t for t in texts if "\n" not in t and "\r" not in t})
+    multi_line = sorted({t for t in texts if "\n" in t or "\r" in t})
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.writelines(f"{t}\n" for t in one_line)
+    tool = os.path.join(repo, "Scripts", "logic_canon.py")
+    command = " ".join(["python3", shlex.quote(tool), "confirm", "--stdin",
+                        *(_one_line_quote(t) for t in multi_line), "<", shlex.quote(path)])
+    return path, command
+
+
+def _one_line_quote(text):
+    """`text` as one shell word on ONE line: ANSI-C `$'...'` quoting (bash, zsh, macOS /bin/sh).
+
+    `shlex.quote` keeps a line break literal inside single quotes, which is valid shell but prints the
+    command over two lines, and a runner copying the printed line would run half of it.
+    """
+    escaped = (text.replace("\\", "\\\\").replace("'", "\\'")
+               .replace("\n", "\\n").replace("\r", "\\r"))
+    return f"$'{escaped}'"
+
+
 def main(census_path, repo, write, date=None, canon=None):
     census = json.load(open(census_path, encoding="utf-8"))
     host = census["host"]
@@ -280,11 +321,17 @@ def main(census_path, repo, write, date=None, canon=None):
     if refused:
         for rid, texts in refused:
             print(f"{rid}: {len(texts)} string(s) the committed canon cannot place")
+        path, command = write_unconfirmed(repo, date, locale, [t for _rid, texts in refused for t in texts])
         print("REFUSED: a string whose 32-bit prefix is in a corpus is neither shipped nor absent until a "
-              "string comparison is pinned. On a machine with Logic, read-only:\n"
-              "  python3 Scripts/logic_canon.py confirm --stdin < strings.txt\n"
-              "then file the records again. Nothing was written.")
+              f"string comparison is pinned. The unplaced strings are in {path}. On a machine with "
+              f"Logic, read-only for Logic (it pins docs/canon/ledger/presence.tsv), run:\n"
+              f"  {command}\n"
+              "then file the records again. No record or evidence was written.")
         return 2
+    stale = unconfirmed_path(repo, date, locale)
+    if write and os.path.exists(stale):
+        # Settled: the list a refused run left is now a claim about a canon that has moved on.
+        os.remove(stale)
     print(f"census {locale} {host['version']} ({host['build']}): {sum(len(v) for v in buckets.values())} rows "
           f"in {len(buckets)} surfaces, {unclassified} unclassified")
     for rid, rec in records.items():

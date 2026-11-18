@@ -81,6 +81,82 @@ def repo_with_swift():
     return root
 
 
+class UnconfirmedCanon:
+    """A canon in which every string's 32-bit prefix matches and no string comparison is pinned."""
+    SHIPS, ABSENT, UNCONFIRMED = "ships", "absent", "unconfirmed"
+
+    @staticmethod
+    def load_manifest():
+        return {"sources": {"strings": {"locales": ["ko"]}}}
+
+    @staticmethod
+    def presence(_source, _locale, _text):
+        return UnconfirmedCanon.UNCONFIRMED
+
+    @staticmethod
+    def differs_only_by_decoration(_source, _locale, _text):
+        return False
+
+
+#: Stands in for `Scripts/logic_canon.py` in a fixture repository: records what the printed confirm
+#: command hands it, so the test runs that command without Logic and without touching docs/canon.
+CONFIRM_STUB = (
+    "import json, os, sys\n"
+    "out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'confirmed.json')\n"
+    "stdin = [line.rstrip('\\n') for line in sys.stdin if line.rstrip('\\n')] if '--stdin' in sys.argv else []\n"
+    "json.dump({'argv': sys.argv[1:], 'stdin': stdin}, open(out, 'w', encoding='utf-8'), ensure_ascii=False)\n"
+)
+
+
+def refusal_problems(module):
+    """Run the unconfirmed-string refusal through `module`; return what is wrong with it (empty: none).
+
+    The defect this pins: the refusal told the runner to `confirm --stdin < strings.txt` and never
+    wrote strings.txt, so a runner following the printed instruction could never get past it.
+    """
+    import contextlib
+    import io
+    import shlex
+    import subprocess
+    repo = repo_with_swift()
+    (repo / "Scripts").mkdir()
+    (repo / "Scripts/logic_canon.py").write_text(CONFIRM_STUB, encoding="utf-8")
+    row = {"surface": "arrange.menus", "path": "AXMenuBar/AXMenuBarItem[편집]", "role": "AXMenuBarItem",
+           "description": None, "help": None, "value": None, "identifier": None}
+    unplaced = ["편집", "it's  two\tspaced ", "line one\nit's a \\ line two"]
+    doc = census_doc(rows=[dict(row, title=t) for t in unplaced])
+    path = repo / "census.json"
+    path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = module.main(str(path), str(repo), True, date="2026-11-17", canon=UnconfirmedCanon)
+    text = out.getvalue()
+    problems = []
+    if rc != 2:
+        problems.append(f"exit {rc}, not the refusal's 2: {text}")
+    if list((repo / "docs/observations").glob("*.json")):
+        problems.append("a refused census filed records")
+    listed = repo / "docs/observations/evidence/2026-11-17-ko-KR-navigation-free.unconfirmed.txt"
+    if not listed.exists():
+        problems.append(f"the refusal wrote no strings file at {listed}")
+        return problems
+    commands = [line.strip() for line in text.splitlines() if line.strip().startswith("python3 ")]
+    if len(commands) != 1:
+        problems.append(f"the refusal prints {len(commands)} runnable command(s), not one: {text}")
+        return problems
+    if not commands[0].endswith("< " + shlex.quote(str(listed))):
+        problems.append(f"the printed command does not read the strings file: {commands[0]}")
+    ran_ = subprocess.run(commands[0], shell=True, cwd=tempfile.mkdtemp(), capture_output=True, text=True)
+    if ran_.returncode != 0:
+        problems.append(f"the printed command exits {ran_.returncode}: {ran_.stderr.strip()[:300]}")
+        return problems
+    got = json.loads((repo / "confirmed.json").read_text(encoding="utf-8"))
+    handed = got["argv"][2:] + got["stdin"]
+    if got["argv"][:2] != ["confirm", "--stdin"] or sorted(handed) != sorted(unplaced):
+        problems.append(f"the printed command hands confirm {got}, not exactly the unplaced {unplaced}")
+    return problems
+
+
 def main():
     # ---- the census is READ-ONLY: no path to Logic but the probe, and the probe only reads ---------
     tree = ast.parse(CENSUS_PY.read_text(encoding="utf-8"))
@@ -206,6 +282,22 @@ def main():
     loose = mutant(CENSUS_PY, "if leaders != [requested] or best < 3:", "if False:", "label_census_mut_locale")
     case("MUTANT: without the uniqueness rule a Portuguese request is accepted for a Spanish bar",
          loose.resolve_locale(unknown, "pt-BR", labels)[0] == "pt-BR")
+
+    # ---- a census the committed canon cannot place leaves a runnable confirm behind ---------------
+    problems = refusal_problems(records_mod)
+    case("a refused census writes the unplaced strings and prints a confirm command that runs and "
+         "hands confirm exactly those strings", problems == [], problems)
+    for n, (name, old, new) in enumerate((
+            ("no strings file (the defect)",
+             "        path, command = write_unconfirmed(repo, date, locale, [t for _rid, texts in refused for t in texts])",
+             "        path, command = unconfirmed_path(repo, date, locale), "
+             "\"python3 Scripts/logic_canon.py confirm --stdin < strings.txt\""),
+            ("an empty strings file",
+             "        handle.writelines(f\"{t}\\n\" for t in one_line)",
+             "        pass"),
+    )):
+        broken = mutant(RECORDS_PY, old, new, f"locale_campaign_records_mut_unconfirmed_{n}")
+        case(f"MUTANT: with {name} the refusal test goes red", refusal_problems(broken) != [], name)
 
     # ---- the regenerate path ----------------------------------------------------------------------
     obs2 = Path(tempfile.mkdtemp())
