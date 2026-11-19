@@ -1706,7 +1706,8 @@ enum AXLocalePolicy {
         canonical: "play",
         variants: [
             "재생", "再生", "Wiedergabe", "reproducir", "lecture", "riproduci", "reproduzir", "播放",
-            "Reproduz"
+            "Reproduz",
+            "Reproducir",
         ],
         rationale: "Identifies the Play transport control when reading TransportState; read-only."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py."

@@ -100,7 +100,7 @@
     "index/nib.tsv": "cfa538478c6a0197d838e2629612e14ec1706fd42e09252351619754c7b2d59c",
     "index/nib.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/niblabels.tsv": "251168083f649fd298772378849247cf221a639aec6401e20978049c1cef2748",
-    "index/niblabels.values.tsv": "0849f6f1a23479130e34b7ea0103347be704204ac3a3d026b96243b42a4b5d61",
+    "index/niblabels.values.tsv": "fcdafee87a0bc8785f5ae889985c2f8c1c1768443b938bf1b00a248a7cd564a9",
     "index/nibstrings.tsv": "afc7f0272ca27ee2dc69bec6213b0d3304e7f521e3ba387fe0bb4c08319e5b73",
     "index/nibstrings.values.tsv": "f006a2478a016f255eb2676746210fcaea4a10a31d3a830b645438306d98e209",
     "index/plugin_names.tsv": "f6d22385cbe42b4e2736a1dbb2637ad10ee67b8bce79578969a473ccc3b6ec93",
@@ -108,13 +108,13 @@
     "index/pluginsettings.tsv": "827154b12becb1b89cf36a9cd5bc43c1d8ca952a370fea6b9dcafde2ac1a6eb9",
     "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "c7137fa138879937177d7a89744a05e3de1156887d4e51a931cafa9744e23782",
-    "index/quickhelp.values.tsv": "b69fecc59d81ad6e97adbbe7a165809fffd3157bc250a15a462cc7f89972a3c5",
+    "index/quickhelp.values.tsv": "326788aff329c48858918301164c83aad89c00af66191d9c404cd45286f01221",
     "index/strings.tsv": "a3c8e80e9acc28eed81bd4adc3b24a8bae20b71016f46153522d890759d06ecc",
-    "index/strings.values.tsv": "f6115cb68744fc96fdfe22ee1c0959ee0c29ebf02e61eff0303055b49971dcbc",
+    "index/strings.values.tsv": "97e5105d11d7451444ed76a320cdd884cddbc38c0a474d937fc5b3b9cb056711",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "ledger/casefold.tsv": "3265f7e8e89a6a5099f54d93263b483d7245ec5b85a7a65ecd1864d865ce2f64",
-    "ledger/presence.tsv": "aba4a2898a27f2dea01e44aa13dc171bef2f563fe1828fda2f86c1cfbb3b490c"
+    "ledger/presence.tsv": "90387f6590cd3b7363323397f5ad2c33774bacfdd41321112020787f31da17b8"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -162,23 +162,23 @@
   },
   "ledger_presence_entries": {
     "madsp": {
-      "-": 23
+      "-": 24
     },
     "niblabels": {
-      "-": 80,
-      "de": 68,
-      "en": 70,
-      "es": 64,
+      "-": 81,
+      "de": 69,
+      "en": 71,
+      "es": 73,
       "fr": 72,
       "it": 72,
-      "ja": 96,
-      "ko": 96,
-      "pt": 68,
-      "zh_CN": 83,
-      "zh_TW": 76
+      "ja": 97,
+      "ko": 97,
+      "pt": 70,
+      "zh_CN": 84,
+      "zh_TW": 77
     },
     "nibstrings": {
-      "en": 262
+      "en": 263
     },
     "plugin_names": {
       "-": 9
@@ -189,7 +189,7 @@
     "quickhelp": {
       "de": 304,
       "en": 316,
-      "es": 251,
+      "es": 312,
       "fr": 244,
       "it": 316,
       "ja": 356,
@@ -200,16 +200,16 @@
     },
     "strings": {
       "-": 3,
-      "de": 819,
-      "en": 783,
-      "es": 698,
-      "fr": 690,
-      "it": 714,
-      "ja": 792,
-      "ko": 800,
-      "pt": 720,
-      "zh_CN": 666,
-      "zh_TW": 659
+      "de": 820,
+      "en": 784,
+      "es": 812,
+      "fr": 691,
+      "it": 718,
+      "ja": 793,
+      "ko": 801,
+      "pt": 739,
+      "zh_CN": 667,
+      "zh_TW": 660
     }
   },
   "logic": {
@@ -299,7 +299,7 @@
         "zh_TW": 9.9884e-08
       },
       "cited_rows": 39,
-      "cited_values": 345,
+      "cited_values": 362,
       "corpus_digest": "402519289fbb19a58559bbda67650fbebd24b33b2dc9b67901feb85dac0e7d01",
       "english_equal_rows_in_translated_units": {
         "de": 174,
@@ -625,7 +625,7 @@
         "zh_TW": 4.886417e-06
       },
       "cited_rows": 726,
-      "cited_values": 1214,
+      "cited_values": 1276,
       "corpus_digest": "f11a0bf05725d3cf30c587804f6f62e4855dfb5a1574823c6c96fbc6704d4d3d",
       "english_equal_rows_in_translated_units": {
         "de": 10910,
@@ -846,7 +846,7 @@
         "zh_TW": 1.1653407e-05
       },
       "cited_rows": 7470,
-      "cited_values": 4072,
+      "cited_values": 4213,
       "corpus_digest": "be163333a326c4ef3d9e1b4923e399cc1fcf01fd04652a26f3b849a6d8a7c641",
       "english_equal_rows_in_translated_units": {
         "de": 4748,
