@@ -78,9 +78,32 @@ for path in ("docs/locale/ui-labels.json", "docs/observations/RATCHETS.json", "d
 done = subprocess.run(["git", "lfs", "ls-files", "--name-only"], cwd=REPO, capture_output=True, text=True)
 tracked = [n for n in done.stdout.splitlines() if n.endswith(".census.jsonl")]
 case("L3 git lfs tracks the census evidence", len(tracked) >= 1, done.stdout[:200] + done.stderr[:200])
+def pointers(root, names, skip_missing=True):
+    """Names whose file in `root` is still an LFS pointer. A tracked file the working tree has deleted is
+    not a pointer: the campaign's prune deletes superseded evidence, and the index still lists it until the
+    commit that records the deletion."""
+    found = []
+    for name in names:
+        if skip_missing and not (root / name).exists():
+            continue
+        if (root / name).read_text(encoding="utf-8")[:40].startswith("version https://git-lfs"):
+            found.append(name)
+    return found
+
+
 for name in tracked:
-    head = (REPO / name).read_text(encoding="utf-8")[:40]
-    case(f"L3 {name} is real rows in this checkout, not a pointer", not head.startswith("version https://git-lfs"), head)
+    if (REPO / name).exists():
+        head = (REPO / name).read_text(encoding="utf-8")[:40]
+        case(f"L3 {name} is real rows in this checkout, not a pointer", not head.startswith("version https://git-lfs"), head)
+import tempfile
+_tmp = Path(tempfile.mkdtemp())
+(_tmp / "a.jsonl").write_text("version https://git-lfs.github.com/spec/v1\n", encoding="utf-8")
+case("L3 a pointer is still found", pointers(_tmp, ["a.jsonl", "gone.jsonl"]) == ["a.jsonl"], pointers(_tmp, ["a.jsonl", "gone.jsonl"]))
+try:
+    pointers(_tmp, ["gone.jsonl"], skip_missing=False)
+    case("MUTANT: not skipping a deleted file raises, which is the failure the campaign hit", False, "no error")
+except FileNotFoundError:
+    case("MUTANT: not skipping a deleted file raises, which is the failure the campaign hit", True)
 
 if failures:
     for line in failures:
