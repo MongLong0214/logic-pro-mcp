@@ -489,7 +489,7 @@ enum AXLocalePolicy {
     /// help (2026-09-05-ko-KR-navigation-free.census.json). The values of Apple's Name row
     /// supply the localized label spellings; identity is still the separately read AXValue.
     static let mixerStripNameField = LabelSet(
-        canonical: "Name", variants: ["이름", "名前", "Nombre", "Nom", "Nome", "名称", "名稱"],
+        canonical: "Name", variants: ["이름", "名前", "Nombre", "Nom", "Nome", "名称", "名稱", "Name"],
         rationale: "Semantic channel-strip Name text field; excludes fader readouts and opaque strip metadata.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Name#value")
     static let eventListColumnTrack = LabelSet(canonical: "Trk", variants: ["트랙", "Pista", "Piste", "Trc", "Pis", "轨道", "音軌"],
@@ -2178,7 +2178,7 @@ enum AXLocalePolicy {
     // best-effort and, when absent, degrade safely to the unchanged `.off`.
     static let automationModeContext = LabelSet(
         canonical: "automation",
-        variants: ["오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音"],
+        variants: ["오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音", "Automation"],
         rationale: "Gates the track-header automation-mode read to the automation control; read-only classifier."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/automation#value"
@@ -2785,7 +2785,7 @@ enum AXLocalePolicy {
     )
     static let pluginAutomationLabelSubstring = LabelSet(
         canonical: "automation",
-        variants: ["오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音"],
+        variants: ["오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音", "Automation"],
         rationale: "Rejects automation-mode slot labels (substring) when extracting a plugin display name; read-only filter."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAMixer.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/automation#value"
