@@ -22,6 +22,11 @@ going on would write something false:
     rebind       locale_labels.py --write [--rebind]: --rebind exactly when a record was REPLACED
     regenerate   locale-regenerate.py --apply --rule-only, until it writes nothing: take a reading only
                  where it equals the label's own canon value; hold and record the rest
+    reclassify   check-policy-literals-against-canon.py --reclassify, logic_canon.py build, locale_labels.py
+                 --write: the apply can add a variant to the Swift (es-ES `Reproducir`, de-DE `Automation`),
+                 and a Swift literal nobody classified fails the policy-literal check. The order is
+                 docs/canon/README.md's: reclassify, build again (the ledger is cut from the
+                 classification), write
     ratchet      check-observation-ratchets.py --rebaseline: allowed sets follow what is now measured
     checks       locale-checks.sh: every canon-locales check; any failure ends the run before a commit
     commit       one commit of the files the run wrote, no trailers, hooks on
@@ -62,7 +67,7 @@ import live_lock  # noqa: E402
 
 PREFLIGHT = os.environ.get("LPM_PREFLIGHT") or os.path.expanduser("~/.claude/scripts/lpm-public-surface-preflight.sh")
 STEP_ORDER = ("precheck", "clean", "lock", "switch", "census", "navigate", "prune", "canon", "rebind", "regenerate",
-              "ratchet", "checks", "commit", "preflight", "lfs", "push")
+              "reclassify", "ratchet", "checks", "commit", "preflight", "lfs", "push")
 LOCALES = ("en-US", "ko-KR", "ja-JP", "de-DE", "es-ES", "fr-FR", "it-IT", "pt-BR", "zh-CN", "zh-TW")
 #: Files a campaign writes and commits. Nothing else is staged: a campaign must not carry along whatever
 #: else was lying in the tree.
@@ -232,6 +237,10 @@ class Campaign:
                 if self.dry_run or "wrote 0 provenance block(s) and 0 coverage citation(s)" in text \
                         or "regenerate" in self.plan:
                     break
+            # After the last step that writes Swift literals: classify them against the installed Logic, then
+            # the build and the write that read the classification, in docs/canon/README.md's order.
+            self.step("reclassify", f"{py} Scripts/check-policy-literals-against-canon.py --reclassify && "
+                                    f"{py} Scripts/logic_canon.py build && {py} Scripts/locale_labels.py --write")
             self.step("ratchet", f"{py} Scripts/check-observation-ratchets.py --rebaseline "
                                  + shlex.quote(f"{self.locale} re-read on the declared Logic: readings "
                                                f"measured or held by locale_campaign.py"))

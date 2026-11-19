@@ -54,7 +54,7 @@ def mutated(old, new, name):
 
 
 engine = load(ENGINE, "campaign_engine")
-STEPS = ("switch", "census", "prune", "canon", "rebind", "regenerate", "ratchet", "checks", "commit", "preflight", "lfs", "push")
+STEPS = ("switch", "census", "prune", "canon", "rebind", "regenerate", "reclassify", "ratchet", "checks", "commit", "preflight", "lfs", "push")
 
 
 def fixture(fail_at=None, holds=None, dirty=False):
@@ -310,6 +310,23 @@ case("the prune step is `census_pack.py prune --repoint` (records re-pointed, no
 m = mutated('            self.step("prune", f"{py} Scripts/observations/census_pack.py prune --repoint")\n', "", "mut_no_prune")
 case("MUTANT: a campaign without the prune step leaves two evidence files for one locale, kind and build",
      "prune" not in [x.split(":")[0][3:] for x in dry_steps(m)])
+
+# ---- defect 3: a Swift literal the apply added is classified before the checks ---------------------------
+# de-DE's apply added `Automation` and es-ES's `Reproducir` to the Swift; the campaign never re-ran the
+# classification, so check-policy-literals-against-canon.py failed on a literal Logic ships.
+reclassify = next((x for x in steps if x.startswith("== reclassify:")), "")
+case("the campaign reclassifies the policy literals after the apply and before the ratchet and the checks",
+     "reclassify" in names and names.index("regenerate") < names.index("reclassify") < names.index("ratchet")
+     < names.index("checks"), names)
+order = [reclassify.find(part) for part in ("check-policy-literals-against-canon.py --reclassify",
+                                            "logic_canon.py build", "locale_labels.py --write")]
+case("reclassify runs docs/canon/README.md's order: reclassify, build again, write",
+     all(i >= 0 for i in order) and order == sorted(order), reclassify)
+m = mutated('            self.step("reclassify", f"{py} Scripts/check-policy-literals-against-canon.py --reclassify && "\n'
+            '                                    f"{py} Scripts/logic_canon.py build && {py} Scripts/locale_labels.py --write")\n',
+            "", "mut_no_reclassify")
+case("MUTANT: a campaign without the reclassify step reaches the checks with an unclassified literal",
+     "reclassify" not in [x.split(":")[0][3:] for x in dry_steps(m)])
 
 # ---- concurrency: every entry point that drives Logic refuses while another holds the lock -----------------
 tools = Path(tempfile.mkdtemp())

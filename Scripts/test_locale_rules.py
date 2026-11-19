@@ -71,13 +71,39 @@ PUNCH = {"surface": "arrange.menus", "role": "AXMenuItem", "title": "クイッ�
 # 1. CENSUS AREAS
 # ---------------------------------------------------------------------------------------------------
 LOCALES = ("en-US", "ko-KR", "ja-JP", "de-DE", "es-ES", "fr-FR", "it-IT", "pt-BR", "zh-CN", "zh-TW")
-EVIDENCE = REPO / "docs" / "observations" / "evidence"
+OBS_DIR = REPO / "docs" / "observations"
 CORE = ("tracks", "control_bar", "mixer", "event", "inspector", "header", "contents", "legend", "time_ruler")
+evidence_mod = load(HERE / "census_evidence.py", "rules_evidence")
+DECLARED = load(HERE / "locale_release.py", "rules_release").declared_logic(
+    str(REPO / "Sources" / "LogicProMCP" / "Accessibility" / "AXLocalePolicy.swift"))
 
 
-def newest_census(locale):
-    found = sorted(EVIDENCE.glob(f"2026-11-1*-{locale}-navigation-free.census.json*"))
-    return load(HERE / "census_evidence.py", "rules_evidence").load(str(found[-1])) if found else None
+def newest_census_path(locale, obs_dir=OBS_DIR):
+    """The navigation-free evidence census the newest record of `locale` on the declared Logic cites.
+
+    Found the way `locale-regenerate.py` finds it: through the records (`discover`, newest first, gated on
+    the declared version, build and locale) and the `evidence` each one lists. Never by a dated filename:
+    a campaign's prune deletes the superseded file and a re-run writes one under a new date, and a glob
+    for the old date then found nothing and this suite crashed on the census it had just replaced.
+    """
+    for rid in regen.discover(locale, DECLARED, str(obs_dir)):
+        record, _why = regen.gate_record(rid, locale, DECLARED, str(obs_dir))
+        for rel in (record or {}).get("evidence") or []:
+            path = Path(obs_dir) / rel
+            if not evidence_mod.is_census_file(path.name):
+                continue
+            try:
+                doc = evidence_mod.load(str(path))
+            except (OSError, ValueError):
+                continue
+            if (doc.get("kind") or "navigation-free") == "navigation-free":
+                return path
+    return None
+
+
+def newest_census(locale, obs_dir=OBS_DIR):
+    path = newest_census_path(locale, obs_dir)
+    return evidence_mod.load(str(path)) if path else None
 
 
 def segments(row):
@@ -133,14 +159,16 @@ for loc in ("es-ES", "fr-FR", "zh-CN", "zh-TW", "it-IT", "pt-BR"):
 m = mutated(OBS / "locale_campaign_records.py",
             '    ("arrange.track_headers", ("header", "legend")),\n',
             '    ("arrange.track_headers", ("header_never",)),\n', "mut_area_header")
-census = newest_census("es-ES")
+# A missing census is the "is committed" case above failing, not a crash here.
+census = newest_census("es-ES") or {"census": []}
 good = sum(1 for r in census["census"] if records.classify(r, "es-ES") == "arrange.track_headers")
 bad = sum(1 for r in census["census"] if m.classify(r, "es-ES") == "arrange.track_headers")
 case("MUTANT: without the header rule es-ES files no track-header rows", good > 0 and bad == 0, (good, bad))
 
 # A name from the wrong locale files nothing: German names do not place a Spanish tree.
+mixer_row = next((r for r in census["census"] if "Mezclador" in r["path"]), None)
 case("an es-ES row is not placed by German area names",
-     records.classify(next(r for r in census["census"] if "Mezclador" in r["path"]), "de-DE") != "mixer.channel_strips")
+     mixer_row is not None and records.classify(mixer_row, "de-DE") != "mixer.channel_strips", mixer_row)
 
 # PORTUGUESE draws the control bar from `Control Bar#acc` (`Barra de Controle`), not from the tab label.
 pt = newest_census("pt-BR")
@@ -327,13 +355,16 @@ def promoted(module):
     with tempfile.TemporaryDirectory() as tmp:
         copy = Path(tmp) / "ui-labels.json"
         copy.write_text(json.dumps(real, ensure_ascii=False), encoding="utf-8")
-        census_path = EVIDENCE / "2026-11-18-en-US-navigation-free.census.jsonl"
+        census_path = newest_census_path("en-US")
         _loc, _host, found, _un = module.main(str(census_path), str(copy))
-        census_doc = load(HERE / "census_evidence.py", "rules_evidence_apply").load(str(census_path))
+        census_doc = evidence_mod.load(str(census_path))
+        # The records that cite that census, from the same index: newest first, so the first per surface.
+        cited = census_path.relative_to(OBS_DIR).as_posix()
         by_surface = {}
-        for rec in (REPO / "docs/observations").glob("2026-11-18-en-US-*-census.json"):
-            d = json.loads(rec.read_text(encoding="utf-8"))
-            by_surface[d["surface"]] = d["id"]
+        for rid in regen.discover("en-US", DECLARED, str(OBS_DIR)):
+            d, _why = regen.gate_record(rid, "en-US", DECLARED, str(OBS_DIR))
+            if d and cited in (d.get("evidence") or []):
+                by_surface.setdefault(d["surface"], d["id"])
         module.apply(str(copy), census_doc, {name: found[name]}, by_surface)
         return name, json.loads(copy.read_text(encoding="utf-8"))["labels"][name]["coverage"]["en-US"]
 

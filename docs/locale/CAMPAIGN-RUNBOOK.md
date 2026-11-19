@@ -18,6 +18,8 @@ Scripts/observations/locale-campaign.sh ko-KR --navigate
 names, reads it and puts it back. Leave it out only when the owner says so.
 Replace `ko-KR` with one of `en-US ko-KR ja-JP de-DE es-ES fr-FR it-IT pt-BR zh-CN zh-TW`.
 Superseded evidence of the same locale, kind and build is pruned and re-pointed by the script itself.
+A variant the apply adds to the Swift is classified by the script itself too (`--reclassify`, then the canon
+build and `locale_labels.py --write`, in `docs/canon/README.md`'s order); never classify one by hand.
 Add `--no-push` to commit without pushing. It takes about 10 minutes. It switches Logic's language,
 relaunches Logic on the test project, reads the screen, updates the label ledger, runs every check,
 commits and pushes. It never clicks a dialog.
