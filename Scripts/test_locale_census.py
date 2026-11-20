@@ -14,6 +14,7 @@ fails the suite.
 import ast
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import types
@@ -103,7 +104,11 @@ class UnconfirmedCanon:
 CONFIRM_STUB = (
     "import json, os, sys\n"
     "out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'confirmed.json')\n"
-    "stdin = [line.rstrip('\\n') for line in sys.stdin if line.rstrip('\\n')] if '--stdin' in sys.argv else []\n"
+    "stdin = []\n"
+    "if '--stdin' in sys.argv:\n"
+    "    stdin = [line.rstrip('\\n') for line in sys.stdin if line.rstrip('\\n')]\n"
+    "if '--stdin-json' in sys.argv:\n"
+    "    stdin = [json.loads(line) for line in sys.stdin if line.strip()]\n"
     "json.dump({'argv': sys.argv[1:], 'stdin': stdin}, open(out, 'w', encoding='utf-8'), ensure_ascii=False)\n"
 )
 
@@ -117,6 +122,7 @@ def refusal_problems(module):
     import contextlib
     import io
     import shlex
+    import shutil
     import subprocess
     repo = repo_with_swift()
     (repo / "Scripts").mkdir()
@@ -136,7 +142,7 @@ def refusal_problems(module):
         problems.append(f"exit {rc}, not the refusal's 2: {text}")
     if list((repo / "docs/observations").glob("*.json")):
         problems.append("a refused census filed records")
-    listed = repo / "docs/observations/evidence/2026-11-17-ko-KR-navigation-free.unconfirmed.txt"
+    listed = repo / "docs/observations/evidence/2026-11-17-ko-KR-navigation-free.unconfirmed.jsonl"
     if not listed.exists():
         problems.append(f"the refusal wrote no strings file at {listed}")
         return problems
@@ -146,14 +152,21 @@ def refusal_problems(module):
         return problems
     if not commands[0].endswith("< " + shlex.quote(str(listed))):
         problems.append(f"the printed command does not read the strings file: {commands[0]}")
-    ran_ = subprocess.run(commands[0], shell=True, cwd=tempfile.mkdtemp(), capture_output=True, text=True)
-    if ran_.returncode != 0:
-        problems.append(f"the printed command exits {ran_.returncode}: {ran_.stderr.strip()[:300]}")
-        return problems
-    got = json.loads((repo / "confirmed.json").read_text(encoding="utf-8"))
-    handed = got["argv"][2:] + got["stdin"]
-    if got["argv"][:2] != ["confirm", "--stdin"] or sorted(handed) != sorted(unplaced):
-        problems.append(f"the printed command hands confirm {got}, not exactly the unplaced {unplaced}")
+    if "$'" in commands[0] or "\n" in commands[0]:
+        problems.append(f"the printed command uses bash-only quoting or spans lines: {commands[0]!r}")
+    # POSIX sh, not bash: /bin/sh is dash on Linux (where CI runs) and a bash-in-sh-mode on macOS.
+    shells = ["/bin/sh"] + [p for p in ("/bin/dash", shutil.which("dash")) if p and os.path.exists(p)]
+    for shell in dict.fromkeys(shells):
+        (repo / "confirmed.json").unlink(missing_ok=True)
+        ran_ = subprocess.run([shell, "-c", commands[0]], cwd=tempfile.mkdtemp(),
+                              capture_output=True, text=True)
+        if ran_.returncode != 0:
+            problems.append(f"the printed command exits {ran_.returncode} under {shell}: {ran_.stderr.strip()[:300]}")
+            continue
+        got = json.loads((repo / "confirmed.json").read_text(encoding="utf-8"))
+        handed = got["argv"][2:] + got["stdin"]
+        if got["argv"][:2] != ["confirm", "--stdin-json"] or sorted(handed) != sorted(unplaced):
+            problems.append(f"under {shell} the printed command hands confirm {got}, not exactly the unplaced {unplaced}")
     return problems
 
 
@@ -287,14 +300,31 @@ def main():
     problems = refusal_problems(records_mod)
     case("a refused census writes the unplaced strings and prints a confirm command that runs and "
          "hands confirm exactly those strings", problems == [], problems)
+    # the real `confirm --stdin-json` reader takes exactly what write_unconfirmed writes
+    canon_spec = importlib.util.spec_from_file_location("logic_canon_for_census_test", HERE / "logic_canon.py")
+    canon_mod = importlib.util.module_from_spec(canon_spec)
+    sys.modules[canon_spec.name] = canon_mod
+    canon_spec.loader.exec_module(canon_mod)
+    awkward = ["편집", "it's  two\tspaced ", "line one\nit's a \\ line two", 'say "hi"\r\nnext']
+    listing = Path(tempfile.mkdtemp()) / "strings.jsonl"
+    listing.write_text("".join(json.dumps(t, ensure_ascii=False) + "\n" for t in awkward) + "\n", encoding="utf-8")
+    with open(listing, encoding="utf-8", newline="") as handle:
+        read_back = canon_mod._json_lines(handle)
+    case("confirm --stdin-json reads quotes, backslashes and line breaks back exactly",
+         read_back == awkward, read_back)
     for n, (name, old, new) in enumerate((
             ("no strings file (the defect)",
              "        path, command = write_unconfirmed(repo, date, locale, [t for _rid, texts in refused for t in texts], kind)",
              "        path, command = unconfirmed_path(repo, date, locale, kind), "
              "\"python3 Scripts/logic_canon.py confirm --stdin < strings.txt\""),
             ("an empty strings file",
-             "        handle.writelines(f\"{t}\\n\" for t in one_line)",
+             "        handle.writelines(f\"{json.dumps(t, ensure_ascii=False)}\\n\" for t in sorted(set(texts)))",
              "        pass"),
+            ("bash-only $'...' quoting for a multi-line string",
+             "    command = \" \".join([\"python3\", shlex.quote(tool), \"confirm\", \"--stdin-json\", \"<\", shlex.quote(path)])",
+             "    command = \" \".join([\"python3\", shlex.quote(tool), \"confirm\", \"--stdin-json\", "
+             "*(\"$'\" + t.replace(\"\\\\\", \"\\\\\\\\\").replace(\"'\", \"\\\\'\").replace(\"\\n\", \"\\\\n\") + \"'\" for t in texts if \"\\n\" in t), "
+             "\"<\", shlex.quote(path)])"),
     )):
         broken = mutant(RECORDS_PY, old, new, f"locale_campaign_records_mut_unconfirmed_{n}")
         case(f"MUTANT: with {name} the refusal test goes red", refusal_problems(broken) != [], name)

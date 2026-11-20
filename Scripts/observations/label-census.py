@@ -229,10 +229,10 @@ def _run_confirm(records_mod, repo, locale, date, kind="navigation-free"):
     listing = records_mod.unconfirmed_path(repo, day, locale, kind)
     if not os.path.exists(listing):
         return False
-    texts = [line.rstrip("\n") for line in open(listing, encoding="utf-8")]
+    texts = [json.loads(line) for line in open(listing, encoding="utf-8") if line.strip()]
     _path, command = records_mod.write_unconfirmed(repo, day, locale, [t for t in texts if t], kind)
-    # Multi-line strings travel as ANSI-C quoted words, which only bash and zsh read.
-    return subprocess.run(command, shell=True, executable="/bin/bash").returncode == 0
+    # The command is plain POSIX sh (JSON Lines on stdin), so any /bin/sh runs it.
+    return subprocess.run(command, shell=True).returncode == 0
 
 
 def ingest(locale, census, repo, write, date=None, labels_mod=None, records_mod=None, confirm=False):
