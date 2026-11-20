@@ -1228,7 +1228,7 @@ enum AXLocalePolicy {
     /// #519: Navigate > Open Marker List.
     static let openMarkerListMenuItem = LabelSet(
         canonical: "Open Marker List",
-        variants: ["마커 목록 열기", "マーカーリストを開く", "Marker-Liste öffnen", "Abrir lista de marcadores", "Ouvrir la liste des marqueurs", "Apri elenco marcatori", "打开标记列表", "打開標記列表"],
+        variants: ["마커 목록 열기", "マーカーリストを開く", "Marker-Liste öffnen", "Abrir lista de marcadores", "Ouvrir la liste des marqueurs", "Apri elenco marcatori", "打开标记列表", "打開標記列表", "Abrir Lista de Marcadores"],
         rationale: "Navigate menu entry that opens the Marker List window. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Open%20Marker%20List#value"
