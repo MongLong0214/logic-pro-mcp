@@ -78,35 +78,41 @@ request, so a batch's wall time is its pull-request chain, not the sum of both.
 
 | order | batch | closes | pull requests | Logic hours | wall hours |
 |---|---|---|---|---|---|
-| 0 | Close-out of what v3.19.0 already fixed | #1552, #1550, #1585, #1586, #1403 | 1 (this file) plus comments | 0 | 1.5 |
+| 0 | Close-out of what v3.19.0 already fixed | #1552, #1550, #1585 | 1 (this file) plus comments | 0 | 1.5 |
 | 1 | Logic 13 first-run reliability | #1565, #668 | 3 | 8 | 12 |
-| 2 | One Logic sweep that settles the unmeasured walls | #970 | 1 | 5 | 5.5 |
+| 2 | One Logic sweep: unmeasured walls, colour source and the #862 route search | none (settles #970, feeds #862, #1516, #1588, #884) | 1 | 8 | 8.5 |
 | 3 | Export browser List view | #1553 | 1 (replaces #1561) | 1 | 3.5 |
 | 4 | Region rename and Chord Track | #1588 | 3 | 5 | 12 |
 | 5 | Pan mode read | #1571 | 1 | 1 | 3.2 |
 | 6 | Plug-in parameter reads | #1417, #1430, #299 | 4 | 6 | 11 |
 | 7 | Background key commands | #1516 | 5 | 8 | 14 |
-| 8 | Same-bytes qualification and publication scope | #284, #1028, #816 | 3 | 12 | 14 |
-| 9 | Session repair | #291, #967, #969, #971 | 8 | 28 | 50 |
-| 10 | Editors and providers | #884, #302, #303, #304, #305 | 8 | 24 | 46 |
-| 11 | Owner decisions on backlog and external items | #955, #306, #862, #1546, #308 | 1 | 0 | 3 |
+| 8 | MCU plug-in edit: bind a strip to its channel | #862 | 3 | 6 | 12 |
+| 9 | Same-bytes qualification, publication scope and verifier adoption | #284, #1028, #816, #1586, #1403 | 3 | 12 | 14 |
+| 10 | Session repair | #291, #967, #969, #971 | 8 | 28 | 50 |
+| 11 | Editors and providers | #884, #302, #303, #304, #305 | 8 | 24 | 46 |
+| 12 | Deferred, revisit after batch 11 | none (#955, #306, #1546, #308 stay open; #970 joins them if batch 2 finds no route) | 0 | 0 | 0 |
 
-Batches 0 to 8 close 18 issues in about 77 wall hours. Batches 9 and 10 close 9 more in about 96
-hours and each of those epics first needs a reachable provider; if the sweep in batch 2 or the
-epic's first investigation finds a wall, the honest outcome is a recorded wall and an owner decision,
-not a forced implementation. Batch 11 is decisions: #955, #306 and #862 are backlog or wall records,
-#1546 waits on an external Creator Studio host, and #308 is the permanent scheduling entry that
-closes last.
+Batches 0 to 9 close 18 issues in about 92 wall hours. Batches 10 and 11 close 9 more in about 96
+hours and each of those epics first needs a reachable provider. Nothing is closed as not-planned,
+backlog or wall: if a measurement finds no route, the issue stays open with the measurement recorded
+and moves to batch 12, deferred. Close-outs are allowed only for issues already fixed with evidence
+(batch 0), and only after the reporter confirms or the stated wait expires.
+
+Batch 12 holds #955 (plug-in backlog), #306 (third-party plug-ins), #1546 (Creator Studio, waiting on an
+external host) and #308 (the permanent scheduling entry). They stay open with their reasons, are
+listed at the end of this file, and are revisited after batch 11. #970 is settled by measuring in
+batch 2 and stays open; it joins batch 12 only if no colour source is found.
 
 Order follows user impact and visibility first (batches 1, 4, 7), then what unblocks others
-(batch 2 decides batches 4, 7 and 10), then cost. Batch 0 and the offline half of batches 3, 4, 5
+(batch 2 decides batches 4, 7, 8 and 11), then cost. Batch 0 and the offline half of batches 3, 4, 5
 and 6 need no Logic session, so they run while the locale campaign holds Logic.
 
 | total | wall hours | calendar, continuous autonomous work at about 16 productive hours a day |
 |---|---|---|
-| batches 0 to 8 (18 issues) | about 77 | 5 days; 7 days with the 30% risk allowance |
-| batches 9 to 11 (14 issues) | about 99 | 6 days; 8 days with the allowance |
-| everything | about 176 | 11 days; about 14 days with the allowance |
+| batches 0 to 9 (18 issues) | about 92 | 6 days; 8 days with the 30% risk allowance |
+| batches 10 and 11 (9 issues) | about 96 | 6 days; 8 days with the allowance |
+| batch 12 (5 issues left open) | 0 | revisited after batch 11 |
+| everything closable | about 188 | 12 days; about 15 days with the allowance |
 
 The previous forecast was 2 to 5 working days for v3.19.0 and the release took 4 days from that
 state, so the sizing is calibrated to this repository. It excludes reporter latency (batch 0, 1, 3
@@ -122,30 +128,30 @@ Logic session.
 | issue | area | state on Logic 13.0 and v3.19.0 | depends on | size | Logic | stars |
 |---|---|---|---|---|---|---|
 | #1588 | tracks, regions | Real. Neither region rename nor Chord Track write exists | Chord Track shape from batch 2 | L | yes | high |
-| #1586 | process | Mostly met. The request-owned `inspect_session` producer is in v3.19.0; the rest is #1028's scope | #1028 | S | no | none |
+| #1586 | process | Mostly met. The request-owned `inspect_session` producer is in v3.19.0; the rest is #1028's scope | #1028 (batch 9) | S | no | none |
 | #1585 | setup, AX | Likely fixed. Doctor treats 13.0 as validated since v3.19.0; `AXWindow: 0` was the census counting descendants only | reporter retest on v3.19.0 | S | no | medium |
 | #1571 | mixer | Real. Pan mode is not read; no source for spread exists, so `null` with a reason is a valid outcome | canon index refresh | M | read-only | low |
 | #1565 | AX latency | Real, partly fixed. Late-mutation boundary (#1572) and chooser readiness (#1579) are in; intermittent first-read timeout and en-US remain | batch 1 | L | yes | high |
 | #1553 | export | Real. #1561 fixes the sidebar only; List view needs the `AXCell`/`AXRow` chain | none | M | one run | low |
 | #1552 | resources | Fixed in v3.19.0 (#1558); Logic 13 readback passes; only a Logic 12.4 rerun is missing | none | S | no | none |
 | #1550 | tracks | Fixed in v3.19.0 (#1560); Logic 13 numbers are in the issue; only a 12.4 rerun is missing | none | S | no | low |
-| #1546 | setup | External. Needs a Creator Studio host the maintainer lacks; a draft pull request was invited | outside contributor | S | external | medium |
+| #1546 | setup | Deferred (batch 12): needs a Creator Studio host the maintainer lacks; a draft pull request was invited | outside contributor | S | external | medium |
 | #1516 | key commands | Real. Four prerequisite pull requests merged; Learn, source-aware check, readiness and a qualified region command remain | Key Commands reachability from batch 2 | L | yes | high |
 | #1430 | plug-ins | Real. No fixture holds the five plug-ins | fixture, #1417 | L | yes | low |
 | #1417 | plug-ins | Partly fixed. Cleanup settled in #1518; mono Gain and Sample Delay unread | none | M | yes | low |
-| #1403 | process | Largely superseded. #1576 removed the policy machinery and #1463 the manual fallback | owner call | S | no | none |
+| #1403 | process | Open. #1576 removed the policy machinery and #1463 the manual fallback; the unattended-path integration items remain | batch 9 | M | no | none |
 | #1028 | verifier | Real, infrastructure shipped. Ten-locale acceptance is the locale campaign | #1590 | L | yes | low |
 | #971 | session repair | Real. Integration, so last | #291, #967, #969 | L | yes | low |
-| #970 | colour | Wall. The saved-project route holds no track colour; a Logic readback is the last open route | batch 2 | S | one run | low |
+| #970 | colour | The saved-project route holds no track colour; a Logic readback is the last open route and batch 2 settles it. Stays open either way | batch 2 | S | one run | low |
 | #969 | organization | Real. Ordering, grouping and layout (L2 to L4) open | none | L | yes | medium |
 | #967 | bus and aux | Real. Creation and reuse open | #291 | L | yes | low |
-| #955 | plug-in backlog | Backlog by label; generic snapshots and batch compensation open | #299 | L | yes | low |
+| #955 | plug-in backlog | Deferred (batch 12): generic snapshots and batch compensation open | #299 | L | yes | low |
 | #884 | automation | Real. Only a current-playhead value is readable; no point source | batch 2 | L | yes | high |
-| #862 | MCU plug-in edit | Wall record; strip index cannot bind to a channel | none | M | yes | none |
-| #816 | publication | Scope superseded by the unsigned release; assets and metadata are published | #284 | M | no | low |
+| #862 | MCU plug-in edit | Solvable. A strip index cannot yet bind to a channel; batch 2 searches the routes and batch 8 builds the bound write | batch 2 | L | yes | medium |
+| #816 | publication | Scope superseded by the unsigned release; assets and metadata are published; written reconciliation with #284 first | #284 | M | no | low |
 | #668 | refresh | Fix merged (#1566); needs a run on a project with about 74 visible rows | #1565 | M | yes | low |
-| #308 | tracker | Permanent by design; closes last | all | S | no | none |
-| #306 | third-party plug-ins | Backlog; prove one exact plug-in first | #299 | L | yes | low |
+| #308 | tracker | Deferred (batch 12): permanent by design | all | S | no | none |
+| #306 | third-party plug-ins | Deferred (batch 12): prove one exact plug-in first | #299 | L | yes | low |
 | #305 | Flex Pitch | Not started; no producer reaches the model | provider | L | yes | low |
 | #304 | tempo | Read resource shipped; write and Smart Tempo open | none | L | yes | medium |
 | #303 | MIDI transforms | Blocked behind #302 | #302 | L | yes | low |
@@ -164,19 +170,59 @@ Logic session.
   `latestValidatedLogicVersion` is 13.0 in the shipped source, so the version warning that put
   capability groups in `not_ready` is gone. Ask the reporter for `LogicProMCP doctor --json --profile
   core --client terminal` on v3.19.0; close on a clean answer or after seven days without one.
-- **#1586:** its pilot (positive success for the claimed feature, in the existing verifier) is
-  #1028's scope and #1582's change. Close it as absorbed once #1028 carries one acceptance row for
-  the pilot, and answer the downstream caller comment: v3.19.0 is the release that routes the
-  request-owned producer.
-- **#1403:** owner call. The remaining items are unattended-path integration tests; the policy
-  workflows they would police are gone.
+
+Closing waits for the reporter's confirmation or the stated wait (seven days after the request).
+#1586 and #1403 are not close-outs: they close with batch 9, when #1028 holds an acceptance row for
+the pilot and the unattended-path items have evidence. v3.19.0 is the release that routes the
+request-owned `inspect_session` producer, and the downstream caller comment on #1586 can be answered
+with that.
+
+### #862 route search (batch 2) and bound write (batch 8)
+
+#862 is solvable and is a real batch. Its blocker is that Logic re-banks when a channel is selected,
+so a strip index has no stable meaning. The Logic sweep in batch 2 tests each route below on one
+disposable project with more than eight tracks, read-only except for the track selections the route
+needs, restoring the starting selection. A route is accepted only if its acceptance check passes on
+three different bank positions. The bound channel must read back as the named target before any write.
+
+- **R1, scribble-strip names.** Capture the LCD text messages from the MCU feedback stream for all eight
+  strips. Select track T by Accessibility, then read the strip that carries T's name. Acceptance: the
+  strip text equals the leading characters of T's Accessibility name, and its position in the window plus
+  the bank offset equals T's index; two tracks whose names collide in the truncated text must be refused.
+- **R2, timecode and assignment display.** Capture the display controller messages while banking and
+  while selecting. Acceptance: record whether any value tracks the bank offset; the route holds only if
+  that value changes by the bank size on a bank shift and matches the selected track's index.
+- **R3, channel-select LED echo.** Select T by Accessibility and read the select-LED echo for the eight
+  strips. Acceptance: exactly one LED lit at the position expected from T's index, none lit when T is
+  outside the window, and the window moves when T is selected from outside it.
+- **R4, bind by name.** Use R1's text as the key and refuse unless exactly one strip matches the full
+  Accessibility name. Acceptance: a fixture with two same-prefix names refuses before any write; a unique
+  name binds.
+- **R5, pin the bank.** Switch to Channel Strip View or a flip mode, then select five other tracks.
+  Acceptance: the bank offset (by R1 or R3) is unchanged after every selection; restore the mode and
+  read it back.
+- **R6, Controller Assignments or Control Surface setup.** Inspect the setup window for a setting that
+  turns off follow-selection banking. Acceptance: with the setting changed the bank stays put across five
+  selections, and the original setting reads back after restore. It is a persistent preference, so it
+  needs consent in the product (as `setup_midi_key_commands` does) and is the last resort.
+- **R7, other protocols.** Check whether a HUI device or Logic Remote can be added and whether either
+  reports channel identity. Acceptance: one bound trace per protocol, or a recorded refusal naming the
+  missing identity.
+- **R8, address by plug-in page.** Select the target by Accessibility, enter the MCU plug-in page and
+  compare the page's plug-in and parameter names with the target's. Acceptance: names equal the
+  target's, one parameter write lands, and the same instance reads it back through Accessibility.
+
+Batch 8 builds the first route that passes: a binding receipt (project, track, channel index, and at
+least one MCU-side source agreeing with Accessibility) that every write must present and that refuses
+on disagreement, then one verified plug-in write through it, then restore and locale runs. If no
+route passes, #862 stays open with the measurements recorded and moves to batch 12.
 
 ### Order and parallel lanes
 
-The merge critical path is `#1590 → #1561 replacement → batch 1 → batch 2 → batches 3 to 7 → batch 8`.
+The merge critical path is `#1590 → #1561 replacement → batch 1 → batch 2 → batches 3 to 8 → batch 9`.
 Use one integration owner, at most two active implementation slices and one exclusive Logic session.
 While #1590's campaign holds Logic, only offline work proceeds: batch 0, and the offline halves of
-batches 3 to 6 (deterministic tests, parsers, contracts). Release cadence: cut v3.19.1 after batches
+batches 3 to 6 (deterministic tests, parsers, contracts) and the recorded-trace tests of batch 8. Release cadence: cut v3.19.1 after batches
 1 and 3 (reliability and export), and v3.20.0 after batches 4, 5 and 7 (the user-visible features).
 
 Reuse focused review and native evidence only while relevant blobs/dependencies, Logic build,
@@ -602,3 +648,16 @@ completion. Issue state here is a transcription of GitHub at the measured date, 
 on" column is transcribed from each issue's own recorded findings. Where this file and an issue
 disagree, **the issue is right and this file is the one that is wrong** — the same relationship its
 predecessor declared toward a file nobody could read.
+
+## Deferred
+
+These stay open on the owner's ruling, with their reasons. None is closed as not-planned, backlog or
+wall. They are revisited after batch 11.
+
+| issue | why deferred |
+|---|---|
+| #955 | Plug-in backlog (generic snapshots, batch compensation, automatic EQ). Needs #299's next parameter first. |
+| #306 | Third-party host parameters. Needs one exact plug-in proved before any generic expansion. |
+| #1546 | Creator Studio support. Needs a Creator Studio host and an outside contribution; the maintainer machine has none. |
+| #308 | The ADR programme's scheduling entry. Open permanently by design. |
+| #970 | Only if batch 2 finds no colour source. Stays open with the readings recorded. |
