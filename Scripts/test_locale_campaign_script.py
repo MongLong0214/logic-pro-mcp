@@ -75,6 +75,10 @@ def fixture(fail_at=None, holds=None, dirty=False):
     for step in STEPS:
         plan[step] = f"echo {step} >> {log}" + (" && false" if step == fail_at else "")
     plan["report"] = "echo 'ko-KR 48 12 0 0 194 1 1 207'"
+    # The real precheck shells out to macOS's pgrep; procps pgrep on Linux prints an error for a name over
+    # 15 characters, which the precheck reads as a live dialog source. The fixture must not depend on the
+    # host OS, so it stubs the step (the dedicated pre-check cases below put it back, behind a fake pgrep).
+    plan["precheck"] = "true"
     (scratch / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
     return root, log, plan
 
