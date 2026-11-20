@@ -43,7 +43,7 @@ If the MCP client launches from a different environment, register with an absolu
 
 ### `tools/list` is empty or times out
 
-Check the MCP client logs, confirm the command path, and run `LogicProMCP --check-permissions`. macOS TCC permissions apply to the parent app that launches the server.
+Check the MCP client logs, confirm the command path, and run `LogicProMCP --check-permissions`. macOS TCC permissions apply to the server's responsible process: usually the app that launches it, but the LogicProMCP binary itself under Claude Desktop. See [Which process needs the permission](#which-process-needs-the-permission).
 
 ### Concurrent large reads appear to time out ("no response")
 
@@ -59,9 +59,31 @@ The server produces every response, complete and well-formed, under concurrent l
 
 ## Permissions
 
+### Which process needs the permission
+
+macOS checks Accessibility, PostEvent and Automation against the server's *responsible process*, and the launcher decides which process that is:
+
+- **Claude Desktop** starts every stdio MCP server through its `disclaimer` helper with TCC responsibility disclaimed. The principal is the **LogicProMCP binary at its real path**, for example `/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicProMCP`. A grant on Claude does not apply to the server.
+- **Claude Code in a terminal, Terminal, iTerm, Cursor, VS Code**: the server inherits the launcher, so the grant belongs to that app.
+
+`LogicProMCP --check-permissions`, `logic_system permissions` and `doctor` report the measured principal: the `TCC principal:` line, and `tcc_principal` / `tcc_principal_is_self` in the evidence of `permissions.launch_context`. Run the check from the client that actually launches the server (for Claude Desktop, ask Claude to run `logic_system permissions`); a Terminal run measures Terminal.
+
+Homebrew installs each version under a new `Cellar/<version>` path, and the release binary carries only an ad-hoc signature. A grant for one version therefore does not carry over to the next, and the old entry stays in the list looking enabled.
+
+### Claude Desktop: Accessibility or PostEvent not granted (macOS 26 and 27)
+
+When the `TCC principal:` line says `this LogicProMCP binary itself`, or the unified log shows `kTCCServicePostEvent` evaluated for the LogicProMCP path with `Auth:Denied (Service Policy)`, that binary has no matching Accessibility grant. PostEvent follows the binary's Accessibility grant, so one switch fixes both.
+
+1. Quit Claude Desktop.
+2. In **System Settings -> Privacy & Security -> Accessibility**, select every `LogicProMCP` entry and remove it with **-**. An entry left from an older Cellar path or build stays enabled but never matches.
+3. Run `LogicProMCP --request-permissions` in Terminal. It requests from a disclaimed copy of the binary, so macOS lists the binary rather than Terminal. Turn the new `LogicProMCP` entry on. Alternatively, add it with **+**: press Cmd-Shift-G and paste the real path from `realpath "$(which LogicProMCP)"`.
+4. Reopen Claude Desktop and run `logic_system permissions` again.
+
+Repeat steps 2-4 after each `brew upgrade logic-pro-mcp`.
+
 ### Accessibility denied
 
-Enable Accessibility for the launcher app in **System Settings -> Privacy & Security -> Accessibility**.
+Grant Accessibility to the reported `TCC principal` in **System Settings -> Privacy & Security -> Accessibility**: the launcher app, or the LogicProMCP binary itself under Claude Desktop (see above).
 
 ### Automation denied or not verifiable
 
@@ -86,7 +108,7 @@ Fix it one of two ways:
 
 ### PostEvent denied
 
-`permissions.post_event_access=fail` means CGEvent-family operations cannot post trusted keyboard or click events from the current launcher app. Grant Accessibility to the same app that launches LogicProMCP, then rerun:
+`permissions.post_event_access=fail` means CGEvent-family operations cannot post trusted keyboard or click events for the reported `TCC principal`. Grant Accessibility to that principal: the launcher app, or [the LogicProMCP binary under Claude Desktop](#claude-desktop-accessibility-or-postevent-not-granted-macos-26-and-27). Then rerun the check from the same client:
 
 ```bash
 LogicProMCP --check-permissions
@@ -95,7 +117,7 @@ LogicProMCP doctor --json
 
 ### Permissions look granted but another client still fails
 
-TCC permissions belong to the parent app that launches the server. A Terminal-run doctor can pass while Claude Desktop, Claude Code, launchd, or another wrapper still lacks the same grants. Check `permissions.launch_context` and `permissions.tcc_cross_context` in `LogicProMCP doctor --json`, then rerun doctor from the app that will actually spawn the server.
+TCC permissions belong to the server's responsible process, which depends on the launcher (see [Which process needs the permission](#which-process-needs-the-permission)). A Terminal-run doctor can pass while Claude Desktop, launchd, or another wrapper is evaluated as a different principal. Check `permissions.launch_context` (its `tcc_principal` evidence) and `permissions.tcc_cross_context` in `LogicProMCP doctor --json`, then rerun the check from the app that will actually spawn the server.
 
 If `permissions.tcc_cross_context` is `skipped`, the live permission probes remain authoritative. The skipped `reason` tells you why the database enrichment could not answer: `full_disk_access_unavailable`, `tcc_query_unavailable`, `tcc_schema_mismatch`, or `principal_not_found`.
 
