@@ -99,7 +99,10 @@ struct Issue60LocalePhase4Tests {
             // ships at the row this LabelSet names in `derivedFrom` -- MAMixer's `Localizable.strings` key `automation` -- not a
             // translation anybody wrote. The set stays EXACT here on purpose: that is what makes
             // this a drift guard, so a future addition still has to say where it came from.
-            ("pluginAutomationLabelSubstring", AXLocalePolicy.pluginAutomationLabelSubstring.labels, ["automation", "오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音"]),
+            // `Automation` was added 2026-11-20 from the de-DE census on Logic 13.0 (7801): record
+            // `2026-11-20-de-DE-mixer-channel_strips-census`, read off an AXCheckBox description.
+            // Matching is case-insensitive, so it changes no match; it is the measured German cell.
+            ("pluginAutomationLabelSubstring", AXLocalePolicy.pluginAutomationLabelSubstring.labels, ["automation", "오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音", "Automation"]),
             ("audioPluginSlotLabel", AXLocalePolicy.audioPluginSlotLabel.labels,
              ["audio plug-in", "audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン", "Audio-Plug-in",
               "módulo de audio", "plugin audio", "音频插件", "音訊外掛模組", "module audio", "plug-in de áudio",
