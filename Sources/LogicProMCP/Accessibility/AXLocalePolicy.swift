@@ -445,7 +445,7 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Progr.%20Change#value"
     )
     static let eventListFilterPitchBend = LabelSet(
-        canonical: "Pitch Bend", variants: ["피치 벤드", "ピッチベンド", "Pitchbend", "Inflexión de tono", "弯音", "滑音", "彎音"],
+        canonical: "Pitch Bend", variants: ["피치 벤드", "ピッチベンド", "Pitchbend", "Inflexión de tono", "弯音", "滑音", "彎音", "Pitch bend"],
         rationale: "Event List pitch-bend filter; ten-locale titles derived from the cited Apple row. Logic 12.3 (6674) shipped 滑音 in zh_TW; Logic 13.0 (7801) ships 彎音, and 滑音 stays for 12.x.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Pitch%20Bend#value"
     )
@@ -1709,6 +1709,7 @@ enum AXLocalePolicy {
             "Reproduz",
             "Reproducir",
             "Lecture",
+            "Riproduci",
         ],
         rationale: "Identifies the Play transport control when reading TransportState; read-only."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py."
