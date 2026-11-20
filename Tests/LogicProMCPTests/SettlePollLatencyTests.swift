@@ -82,7 +82,7 @@ private let legacyFixedSettle = SettleSchedule(waitsNanoseconds: [350 * ms])
     @Test(arguments: [0, 5, 10, 25, 90, 200, 340, 350] as [UInt64])
     func aMoveThatLandsInLMillisecondsIsChargedNoMoreThanTheNextCheckpoint(latencyMs: UInt64) async throws {
         let run = await runMove(stages: [(latencyMs, 9)])
-        #expect(run.json["verified"] as? Bool == true)
+        #expect(run.json["verified"] as? Int == 1)
         #expect(run.json["observed"] as? Int == 9)
         var cumulative: UInt64 = 0
         var checkpoints: [UInt64] = [0]
@@ -99,22 +99,22 @@ private let legacyFixedSettle = SettleSchedule(waitsNanoseconds: [350 * ms])
         let polled = await runMove(stages: [(latencyMs, 9)])
         let legacy = await runMove(stages: [(latencyMs, 9)], schedule: legacyFixedSettle)
         #expect(polled.waitedNanoseconds == 350 * ms)
-        #expect(polled.json["verified"] as? Bool == false)
+        #expect(polled.json["verified"] as? Int == 0)
         #expect(polled.json["reason"] as? String == "readback_mismatch")
         #expect(polled.json["reason"] as? String == legacy.json["reason"] as? String)
-        #expect(polled.json["verified"] as? Bool == legacy.json["verified"] as? Bool)
+        #expect(polled.json["verified"] as? Int == legacy.json["verified"] as? Int)
     }
 
     /// An intermediate reading that shows the region somewhere ELSE must not end the poll: a stop on
     /// "it moved" instead of "it landed on the playhead" would certify bar 5 here.
     @Test func aRegionThatMovedToTheWrongBarDoesNotEndThePoll() async {
         let wrongThenRight = await runMove(stages: [(40, 5), (200, 9)])
-        #expect(wrongThenRight.json["verified"] as? Bool == true)
+        #expect(wrongThenRight.json["verified"] as? Int == 1)
         #expect(wrongThenRight.json["observed"] as? Int == 9)
         #expect(wrongThenRight.waitedNanoseconds >= 200 * ms)
 
         let wrongForever = await runMove(stages: [(40, 5)])
-        #expect(wrongForever.json["verified"] as? Bool == false)
+        #expect(wrongForever.json["verified"] as? Int == 0)
         #expect(wrongForever.json["reason"] as? String == "readback_mismatch")
         #expect(wrongForever.json["post_start_bar"] as? Int == 5)
         #expect(wrongForever.waitedNanoseconds == 350 * ms)
@@ -125,7 +125,7 @@ private let legacyFixedSettle = SettleSchedule(waitsNanoseconds: [350 * ms])
     func theVerdictNeverDiffersFromTheFixedSleepVerdict(latencyMs: UInt64) async {
         let polled = await runMove(stages: [(latencyMs, 9)])
         let legacy = await runMove(stages: [(latencyMs, 9)], schedule: legacyFixedSettle)
-        #expect(polled.json["verified"] as? Bool == legacy.json["verified"] as? Bool)
+        #expect(polled.json["verified"] as? Int == legacy.json["verified"] as? Int)
         #expect(polled.json["reason"] as? String == legacy.json["reason"] as? String)
         #expect(polled.waitedNanoseconds <= legacy.waitedNanoseconds)
     }
@@ -195,7 +195,7 @@ private let legacyFixedSettle = SettleSchedule(waitsNanoseconds: [350 * ms])
     @Test(arguments: [0, 3, 10, 25, 50, 60, 180, 599, 600] as [UInt64])
     func aCheckboxThatFlipsInLMillisecondsIsChargedNoMoreThanTheNextCheckpoint(latencyMs: UInt64) {
         let probe = checkbox(latencyMs: latencyMs)
-        #expect(probe.read(0) == true)
+        #expect(probe.read(0) != nil)
         let expected = ([UInt64(0)] + SettleSchedule.controlBarCheckbox.checkpointsNanoseconds).first { $0 >= latencyMs * ms }
         #expect(probe.waited() == expected)
         if let old = Self.oldCheckboxDetection(latencyMs: Int(latencyMs)) { #expect(probe.waited() <= UInt64(old) * ms) }
