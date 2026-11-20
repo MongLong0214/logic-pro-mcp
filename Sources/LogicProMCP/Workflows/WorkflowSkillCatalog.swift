@@ -429,6 +429,7 @@ enum WorkflowSkillCatalog {
             stockPluginGuardedInsert(),
             bounceReadiness(),
             batchExportPlan(),
+            sampleSourcePrep(),
         ]
     }
 
@@ -1033,6 +1034,43 @@ enum WorkflowSkillCatalog {
     }
 
     // MARK: - Builders
+
+    private static func sampleSourcePrep() -> WorkflowSkill {
+        makeWorkflow(
+            id: "logic.workflow.audio.sample_source_prep",
+            title: "Sample Source Preparation",
+            intent: "Inspect an audio file before sampling, stem splitting or remixing it: format, length, channel count, level, silence and spectral balance.",
+            scope: "Read-only analysis of a caller-supplied audio file; Logic does not need to be running and no project state changes.",
+            prerequisites: ["Absolute path to a readable audio file supplied by the caller"],
+            allowedTools: ["logic_audio"],
+            allowedResources: [],
+            requiredConfirmations: [],
+            stateChecks: [],
+            steps: [
+                toolStep("analyze_file", "Read format, channel count, length, level and silence ratio", "logic_audio", command: "analyze_file", false, nil, ["schema", "channel_count", "sample_rate", "duration_seconds", "peak_dbfs", "silence_ratio", "verification"], ["file missing or unreadable", "verification status fail"]),
+                toolStep("analyze_spectrum", "Read band energy, resonances and the coarse source classification", "logic_audio", command: "analyze_spectrum", false, nil, ["bands", "resonances", "classification", "complete"], ["spectral analysis failed", "analysis incomplete"]),
+                toolStep("recommend_eq", "Read advisory corrective EQ bands", "logic_audio", command: "recommend_eq", false, nil, ["bands", "analysis"], ["no safe recommendation: bands empty with a reason"]),
+            ],
+            verification: WorkflowVerification(evidence: ["audio_analysis_json", "spectral_analysis_json"], successFields: ["schema", "bands"], liveEvidenceFile: nil),
+            failureModes: [
+                "path missing or not a regular file",
+                "format not decodable",
+                "input exceeds the size, duration or decoded frame limits",
+                "spectral analysis incomplete",
+            ],
+            rollbackOrRecovery: "No rollback required; the workflow only reads the supplied file.",
+            evidenceLevel: .deterministic,
+            productionReady: true,
+            dependsOn: [],
+            limitations: [
+                "Does not import, split, stretch or modify the file.",
+                "The source classification is coarse and advisory; it can read white noise as drums and a pure tone as vocal.",
+                "EQ bands are advice for a person or a separate verified EQ write; nothing is applied here.",
+                "A two channel file whose channels are identical is still reported as two channels.",
+            ],
+            mutationKind: .readOnly
+        )
+    }
 
     private static func makeWorkflow(
         id: String,
