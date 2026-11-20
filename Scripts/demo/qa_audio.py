@@ -6,6 +6,7 @@
 Checks (all measured, none assumed):
   * integrated loudness (EBU R128) and true peak via ffmpeg ebur128 (target -14 LUFS, true peak <= -1.0 dBTP)
   * clipping: count of samples at full scale (must be 0)
+  * short-term loudness of the opening and the loudness range (reported; the build targets LRA <= 7)
   * silence gaps: any run below -60 dBFS longer than 0.35 s inside the body (must be none)
   * clicks: sample-to-sample jumps far outside the signal's own distribution (reported, must be 0 over 6 sigma-of-diff x 40)
 """

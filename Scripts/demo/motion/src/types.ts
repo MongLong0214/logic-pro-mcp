@@ -11,18 +11,11 @@ export type Ev = {
   result: string; // one-line, truncated server answer
 };
 
-export type Take = {
-  video: string; // path under public/
-  width: number;
-  height: number;
-  durationSeconds: number;
-  events: Ev[];
-  markers: Record<string, number>; // name -> footage seconds
-  audioOnset?: number; // footage seconds of the first music sample (take B)
-};
-
 export type Session = {
-  takes: { A: Take; B: Take };
-  stats: { mixWrites: number; mixSeconds: number; medianMs: number; totalCalls: number; verifiedCalls: number };
+  film: {
+    seq: string; seqStart: number; fps: number; width: number; height: number; durationSeconds: number;
+    events: Ev[]; markers: Record<string, number>; musicStart: number;
+  };
+  stats: { writes: number; verifiedWrites: number; medianMs: number; maxMs: number; totalCalls: number };
   meta: { version: string; logic: string; macos: string; date: string; locale: string; bpm: number; bars: number };
 };

@@ -8,8 +8,8 @@ A local [Model Context Protocol](https://modelcontextprotocol.io) server that le
 </p>
 
 <p align="center">
-  <a href="docs/media/logic-pro-mcp-demo.mp4"><img src="docs/media/logic-pro-mcp-demo.gif" width="720" alt="Logic Pro MCP launch film: an MCP client reads a Logic Pro session, sets the tempo, brings in five parts and mixes them, every change read back and verified. Click for the full 80 second film with sound." /></a>
-  <br /><sub>Live on Logic Pro 13.0 with v3.19.0. Click for the <a href="docs/media/logic-pro-mcp-demo.mp4">80 s film with sound</a>.</sub>
+  <a href="docs/media/logic-pro-mcp-demo.mp4"><img src="docs/media/logic-pro-mcp-demo.gif" width="720" alt="Logic Pro MCP launch film: a scripted MCP client reads a Logic Pro session, sets the tempo, brings in five parts and mixes them, every change shown is read back. Click for the full 51 second film with sound." /></a>
+  <br /><sub>Live on Logic Pro 13.0 with v3.19.0. Click for the <a href="docs/media/logic-pro-mcp-demo.mp4">51 s film with sound</a>.</sub>
 </p>
 
 [Install](#install) · [Register a client](#register-with-an-mcp-client) · [Permissions](#permissions) · [Tools](#tools-and-operations) · [Safety model](#safety-model) · [What changed in 3.19.0](#what-changed-in-3190) · [Demo](docs/media/logic-pro-mcp-demo.mp4)

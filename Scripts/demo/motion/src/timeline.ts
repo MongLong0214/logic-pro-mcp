@@ -1,47 +1,48 @@
-// One source of truth for the film's structure. Times are seconds of the finished video; the music bed
-// (Logic's own output of the song, 112 BPM, bar = 2.143 s) runs from 0, so scene cuts land on bars.
-// scripts/export-cues.ts reads this same file to place sound-design hits, so picture and sound cannot drift.
-export const BPM = 112;
+// The film's structure. No imports so scripts/export-cues.mjs can read it with plain node.
+// Two clocks: v = seconds of the finished video, t = seconds of the song (bar 1 = t 0, a bar is 2.0 s at 120 BPM).
+export const BPM = 120;
 export const BAR = (60 / BPM) * 4;
-export const bar = (n: number) => (n - 1) * BAR; // start of 1-based bar n
+export const bar = (n: number) => (n - 1) * BAR;
+export const SONG = 24 * BAR; // 48 s
 
-export const TOTAL = bar(36) + BAR + 2.6; // song ends at the end of bar 36 (rings out), plus the CTA tail
+// Footage clock. The driver waits 2 s after its first reads (the track poller needs a cycle); that dead time is cut:
+// footage [SEG_A0, SEG_A1] plays first, then footage jumps to SEG_B0. Nothing is retimed; the jump is on a static frame.
+export const SEG_A0 = 1.15;
+export const SEG_A1 = 1.75;
+export const SEG_B0 = 3.45;
+export const vOfFootage = (f: number) => (f <= SEG_A1 ? f - SEG_A0 : SEG_A1 - SEG_A0 + (f - SEG_B0));
+export const footageOfV = (v: number) => (v <= SEG_A1 - SEG_A0 ? SEG_A0 + v : SEG_B0 + (v - (SEG_A1 - SEG_A0)));
 
-export type SceneId = "hook" | "problem" | "reveal" | "read" | "tempo" | "build" | "mix" | "verify" | "speed" | "close";
-
-export const scenes: Record<SceneId, { from: number; to: number }> = {
-  hook: { from: 0, to: bar(3) },
-  problem: { from: bar(3), to: bar(5) },
-  reveal: { from: bar(5), to: bar(7) + 0.4 },
-  read: { from: bar(7) + 0.4, to: bar(9) },
-  tempo: { from: bar(9), to: bar(11) },
-  build: { from: bar(11), to: bar(17) },
-  mix: { from: bar(17), to: bar(21) },
-  verify: { from: bar(21), to: bar(25) },
-  speed: { from: bar(25), to: bar(29) },
-  close: { from: bar(29), to: TOTAL },
+// Scenes, in song time t (video time v = t + P, where P is the pre-roll before the first note, from session.json).
+export const scenes = {
+  entrances: [
+    { name: "Pad", t: 0, title: "The pad comes in", track: 1 },
+    { name: "Keys", t: bar(3), title: "Then the keys", track: 0 },
+    { name: "Bass", t: bar(5), title: "The bass", track: 2 },
+    { name: "Drums", t: bar(7), title: "The drums", track: 3 },
+    { name: "Lead", t: bar(9), title: "And the hook", track: 4 },
+  ],
+  mix: { from: bar(11), to: bar(17) },
+  verify: { from: bar(17), to: bar(19) + 1 },
+  speed: { from: bar(19) + 1, to: bar(22) },
+  close: { from: bar(22), to: SONG },
 };
 
-// Sound-design hits: [time s, kind]. Kinds are synthesised by scripts/sfx.sh (whoosh, tick, ding, riser, boom).
-export const sfx: Array<[number, "whoosh" | "tick" | "ding" | "riser" | "boom"]> = [
-  [bar(3) - 0.05, "whoosh"],
-  [bar(5) - 0.9, "riser"],
-  [bar(5), "boom"],
-  [scenes.read.from, "whoosh"],
-  [scenes.tempo.from, "whoosh"],
-  [scenes.build.from, "whoosh"],
-  [scenes.mix.from, "whoosh"],
-  [scenes.verify.from, "whoosh"],
-  [scenes.speed.from, "whoosh"],
-  [scenes.close.from - 0.1, "whoosh"],
-];
-
-// 26 s cut for social and the README GIF: [video start, video end, music start]. The audio script crossfades
-// between these excerpts of the same song; scene components take the matching footage offsets.
+// 26-second social cut / GIF: [song time range] segments, cut on bar lines. `at` is the social-clock start.
 export const social = {
-  hook: { v: [0, 3.4], a: 0 },
-  reveal: { v: [3.4, 8.0], a: bar(5) - 0.6 },
-  drop: { v: [8.0, 20.0], a: bar(13) },
-  close: { v: [20.0, 26.0], a: bar(29) },
-  total: 26.0,
+  // pre-roll (hook + visible tempo/pan writes), the drums and the hook entering with their faders on screen, the end card
+  segments: [
+    { kind: "pre" as const, len: 0 }, // len filled from P at render time
+    { kind: "song" as const, from: bar(7) - 0.5, len: 14.5 },
+    { kind: "song" as const, from: bar(22), len: 6 },
+  ],
 };
+
+// Sound-design hits in video seconds are built in export-cues.mjs from these song-time cues plus the real write times.
+export const sfxSong: Array<[number, "whoosh" | "ding" | "boom" | "riser"]> = [
+  [bar(7) - 0.0, "whoosh"],
+  [bar(11), "whoosh"],
+  [bar(17), "whoosh"],
+  [bar(19) + 1, "whoosh"],
+  [bar(22) - 0.05, "boom"],
+];

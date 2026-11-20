@@ -19,15 +19,16 @@ exposed by the server yet.
 
 | path | role |
 |---|---|
-| `music/compose.py` | deterministic arrangement ("Signal", 112 BPM, A minor, 36 bars): writes `music/out/*.mid` + `arrangement.json` |
+| `music/compose.py` | deterministic arrangement ("Signal", 120 BPM, A minor, 24 bars): writes `music/out/*.mid` + `arrangement.json` |
 | `capture/LogicCapture.swift` | ScreenCaptureKit recorder: Logic's window at native Retina pixels, 60 fps, plus Logic's own audio |
-| `driver.py` | scripted MCP client (stdio JSON-RPC), scenarios `reset`, `setup` (take A), `play` (take B) |
+| `driver.py` | scripted MCP client (stdio JSON-RPC), scenarios `reset` and `film` (the single take) |
 | `record_take.sh` | runs capture + driver together; run it in the terminal that holds Screen Recording permission |
-| `align.py` | driver logs + capture metadata -> `motion/public/data/session.json` |
+| `align.py` | driver log + capture metadata -> `motion/public/data/session.json` (fits the beat grid to find when bar 1 started) |
+| `scan_frames.py` | per-frame luma scan: fails the build on any dropout frame |
 | `motion/` | Remotion project: scenes, kinetic captions, transcript, camera moves (brand tokens from the landing site) |
 | `sound_design.py` | generated UI/whoosh sound design (numpy), mixed under the song |
 | `qa_audio.py` | LUFS, true peak, clipping, silence gaps, click detection |
-| `build.sh` | `process`, `render`, `audio`, `encode`, `all` |
+| `build.sh` | `process`, `render`, `audio`, `encode`, `check`, `all`; `check` is a hard gate: every output needs an audio stream, about -14 LUFS, true peak at or under -1.0 dBTP, and no dropout frames |
 
 ## Re-render
 
@@ -35,7 +36,7 @@ exposed by the server yet.
 Scripts/demo/fetch-binary.sh v3.19.0          # the exact published binary
 python3 Scripts/demo/music/compose.py         # regenerate the MIDI (identical every run)
 # live: prepare the fixture project (docs/media/README.md), then in the permitted terminal:
-Scripts/demo/record_take.sh reset && Scripts/demo/record_take.sh A && Scripts/demo/record_take.sh B
+Scripts/demo/record_take.sh reset && Scripts/demo/record_take.sh film
 Scripts/demo/build.sh all                     # PREVIEW=1 for a fast 540p draft
 ```
 
@@ -43,5 +44,5 @@ Outputs land in `Scripts/demo/out/` (the 4K master stays local; the repo carries
 
 ## Timing honesty
 
-No clip is retimed. Video footage plays at 1.0x everywhere; the speed section replays the real mixer batch on its real
-clock. The only retime-free "acceleration" is none. If a future edit speeds a clip up, the on-screen label must say so.
+No clip is retimed. Footage plays at 1.0x everywhere. The one cut is the 2 s the driver waits for the track poller, on a
+static frame. If a future edit speeds a clip up, the on-screen label must say so.

@@ -1,45 +1,36 @@
 import React from "react";
-import { AbsoluteFill, Composition, Sequence, staticFile } from "remotion";
+import { Composition } from "remotion";
 import { FPS } from "./theme";
-import { TOTAL, scenes, social } from "./timeline";
-import { BuildScene, Close, Hook, MixScene, Problem, ReadScene, Reveal, SpeedScene, TempoScene, VerifyScene } from "./scenes";
+import { LaunchFilm, FilmProvider, TimeMap, WithTau } from "./film";
+import { SONG, social, vOfFootage } from "./timeline";
 import type { Session } from "./types";
 import sessionJson from "../public/data/session.json";
 
 const session = sessionJson as unknown as Session;
-void staticFile;
-const fr = (s: number) => Math.round(s * FPS);
-const at = (id: keyof typeof scenes) => ({ from: fr(scenes[id].from), durationInFrames: fr(scenes[id].to) - fr(scenes[id].from) });
+const P = vOfFootage(session.film.musicStart);
 
-export const Launch: React.FC = () => (
-  <AbsoluteFill style={{ background: "#101512" }}>
-    <Sequence {...at("hook")}><Hook session={session} /></Sequence>
-    <Sequence {...at("problem")}><Problem /></Sequence>
-    <Sequence {...at("reveal")}><Reveal /></Sequence>
-    <Sequence {...at("read")}><ReadScene session={session} /></Sequence>
-    <Sequence {...at("tempo")}><TempoScene session={session} /></Sequence>
-    <Sequence {...at("build")}><BuildScene session={session} /></Sequence>
-    <Sequence {...at("mix")}><MixScene session={session} /></Sequence>
-    <Sequence {...at("verify")}><VerifyScene session={session} /></Sequence>
-    <Sequence {...at("speed")}><SpeedScene session={session} /></Sequence>
-    <Sequence {...at("close")}><Close session={session} /></Sequence>
-  </AbsoluteFill>
-);
+// Launch: composition time is film time. Ends when the song does.
+const launchMap: TimeMap = [{ s0: 0, len: P + SONG, tau0: 0 }];
+const LAUNCH_LEN = P + SONG;
 
-const seg = (k: "hook" | "reveal" | "drop" | "close") => ({ from: fr(social[k].v[0]), durationInFrames: fr(social[k].v[1]) - fr(social[k].v[0]) });
+// Social: pre-roll, the drums and hook entering, the end card; same scenes, cut on bar lines.
+const socialMap: TimeMap = (() => {
+  let s = 0;
+  const out: TimeMap = [];
+  for (const seg of social.segments) {
+    if (seg.kind === "pre") { out.push({ s0: s, len: P, tau0: 0 }); s += P; }
+    else { out.push({ s0: s, len: seg.len, tau0: P + (seg as { from: number }).from }); s += seg.len; }
+  }
+  return out;
+})();
+const SOCIAL_LEN = socialMap[socialMap.length - 1].s0 + socialMap[socialMap.length - 1].len;
 
-export const Social: React.FC = () => (
-  <AbsoluteFill style={{ background: "#101512" }}>
-    <Sequence {...seg("hook")}><Hook session={session} t0={0} /></Sequence>
-    <Sequence {...seg("reveal")}><Reveal /></Sequence>
-    <Sequence {...seg("drop")}><BuildScene session={session} t0={social.drop.a} /></Sequence>
-    <Sequence {...seg("close")}><Close session={session} /></Sequence>
-  </AbsoluteFill>
-);
+export const Launch: React.FC = () => <FilmProvider session={session}><WithTau map={launchMap}><LaunchFilm /></WithTau></FilmProvider>;
+export const Social: React.FC = () => <FilmProvider session={session}><WithTau map={socialMap}><LaunchFilm /></WithTau></FilmProvider>;
 
 export const Root: React.FC = () => (
   <>
-    <Composition id="Launch" component={Launch} width={1920} height={1080} fps={FPS} durationInFrames={fr(TOTAL)} />
-    <Composition id="Social" component={Social} width={1920} height={1080} fps={FPS} durationInFrames={fr(social.total)} />
+    <Composition id="Launch" component={Launch} width={1920} height={1080} fps={FPS} durationInFrames={Math.round(LAUNCH_LEN * FPS)} />
+    <Composition id="Social" component={Social} width={1920} height={1080} fps={FPS} durationInFrames={Math.round(SOCIAL_LEN * FPS)} />
   </>
 );

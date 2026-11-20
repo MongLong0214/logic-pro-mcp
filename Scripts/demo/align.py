@@ -59,7 +59,7 @@ def play_start(path, bpm, lo, hi, probe=(30.0, 70.0)):
         if score > best[0]:
             best = (score, ph)
     cands = [best[1] + k * beat for k in range(0, 12)]
-    inside = [c for c in cands if lo <= c <= hi + 0.25]  # Logic cannot start before the call is sent
+    inside = [c for c in cands if lo + 0.2 <= c <= hi + 0.4]  # Logic starts after the call is sent (measured: about 0.5 s in)
     return min(inside) if inside else lo
 
 
@@ -121,7 +121,7 @@ def pretty(d, uri=None):
     if "requested" in d and "observed" in d:
         def f(v):
             return f"{v:.2f}" if isinstance(v, float) else str(v)
-        parts.append(f"requested {f(d['requested'])} → observed {f(d['observed'])}")
+        parts.append(f"{f(d['requested'])} → {f(d['observed'])}")
     if d.get("error"):
         parts.append(str(d["error"]))
     return " · ".join(parts) if parts else one_line(json.dumps(d))
@@ -155,42 +155,37 @@ def events_from(path, epoch0):
 
 def main():
     ap = argparse.ArgumentParser()
-    for t in "ab":
-        ap.add_argument(f"--{t}-log"); ap.add_argument(f"--{t}-meta"); ap.add_argument(f"--{t}-video")
-    ap.add_argument("--b-audio")
+    ap.add_argument("--log", required=True)
+    ap.add_argument("--meta", required=True)
+    ap.add_argument("--video", required=True, help="the raw capture, for probing size and duration")
+    ap.add_argument("--audio", required=True, help="wav extracted from the capture")
+    ap.add_argument("--seq", required=True, help="footage frame sequence directory name under the footage server root")
+    ap.add_argument("--seq-start", type=int, required=True, help="absolute frame number of the first image in the sequence")
     ap.add_argument("--out", required=True)
     ap.add_argument("--version", default="3.19.0")
     ap.add_argument("--logic", default="13.0 (7801)")
     ap.add_argument("--macos", default="26.3")
     ap.add_argument("--locale", default="en-US")
-    ap.add_argument("--bpm", type=int, default=112)
-    ap.add_argument("--bars", type=int, default=36)
+    ap.add_argument("--bpm", type=int, default=120)
+    ap.add_argument("--bars", type=int, default=24)
     a = ap.parse_args()
-    takes = {}
-    for t in "ab":
-        meta = json.load(open(getattr(a, f"{t}_meta")))
-        w, h, dur = probe(getattr(a, f"{t}_video"))
-        evs, markers = events_from(getattr(a, f"{t}_log"), meta["first_frame_epoch"])
-        for e in evs:
-            e.pop("_raw", None)
-        takes[t.upper()] = {"video": "footage/" + getattr(a, f"{t}_video").split("/")[-1], "width": w, "height": h,
-                            "durationSeconds": dur, "events": evs, "markers": markers}
-    if a.b_audio:
-        # audioOnset = the music clock's zero: the instant bar 1 starts (not the pad's fade-in, which is later)
-        ev = takes["B"]["events"]
-        play = next(e for e in ev if e["call"].endswith(".play"))
-        takes["B"]["audioOnset"] = round(play_start(a.b_audio, a.bpm, play["t"], play["t"] + play["ms"] / 1000), 3)
-    allev = takes["A"]["events"] + takes["B"]["events"]
-    mixw = takes["A"]["markers"].get("mix_batch_writes", 0)
-    mixs = takes["A"]["markers"].get("mix_batch_seconds", 0.0)
-    tools = [e for e in allev if e["kind"] == "tool"]
-    out = {"takes": takes,
-           "stats": {"mixWrites": mixw, "mixSeconds": mixs, "medianMs": round(statistics.median([e["ms"] for e in tools]), 1) if tools else 0,
-                     "totalCalls": len(allev), "verifiedCalls": sum(1 for e in tools if e["verified"] is True)},
+    meta = json.load(open(a.meta))
+    w, h, dur = probe(a.video)
+    evs, markers = events_from(a.log, meta["first_frame_epoch"])
+    for e in evs:
+        e.pop("_raw", None)
+    play = next(e for e in evs if e["call"].endswith(".play"))
+    music_start = round(play_start(a.audio, a.bpm, play["t"], play["t"] + play["ms"] / 1000, probe=(20.0, 40.0)), 3)
+    writes = [e for e in evs if e["kind"] == "tool" and not e["call"].endswith((".play", ".stop"))]
+    lat = sorted(e["ms"] for e in writes)
+    out = {"film": {"seq": a.seq, "seqStart": a.seq_start, "fps": 60, "width": w, "height": h, "durationSeconds": dur,
+                    "events": evs, "markers": markers, "musicStart": music_start},
+           "stats": {"writes": len(writes), "verifiedWrites": sum(1 for e in writes if e["verified"] is True),
+                     "medianMs": round(statistics.median(lat), 0), "maxMs": round(lat[-1], 0), "totalCalls": len(evs)},
            "meta": {"version": a.version, "logic": a.logic, "macos": a.macos, "locale": a.locale, "bpm": a.bpm, "bars": a.bars,
                     "date": datetime.date.today().isoformat()}}
     json.dump(out, open(a.out, "w"), indent=1, ensure_ascii=False)
-    print(f"wrote {a.out}: {len(allev)} calls, median {out['stats']['medianMs']} ms")
+    print(f"wrote {a.out}: {len(evs)} calls, {len(writes)} writes, median {out['stats']['medianMs']} ms, music starts at {music_start}s")
 
 
 if __name__ == "__main__":
