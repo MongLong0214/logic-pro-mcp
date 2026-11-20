@@ -625,6 +625,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                     // not omitted — so a caller that only checks presence still sees it and must read the
                     // per-check states to learn why. See `Self.allGrantedValue`.
                     "all_granted": Self.allGrantedValue(for: status),
+                    // #1596: the process these states describe. `null` when unmeasured.
+                    "tcc_principal": status.principal.map { .string($0.displayPath) } ?? .null,
+                    "tcc_principal_is_self": status.principal.map { .bool($0.isSelf) } ?? .null,
                     "summary": .string(status.summary),
                 ])
             )

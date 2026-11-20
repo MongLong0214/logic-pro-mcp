@@ -6,8 +6,10 @@ extension SetupDoctor {
             id: "permissions.accessibility",
             domain: "permissions",
             status: status.accessibility ? .pass : .fail,
-            summary: status.accessibility ? "Accessibility permission is granted." : "Accessibility permission is not granted.",
-            evidence: ["state": status.accessibilityState.rawValue],
+            summary: status.accessibility
+                ? "Accessibility permission is granted\(principalClause(status))."
+                : "Accessibility permission is not granted\(principalClause(status)).",
+            evidence: principalEvidence(status, ["state": status.accessibilityState.rawValue]),
             remediationType: .none
         )
     }
@@ -65,27 +67,64 @@ extension SetupDoctor {
             domain: "permissions",
             status: status.postEventAccess ? .pass : .fail,
             summary: status.postEventAccess
-                ? "PostEvent access for CGEvent-family operations is granted."
-                : "PostEvent access is denied; CGEvent-family ops (transport.stop/pause + most edit/view/track fallbacks) will fail.",
-            evidence: ["post_event_access": status.postEventAccess ? "granted" : "denied"],
+                ? "PostEvent access for CGEvent-family operations is granted\(principalClause(status))."
+                : "PostEvent access is denied\(principalClause(status)); CGEvent-family ops (transport.stop/pause + most edit/view/track fallbacks) will fail.",
+            evidence: principalEvidence(status, ["post_event_access": status.postEventAccess ? "granted" : "denied"]),
             remediationType: .none
         )
     }
 
 
-    static func launchContextCheck(runtime: Runtime) -> Check {
+    static func launchContextCheck(
+        runtime: Runtime,
+        permissionStatus: PermissionChecker.PermissionStatus? = nil
+    ) -> Check {
         let context = runtime.launchContext()
-        let summary = context.context == "unknown"
-            ? "This report could not identify the responsible process; permission results remain bound to the unresolved launch context."
-            : "This report measures TCC permissions for the responsible process \(context.context); permission results are bound to that launch context."
+        let principal = permissionStatus?.principal
+        let summary: String
+        if let principal, principal.isSelf {
+            // #1596: the launch context names the app in the parent chain, but TCC is not
+            // evaluating that app. A launcher that disclaims responsibility (some MCP clients do,
+            // for every stdio server) leaves this binary as its own principal.
+            summary = "TCC evaluates this LogicProMCP binary itself (\(principal.displayPath)), not the launch context \(context.context); grants held by the launching app do not apply to this server."
+        } else if context.context == "unknown" {
+            summary = "This report could not identify the responsible process; permission results remain bound to the unresolved launch context."
+        } else {
+            summary = "This report measures TCC permissions for the responsible process \(context.context); permission results are bound to that launch context."
+        }
         return check(
             id: "permissions.launch_context",
             domain: "permissions",
             status: .pass,
             summary: summary,
-            evidence: ["launch_context": context.context, "responsible_hint": context.responsibleHint],
+            evidence: principalEvidence(
+                permissionStatus,
+                ["launch_context": context.context, "responsible_hint": context.responsibleHint]
+            ),
             remediationType: .none
         )
+    }
+
+
+    /// " for <principal>" when the principal was measured, so a denial names the process that was
+    /// denied (#1596) instead of leaving the reader to assume it was the launcher app.
+    static func principalClause(_ status: PermissionChecker.PermissionStatus) -> String {
+        guard let principal = status.principal else { return "" }
+        return principal.isSelf
+            ? " for this LogicProMCP binary (\(principal.displayPath))"
+            : " for \(principal.displayPath)"
+    }
+
+
+    static func principalEvidence(
+        _ status: PermissionChecker.PermissionStatus?,
+        _ evidence: [String: String]
+    ) -> [String: String] {
+        guard let principal = status?.principal else { return evidence }
+        var merged = evidence
+        merged["tcc_principal"] = principal.displayPath
+        merged["tcc_principal_is_self"] = principal.isSelf ? "true" : "false"
+        return merged
     }
 
 

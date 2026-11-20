@@ -59,12 +59,14 @@ Claude Desktop can launch the same configured MCP server separately for chat and
 
 Open **System Settings -> Privacy & Security**:
 
-1. **Accessibility**: enable the app that launches `LogicProMCP` (Claude Code, Terminal, Cursor, or Claude Desktop).
-2. **Automation**: allow that app to control **Logic Pro** and **System Events**.
+1. **Accessibility**: enable the process macOS evaluates for the server:
+   - **Claude Desktop**: the `LogicProMCP` binary itself, not Claude. Claude Desktop launches MCP servers with TCC responsibility disclaimed. Run `LogicProMCP --request-permissions` in Terminal and turn on the `LogicProMCP` entry it adds, then reopen Claude Desktop. Remove older `LogicProMCP` entries first, and repeat after each `brew upgrade`: the Cellar path and ad-hoc signature change with every version.
+   - **Claude Code, Terminal, iTerm, Cursor, VS Code**: the app that launches `LogicProMCP`.
+2. **Automation**: allow that same process to control **Logic Pro** and **System Events**.
 
 If you use **Apple Creator Studio** Logic Pro (`com.apple.mobilelogic`), grant Automation separately from desktop Logic Pro (`com.apple.logic10`). macOS treats them as distinct apps even though both appear as "Logic Pro".
 
-`--check-permissions` and doctor readiness cover Accessibility, Automation for Logic Pro, Automation for System Events, and trusted PostEvent access. PostEvent is granted through the same launcher-app Accessibility control, but is reported separately because CGEvent fallback paths need it.
+`--check-permissions` and doctor readiness cover Accessibility, Automation for Logic Pro, Automation for System Events, and trusted PostEvent access. PostEvent is granted through the same Accessibility control, but is reported separately because CGEvent fallback paths need it. The `TCC principal:` line names the process the results were measured for. See [Troubleshooting](TROUBLESHOOTING.md#which-process-needs-the-permission).
 
 Verify:
 
@@ -278,11 +280,11 @@ Reports the responsible process's current Automation authorization for **System 
 
 <a id="doctor-permissionspost-event-access"></a>
 ### `permissions.post_event_access`
-Reports whether the responsible launcher can use the native PostEvent path required by CGEvent operations. A non-pass result is a terminal observation for this unattended run; doctor emits no remediation for this check.
+Reports whether the measured TCC principal can use the native PostEvent path required by CGEvent operations. When measured, the summary names the principal, and `tcc_principal` / `tcc_principal_is_self` record it. A non-pass result is a terminal observation for this unattended run; doctor emits no remediation for this check.
 
 <a id="doctor-permissionslaunch-context"></a>
 ### `permissions.launch_context`
-Identifies which responsible process context the permission observations describe. Unknown context remains an informational observation and does not create a continuation action.
+Identifies which responsible process the permission observations describe. `launch_context` is the client found in the parent chain; `tcc_principal` is the responsible process macOS actually evaluates, measured for this process. When `tcc_principal_is_self` is `true` (Claude Desktop launches), grants held by the launching app do not apply. Unknown context remains an informational observation and does not create a continuation action.
 
 <a id="doctor-permissionstcc-cross-context"></a>
 ### `permissions.tcc_cross_context`

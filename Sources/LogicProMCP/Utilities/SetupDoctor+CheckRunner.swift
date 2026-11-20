@@ -102,7 +102,7 @@ extension SetupDoctor {
         case .permissionsPostEventAccess:
             return postEventAccessCheck(context.permissionStatus)
         case .permissionsLaunchContext:
-            return launchContextCheck(runtime: context.runtime)
+            return launchContextCheck(runtime: context.runtime, permissionStatus: context.permissionStatus)
         case .permissionsTCCCrossContext:
             return tccCrossContextCheck(runtime: context.runtime)
         case .systemMacOSVersion:
