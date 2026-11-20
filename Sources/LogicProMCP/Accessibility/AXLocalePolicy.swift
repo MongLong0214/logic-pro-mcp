@@ -1708,6 +1708,7 @@ enum AXLocalePolicy {
             "재생", "再生", "Wiedergabe", "reproducir", "lecture", "riproduci", "reproduzir", "播放",
             "Reproduz",
             "Reproducir",
+            "Lecture",
         ],
         rationale: "Identifies the Play transport control when reading TransportState; read-only."
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py."
@@ -2673,7 +2674,7 @@ enum AXLocalePolicy {
     /// derivation, not a reading.
     static let pluginSlotListControl = LabelSet(
         canonical: "list",
-        variants: ["목록", "リスト", "Liste", "lista", "elenco", "列表"],
+        variants: ["목록", "リスト", "Liste", "lista", "elenco", "列表", "liste"],
         rationale: "Ranks an insert slot's list control behind its open control. Derived from Apple's own row; no live reading at an insert slot exists. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FMAGUI.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/list#value"
     )
