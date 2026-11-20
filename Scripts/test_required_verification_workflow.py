@@ -623,9 +623,11 @@ class RequiredVerificationWorkflow(unittest.TestCase):
     def test_a_checkout_without_full_history_is_detected(self):
         scripts = history_reading_scripts()
         release = read(".github/workflows/release.yml")
-        shallow = release.replace(
-            "        with:\n          ref: ${{ inputs.candidate_sha }}\n          fetch-depth: 0\n",
-            "        with:\n          ref: ${{ inputs.candidate_sha }}\n", 1)
+        body = job_body(release, "candidate-package")
+        # Drop only this job's fetch-depth line, whatever its neighbours are.
+        shallow_body = re.sub(r"^ +fetch-depth: 0\n", "", body, count=1, flags=re.M)
+        self.assertNotEqual(shallow_body, body)
+        shallow = release.replace(body, shallow_body, 1)
         self.assertNotEqual(shallow, release)
         problems = history_checkout_problems(shallow, scripts)
         self.assertTrue(any(p.startswith("candidate-package:") for p in problems), problems)
