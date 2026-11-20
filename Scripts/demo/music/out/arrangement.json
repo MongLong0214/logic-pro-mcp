@@ -1,0 +1,72 @@
+{
+  "title": "Signal",
+  "bpm": 112,
+  "key": "A minor",
+  "bars": 36,
+  "ppq": 960,
+  "seed": 20260319,
+  "seconds_per_bar": 2.142857142857143,
+  "duration_seconds": 77.14285714285714,
+  "sections": [
+    {
+      "name": "intro",
+      "from_bar": 1,
+      "to_bar": 4
+    },
+    {
+      "name": "build",
+      "from_bar": 5,
+      "to_bar": 12
+    },
+    {
+      "name": "drop",
+      "from_bar": 13,
+      "to_bar": 28
+    },
+    {
+      "name": "outro",
+      "from_bar": 29,
+      "to_bar": 36
+    }
+  ],
+  "progression": [
+    "Am7",
+    "Fmaj7",
+    "Cmaj7",
+    "G/B"
+  ],
+  "track_order": [
+    "Keys",
+    "Pad",
+    "Bass",
+    "Drums",
+    "Lead"
+  ],
+  "tracks": [
+    {
+      "name": "Keys",
+      "entry_bar": 3,
+      "notes": 436
+    },
+    {
+      "name": "Pad",
+      "entry_bar": 1,
+      "notes": 165
+    },
+    {
+      "name": "Bass",
+      "entry_bar": 5,
+      "notes": 108
+    },
+    {
+      "name": "Drums",
+      "entry_bar": 9,
+      "notes": 492
+    },
+    {
+      "name": "Lead",
+      "entry_bar": 13,
+      "notes": 75
+    }
+  ]
+}

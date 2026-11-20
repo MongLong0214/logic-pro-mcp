@@ -1,0 +1,333 @@
+{
+ "takes": {
+  "A": {
+   "video": "footage/A.mp4",
+   "width": 3840,
+   "height": 2100,
+   "durationSeconds": 10.316667,
+   "events": [
+    {
+     "t": 1.6717629432678223,
+     "ms": 101.4,
+     "kind": "read",
+     "call": "read",
+     "args": "logic://system/health",
+     "label": "read: health",
+     "state": "-",
+     "ok": true,
+     "verified": null,
+     "result": "3 channels ready: Accessibility, AppleScript, CGEvent"
+    },
+    {
+     "t": 1.773202896118164,
+     "ms": 288.4,
+     "kind": "read",
+     "call": "read",
+     "args": "logic://transport/state",
+     "label": "read: transport",
+     "state": "-",
+     "ok": true,
+     "verified": null,
+     "result": "tempo 90 · bar 1.1 · stopped"
+    },
+    {
+     "t": 4.066753149032593,
+     "ms": 2.9,
+     "kind": "read",
+     "call": "read",
+     "args": "logic://tracks",
+     "label": "read: tracks",
+     "state": "-",
+     "ok": true,
+     "verified": null,
+     "result": "5 tracks: Studio Grand, Epic Cloud Formation, Simple Foundation…"
+    },
+    {
+     "t": 4.069836139678955,
+     "ms": 602.7,
+     "kind": "tool",
+     "call": "logic_transport.set_tempo",
+     "args": "{\"tempo\":112}",
+     "label": "set tempo",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 112 → observed 112"
+    },
+    {
+     "t": 4.6725969314575195,
+     "ms": 101.8,
+     "kind": "read",
+     "call": "read",
+     "args": "logic://transport/state",
+     "label": "read: tempo readback",
+     "state": "-",
+     "ok": true,
+     "verified": null,
+     "result": "tempo 112 · bar 1.1 · stopped"
+    },
+    {
+     "t": 4.774597883224487,
+     "ms": 219.8,
+     "kind": "tool",
+     "call": "logic_mixer.set_pan",
+     "args": "{\"track\":0,\"value\":-0.25}",
+     "label": "mix: pan Keys",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested -0.25 → observed -0.24"
+    },
+    {
+     "t": 4.994553804397583,
+     "ms": 605.6,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":0,\"value\":0.66}",
+     "label": "mix: volume Keys",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.66 → observed 0.66"
+    },
+    {
+     "t": 5.600311040878296,
+     "ms": 117.7,
+     "kind": "tool",
+     "call": "logic_mixer.set_pan",
+     "args": "{\"track\":1,\"value\":0.0}",
+     "label": "mix: pan Pad",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0 → observed 0.01"
+    },
+    {
+     "t": 5.718169927597046,
+     "ms": 477.3,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":1,\"value\":0.56}",
+     "label": "mix: volume Pad",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.56 → observed 0.56"
+    },
+    {
+     "t": 6.195592880249023,
+     "ms": 115.9,
+     "kind": "tool",
+     "call": "logic_mixer.set_pan",
+     "args": "{\"track\":2,\"value\":0.0}",
+     "label": "mix: pan Bass",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0 → observed 0.01"
+    },
+    {
+     "t": 6.311588764190674,
+     "ms": 577.5,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":2,\"value\":0.72}",
+     "label": "mix: volume Bass",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.72 → observed 0.72"
+    },
+    {
+     "t": 6.889305114746094,
+     "ms": 125.5,
+     "kind": "tool",
+     "call": "logic_mixer.set_pan",
+     "args": "{\"track\":3,\"value\":0.0}",
+     "label": "mix: pan Drums",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0 → observed 0.01"
+    },
+    {
+     "t": 7.014963865280151,
+     "ms": 571.5,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":3,\"value\":0.7}",
+     "label": "mix: volume Drums",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.70 → observed 0.70"
+    },
+    {
+     "t": 7.586708068847656,
+     "ms": 154.4,
+     "kind": "tool",
+     "call": "logic_mixer.set_pan",
+     "args": "{\"track\":4,\"value\":0.3}",
+     "label": "mix: pan Lead",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.30 → observed 0.31"
+    },
+    {
+     "t": 7.741247892379761,
+     "ms": 510.3,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":4,\"value\":0.64}",
+     "label": "mix: volume Lead",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.64 → observed 0.64"
+    },
+    {
+     "t": 8.251658916473389,
+     "ms": 1.6,
+     "kind": "read",
+     "call": "read",
+     "args": "logic://tracks",
+     "label": "read: tracks after mix",
+     "state": "-",
+     "ok": true,
+     "verified": null,
+     "result": "5 tracks: Studio Grand, Epic Cloud Formation, Simple Foundation…"
+    }
+   ],
+   "markers": {
+    "mix_batch": 8.251646995544434,
+    "mix_batch_seconds": 3.477,
+    "mix_batch_writes": 10
+   }
+  },
+  "B": {
+   "video": "footage/B.mp4",
+   "width": 3840,
+   "height": 2100,
+   "durationSeconds": 83.0,
+   "events": [
+    {
+     "t": 1.6978776454925537,
+     "ms": 566.2,
+     "kind": "tool",
+     "call": "logic_transport.play",
+     "args": "{}",
+     "label": "play",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified"
+    },
+    {
+     "t": 2.2641685009002686,
+     "ms": 499.5,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":1,\"value\":0.56}",
+     "label": "bring in Pad",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.56 → observed 0.56"
+    },
+    {
+     "t": 5.538641452789307,
+     "ms": 608.5,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":0,\"value\":0.66}",
+     "label": "bring in Keys",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.66 → observed 0.66"
+    },
+    {
+     "t": 9.824373722076416,
+     "ms": 571.6,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":2,\"value\":0.72}",
+     "label": "bring in Bass",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.72 → observed 0.72"
+    },
+    {
+     "t": 18.39477562904358,
+     "ms": 620.9,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":3,\"value\":0.7}",
+     "label": "bring in Drums",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.70 → observed 0.70"
+    },
+    {
+     "t": 26.967238426208496,
+     "ms": 523.5,
+     "kind": "tool",
+     "call": "logic_mixer.set_volume",
+     "args": "{\"track\":4,\"value\":0.64}",
+     "label": "bring in Lead",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified · requested 0.64 → observed 0.64"
+    },
+    {
+     "t": 79.0444746017456,
+     "ms": 291.8,
+     "kind": "tool",
+     "call": "logic_transport.stop",
+     "args": "{}",
+     "label": "stop",
+     "state": "A",
+     "ok": true,
+     "verified": true,
+     "result": "State A · verified"
+    },
+    {
+     "t": 79.3365786075592,
+     "ms": 92.9,
+     "kind": "read",
+     "call": "read",
+     "args": "logic://transport/state",
+     "label": "read: transport",
+     "state": "-",
+     "ok": true,
+     "verified": null,
+     "result": "tempo 112 · bar 36.4 · stopped"
+    }
+   ],
+   "markers": {
+    "play_started": 1.6978745460510254
+   },
+   "audioOnset": 2.191
+  }
+ },
+ "stats": {
+  "mixWrites": 10,
+  "mixSeconds": 3.477,
+  "medianMs": 516.9,
+  "totalCalls": 24,
+  "verifiedCalls": 18
+ },
+ "meta": {
+  "version": "3.19.0",
+  "logic": "13.0 (7801)",
+  "macos": "26.3",
+  "locale": "en-US",
+  "bpm": 112,
+  "bars": 36,
+  "date": "2026-11-20"
+ }
+}
