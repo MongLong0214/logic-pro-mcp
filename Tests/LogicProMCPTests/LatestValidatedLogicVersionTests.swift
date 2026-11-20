@@ -30,6 +30,20 @@ struct LatestValidatedLogicVersionTests {
                 "the canon MANIFEST pins Logic \(pinned)")
     }
 
+    @Test("the latest validated version is derived from the one Logic declaration")
+    func derivedFromTheOneDeclaration() {
+        #expect(LogicProSupport.latestValidatedLogicVersion == AXLocalePolicy.currentLogicVersion)
+    }
+
+    @Test("manifest.json's latest_logic_pro_version equals the one declaration")
+    func manifestMatchesTheDeclaration() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
+        let json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(json["latest_logic_pro_version"] as? String == AXLocalePolicy.currentLogicVersion)
+    }
+
     @Test("the previous latest, 12.3, is now a supported-but-not-latest warning")
     func twelveThreeWarns() {
         let result = SetupDoctor.logicVersionSupportCheck(

@@ -131,7 +131,7 @@ class Ratchet(unittest.TestCase):
                      # path. Without it the copy does not run a weaker guard, it does not run.
                      "ratchet.py",
                      # `check-labelsets-are-derived.py` decodes Swift's escapes with this (#993).
-                     "locale_labels.py"):
+                     "locale_labels.py", "locale_release.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name), os.path.join(root, "Scripts", name))
         policy_rel = os.path.join("Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
         for path in guard.swift_sources():
@@ -352,7 +352,7 @@ class MissingEvidenceIsRefused(unittest.TestCase):
                      # path. Without it the copy does not run a weaker guard, it does not run.
                      "ratchet.py",
                      # `check-labelsets-are-derived.py` decodes Swift's escapes with this (#993).
-                     "locale_labels.py"):
+                     "locale_labels.py", "locale_release.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name), os.path.join(root, "Scripts", name))
         for path in guard.swift_sources():
             target = os.path.join(root, os.path.relpath(path, REPO))

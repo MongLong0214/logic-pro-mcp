@@ -77,8 +77,9 @@ struct Issue60LocalePhase4Tests {
             ("sliderVolumeHint", AXLocalePolicy.sliderVolumeHint.labels, ["volume", "fader", "볼륨", "ボリューム", "Volumen", "音量"]),
             // Extended 2026-09-26 (#904) from the row in `derivedFrom` -- `Pan#par`. Apple ships `Pan`
             // in seven locales and Italian `Panning`, both already members up to case, so only the
-            // three Chinese values are new; `패닝` and `밸런스` stay as the readings they were.
-            ("sliderPanHint", AXLocalePolicy.sliderPanHint.labels, ["pan", "panning", "패닝", "밸런스", "パン", "声像", "聲像", "相位"]),
+            // two Chinese values are new; `패닝` and `밸런스` stay as the readings they were. `聲像` is
+            // Logic 13.0 (7801)'s zh_TW; `相位` is Logic 12.3 (6674)'s and stays for 12.x.
+            ("sliderPanHint", AXLocalePolicy.sliderPanHint.labels, ["pan", "panning", "패닝", "밸런스", "パン", "声像", "相位", "聲像"]),
             // Extended 2026-09-25 (#977) from the two rows these LabelSets now name in `derivedFrom`:
             // MAGUI `bypass` at the insert slot, MAToolKit `bypass` in the editor window. They differ
             // only in German -- `Umgehen` at the slot and `Bypass` in the editor, both read off a
@@ -98,7 +99,10 @@ struct Issue60LocalePhase4Tests {
             // ships at the row this LabelSet names in `derivedFrom` -- MAMixer's `Localizable.strings` key `automation` -- not a
             // translation anybody wrote. The set stays EXACT here on purpose: that is what makes
             // this a drift guard, so a future addition still has to say where it came from.
-            ("pluginAutomationLabelSubstring", AXLocalePolicy.pluginAutomationLabelSubstring.labels, ["automation", "오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音"]),
+            // `Automation` was added 2026-11-20 from the de-DE census on Logic 13.0 (7801): record
+            // `2026-11-20-de-DE-mixer-channel_strips-census`, read off an AXCheckBox description.
+            // Matching is case-insensitive, so it changes no match; it is the measured German cell.
+            ("pluginAutomationLabelSubstring", AXLocalePolicy.pluginAutomationLabelSubstring.labels, ["automation", "오토메이션", "オートメーション", "automatización", "automazione", "automação", "自动化", "自動混音", "Automation"]),
             ("audioPluginSlotLabel", AXLocalePolicy.audioPluginSlotLabel.labels,
              ["audio plug-in", "audio effect", "오디오 플러그인", "오디오 이펙트", "オーディオプラグイン", "Audio-Plug-in",
               "módulo de audio", "plugin audio", "音频插件", "音訊外掛模組", "module audio", "plug-in de áudio",
@@ -119,7 +123,7 @@ struct Issue60LocalePhase4Tests {
             // Extended 2026-09-26 (#904) from the row in `derivedFrom` -- `Pan#par`, the same row as
             // sliderPanHint. This set never carried `panning`, so Italian `Panning` is new here where
             // it was a duplicate up to case there; `팬` and `밸런스` stay as the readings they were.
-            ("headerPanHint", AXLocalePolicy.headerPanHint.labels, ["pan", "팬", "밸런스", "パン", "Panning", "声像", "聲像", "相位"]),
+            ("headerPanHint", AXLocalePolicy.headerPanHint.labels, ["pan", "팬", "밸런스", "パン", "Panning", "声像", "相位", "聲像"]),
             // `Spuren Titel` added 2026-09-12 (#876), read off the de-DE navigation-free census as the
             // AXDescription of the AXGroup this label addresses. Not drift: without it `located_band`
             // and every reader keyed on this description find nothing on a German Logic, which is the
