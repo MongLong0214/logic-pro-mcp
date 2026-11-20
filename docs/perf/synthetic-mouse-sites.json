@@ -1,0 +1,53 @@
+{
+  "files": {
+    "Accessibility/AXMouseHelper.swift": {
+      "count": 25,
+      "direct_alternative": "Delete once no caller remains; callers move to AXPress, AX attribute writes, MIDI key commands or MCU.",
+      "evidence": "code: AXMouseHelper.swift Runtime.prepareMouseClick; callers listed in this file",
+      "reason": "The one production implementation of synthetic click and double-click (CGEvent down/up at the cghid tap) that every other site below routes through; it can only shrink as its callers do. Its callers each record why AXPress or an AX write did not serve."
+    },
+    "Accessibility/LibraryAccessor.swift": {
+      "count": 9,
+      "direct_alternative": "Try AXPress or AXSelected on the row's AXRow/AXOutline ancestor, then Logic's Library key commands (next/previous patch); read the loaded patch back from the channel-strip name.",
+      "evidence": "LibraryAccessor.swift selectPreset doc comment (v3.0.3); live direct-path trial not yet run",
+      "reason": "Library browser rows are static texts: v3.0.3 measured that Logic 12 commits a preset only on a double-click and a single click only highlights, so the row is selected by coordinate. It also warps the cursor and sleeps 150 ms around each click."
+    },
+    "Channels/AccessibilityChannel+MixerName.swift": {
+      "count": 2,
+      "direct_alternative": "Try Logic's rename-track key command or the Tracks-header name AXValue write, and read the name back from the header.",
+      "evidence": "MixerName.swift physicalMixerNamePlate gate isAttributeSettable==false",
+      "reason": "The Mixer name plate reports AXValue as not settable (the code gates on isAttributeSettable == false), so renaming opens the editor with a native double-click and types."
+    },
+    "Channels/AccessibilityChannel+SendLevel.swift": {
+      "count": 1,
+      "direct_alternative": "Try AXIncrement/AXDecrement stepping with readback per step, or an MCU send-level fader write (mixer.set_send) with AX readback.",
+      "evidence": "SendLevel.swift comment: One native double-click, not AXValue stepping or a popup fallback (32-track fixture)",
+      "reason": "Send level is entered by a native double-click on the knob; the code records that AXValue stepping and the popup fallback were rejected, and that re-walking the rail between the two clicks exceeded the double-click interval on the measured 32-track fixture."
+    },
+    "Channels/AccessibilityChannel+Tracks.swift": {
+      "count": 1,
+      "direct_alternative": "Extend the AXPress branch (hiddenMenuPath leaf) to the disclosure so the coordinate click is unreachable.",
+      "evidence": "Tracks.swift click(target:) has an AXPress branch and a mouse branch",
+      "reason": "The hidden track-view disclosure is clicked by frame centre when no AXPress leaf is held; the held-menu branch already presses the AX leaf directly."
+    },
+    "Channels/AccessibilityChannel+Transport.swift": {
+      "count": 1,
+      "direct_alternative": "Use the existing slider-direct path (AXValue write + AXConfirm) or the coarse AXIncrement/Decrement steps, then read back; no cursor needed.",
+      "evidence": "Transport.swift slider-direct branch and the 'one-BPM nudge' comment; live trial not yet run",
+      "reason": "transport.set_tempo double-clicks the tempo field, types the digits and presses Return (fixed 120+50+150 ms) because the geometry-bearing slider rejects a numeric AXValue write (Logic treats it as a one-BPM nudge, #973 measurements) ; the geometry-less slider already uses a direct AXValue write plus AXConfirm."
+    },
+    "Channels/AccessibilityChannel+VerifiedPlugins.swift": {
+      "count": 10,
+      "direct_alternative": "Make AXPress/AXShowMenu on the exact element the only actuator and refuse otherwise; measure how often the coordinate branch is the one that lands.",
+      "evidence": "VerifiedPlugins.swift clickElementCenterOutcome / CoordinateClickOutcome; no live frequency measured",
+      "reason": "Coordinate click is the last-resort actuator after AXPress; each use reports a CoordinateClickOutcome and the held-plugin paths click a frame centre only after a hit test confirms the target element."
+    },
+    "Workflows/OwnedAuxLifecycle.swift": {
+      "count": 6,
+      "direct_alternative": "AXPress the held leaf (as Tracks.swift does for the hidden menu) and drop the cursor move.",
+      "evidence": "OwnedAuxLifecycle.swift prepareMouseClick sites after elementAtPosition hit test",
+      "reason": "The creator-menu leaf and its confirmation are clicked by frame centre after a hit test, plus a mouseMoved, because the menu leaf is held open and was not measured to answer AXPress."
+    }
+  },
+  "note": "Files that still construct or post a synthetic mouse or scroll event, warp the cursor, or call the mouse helper. Direct control is the default: a new site fails OperationLatencyBudgetGuardTests, a count may only fall, and a file whose count reaches zero must be deleted from here. Each entry states the measured reason no direct path works, the direct alternative to try, and the evidence. The alternatives are untried unless the evidence says otherwise: they are the first live measurements to run."
+}

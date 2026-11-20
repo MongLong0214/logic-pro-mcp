@@ -34,12 +34,12 @@ private final class Recorder: @unchecked Sendable {
     var count: Int { lock.lock(); defer { lock.unlock() }; return fired }
 }
 
-private struct RegionFakeFixture {
+struct RegionFakeFixture {
     let builder: FakeAXRuntimeBuilder
     let runtime: AXLogicProElements.Runtime
 }
 
-private func makeRegionFixture(
+func makeRegionFixture(
     headers: [(pos: AXValue, size: AXValue)],
     regions: [(name: String, help: String, pos: AXValue, size: AXValue, selected: Bool)],
     playheadPosition: String
@@ -148,7 +148,7 @@ func localizedDrummerRegionKindReachesInventory(name: String) throws {
             )
             return .success("OK")
         },
-        settle: { /* skip in tests */ }
+        settle: { _ in }
     )
 
     #expect(result.isSuccess)
@@ -198,7 +198,7 @@ func localizedDrummerRegionKindReachesInventory(name: String) throws {
             )
             return .success("OK")
         },
-        settle: { /* skip in tests */ }
+        settle: { _ in }
     )
 
     #expect(result.isSuccess)
@@ -238,7 +238,7 @@ func localizedDrummerRegionKindReachesInventory(name: String) throws {
             )
             return .success("OK")
         },
-        settle: { /* skip in tests */ }
+        settle: { _ in }
     )
 
     #expect(result.isSuccess)
@@ -276,7 +276,7 @@ func localizedDrummerRegionKindReachesInventory(name: String) throws {
             )
             return .success("OK")
         },
-        settle: { }
+        settle: { _ in }
     )
 
     #expect(result.isSuccess)
@@ -308,7 +308,7 @@ func localizedDrummerRegionKindReachesInventory(name: String) throws {
     let result = await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(
         runtime: fixture.runtime,
         executeScript: { _ in .success("OK") },
-        settle: { }
+        settle: { _ in }
     )
 
     #expect(result.isSuccess)
@@ -341,7 +341,7 @@ func localizedDrummerRegionKindReachesInventory(name: String) throws {
     let result = await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(
         runtime: fixture.runtime,
         executeScript: { _ in .success("OK") },
-        settle: { }
+        settle: { _ in }
     )
 
     #expect(result.isSuccess)
@@ -360,7 +360,7 @@ func localizedDrummerRegionKindReachesInventory(name: String) throws {
     let result = await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(
         runtime: fixture.runtime,
         executeScript: { _ in .success("MENU_ERROR: not found") },
-        settle: { }
+        settle: { _ in }
     )
     #expect(!result.isSuccess)
     let obj = decodeJSON(result.message)
@@ -1045,7 +1045,7 @@ func moveToPlayheadRefusesAMultiRegionSelection() async throws {
     let result = await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead(
         runtime: fixture.runtime,
         executeScript: { _ in menu.ran = true; return .success("OK") },
-        settle: { }
+        settle: { _ in }
     )
 
     let obj = decodeJSON(result.message)
@@ -1107,7 +1107,7 @@ func moveToPlayheadStillVerifiesASingleRegion() async throws {
             )
             return .success("OK")
         },
-        settle: { }
+        settle: { _ in }
     )
 
     let obj = decodeJSON(result.message)

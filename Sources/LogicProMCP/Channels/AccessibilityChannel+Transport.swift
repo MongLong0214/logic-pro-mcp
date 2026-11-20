@@ -3427,7 +3427,9 @@ extension AccessibilityChannel {
 
     static func defaultToggleAutopunch(
         runtime: AXLogicProElements.Runtime = .production,
-        mouseRuntime: AXMouseHelper.Runtime = .production
+        mouseRuntime: AXMouseHelper.Runtime = .production,
+        settle: SettleSchedule = .controlBarCheckbox,
+        settleWait: (UInt64) -> Void = SettlePoll.blockingWait
     ) -> ChannelResult {
         let controlBar = AXLogicProElements.getControlBar(runtime: runtime)
         guard let controlBar, let control = observedAutopunchControl(in: controlBar, runtime: runtime) else {
@@ -3469,14 +3471,19 @@ extension AccessibilityChannel {
             ))
         }
 
-        var after: Bool?
-        for _ in 0..<12 {
-            usleep(50_000)
-            guard let observed = observedAutopunchControl(in: controlBar, runtime: runtime),
-                  CFEqual(observed.element, button) else { after = nil; break }
-            after = observed.value
-            if observed.value != before { break }
-        }
+        // Stops at the first reading that shows the value changed, or that the control is no longer
+        // the one pressed (`nil`); otherwise the reading after the whole window decides, as the
+        // 12 x 50 ms loop did.
+        let after: Bool? = SettlePoll.untilSettledSync(
+            schedule: settle,
+            wait: settleWait,
+            read: { () -> Bool? in
+                guard let observed = observedAutopunchControl(in: controlBar, runtime: runtime),
+                      CFEqual(observed.element, button) else { return nil }
+                return observed.value
+            },
+            isSettled: { $0 == nil || $0! != before }
+        ).reading
 
         var extras: [String: Any] = [
             "button": "Autopunch",
@@ -3784,19 +3791,26 @@ extension AccessibilityChannel {
         return nil
     }
 
-    private static func waitForControlBarCheckboxValue(
+    /// Poll the checkbox until `predicate` accepts a reading, for at most the 600 ms the old
+    /// fixed loop spent (12 reads, each after a blind 50 ms sleep). The first read is immediate and
+    /// the early checkpoints are short, so a Logic that reflects the press at once is not charged
+    /// the 50 ms floor. A stale reading never satisfies `predicate` (it still shows the old value),
+    /// so reading sooner cannot certify a press that did not land; the last reading is still taken
+    /// 600 ms after the press.
+    static func waitForControlBarCheckboxValue(
         _ element: AXUIElement,
         runtime: AXLogicProElements.Runtime,
+        schedule: SettleSchedule = .controlBarCheckbox,
+        wait: (UInt64) -> Void = SettlePoll.blockingWait,
         matching predicate: (Bool) -> Bool
     ) -> Bool? {
-        for _ in 0..<12 {
-            usleep(50_000)
-            if let value = controlBarCheckboxValue(element, runtime: runtime),
-               predicate(value) {
-                return value
-            }
-        }
-        return nil
+        let outcome = SettlePoll.untilSettledSync(
+            schedule: schedule,
+            wait: wait,
+            read: { controlBarCheckboxValue(element, runtime: runtime) },
+            isSettled: { $0.map(predicate) ?? false }
+        )
+        return outcome.settled ? outcome.reading : nil
     }
 
 }

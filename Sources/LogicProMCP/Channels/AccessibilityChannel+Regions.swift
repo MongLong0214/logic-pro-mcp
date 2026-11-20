@@ -485,6 +485,22 @@ extension AccessibilityChannel {
 
     // MARK: - Region repositioning
 
+    struct MoveToPlayheadReading {
+        let selection: [RegionInfo]?
+        let playheadBar: Int?
+    }
+
+    /// The State A condition of `defaultMoveSelectedRegionToPlayhead`, stated once so the settle
+    /// poll may stop on it and on nothing weaker: the same single region, placed on a track, now
+    /// starting within a bar of the playhead.
+    static func moveLanded(pre: RegionInfo?, reading: MoveToPlayheadReading) -> Bool {
+        guard let pre, pre.trackIndex >= 0,
+              let selection = reading.selection, selection.count == 1, let post = selection.first,
+              post.startBar > 0, let head = reading.playheadBar,
+              post.name == pre.name, post.trackIndex == pre.trackIndex else { return false }
+        return abs(post.startBar - head) <= 1
+    }
+
     /// Move the currently selected region to the playhead position via the
     /// `편집 → 이동 → 재생헤드로` menu (Edit → Move → To Playhead).
     ///
@@ -497,7 +513,8 @@ extension AccessibilityChannel {
     static func defaultMoveSelectedRegionToPlayhead(
         runtime: AXLogicProElements.Runtime = .production,
         executeScript: @Sendable (String) async -> ChannelResult = { await AppleScriptChannel.executeAppleScript($0) },
-        settle: @Sendable () async -> Void = { try? await Task.sleep(nanoseconds: 350_000_000) }
+        settleSchedule: SettleSchedule = .regionMove,
+        settle: @Sendable (UInt64) async -> Void = { try? await Task.sleep(nanoseconds: $0) }
     ) async -> ChannelResult {
         // Pre-state: snapshot the currently selected region (may be nil if
         // nothing is selected or the AX surface is unreadable).
@@ -580,14 +597,27 @@ extension AccessibilityChannel {
                     hint: "region.move_to_playhead menu click failed: \(output)"
                 ))
             }
-            // Settle window so Logic's AX tree updates before we re-read.
-            await settle()
-
+            // Settle window so Logic's AX tree updates before we re-read. It used to be one fixed
+            // 350 ms sleep; it is the same 350 ms as a bounded poll that stops at the first
+            // reading that already proves the move landed (the State A condition itself), and
+            // otherwise takes its reading after the whole window, as before.
+            //
             // Read as a SET on the way out too: the menu can leave a different number selected
             // than it started with, and a post-read that silently took the first would hide that.
-            let postSelection = selectedRegionInfos(runtime: runtime)
+            let settled = await SettlePoll.untilSettled(
+                schedule: settleSchedule,
+                wait: settle,
+                read: {
+                    MoveToPlayheadReading(
+                        selection: selectedRegionInfos(runtime: runtime),
+                        playheadBar: currentPlayheadBar(runtime: runtime)
+                    )
+                },
+                isSettled: { moveLanded(pre: pre, reading: $0) }
+            )
+            let postSelection = settled.reading.selection
             let post = postSelection?.count == 1 ? postSelection?.first : nil
-            let playheadBar = currentPlayheadBar(runtime: runtime)
+            let playheadBar = settled.reading.playheadBar
 
             // Without a pre-state we can't diff. State B readback_unavailable.
             guard let pre = pre else {

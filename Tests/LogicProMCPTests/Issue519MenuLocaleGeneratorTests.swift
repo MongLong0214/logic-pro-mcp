@@ -320,7 +320,7 @@ struct Issue519EditMenuDriveSiteTests {
                 probe.capture(script)
                 return .success("MENU_ERROR: not found")
             },
-            settle: {}
+            settle: { _ in }
         )
         for label in AXLocalePolicy.editMenuBar.labels {
             #expect(probe.script.contains("\"\(label)\""))

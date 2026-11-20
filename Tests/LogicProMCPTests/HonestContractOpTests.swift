@@ -433,7 +433,7 @@ private func axSizeHC(_ w: CGFloat, _ h: CGFloat) -> AXValue {
             builder.setAttribute(region, kAXHelpAttribute as String, postHelp)
             return .success("OK")
         },
-        settle: { }
+        settle: { _ in }
     )
 
     #expect(result.isSuccess)
