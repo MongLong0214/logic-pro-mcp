@@ -26,7 +26,8 @@ import Testing
             ghostPolls: Int = 0,
             barWriteOvershoot: Bool = false,
             startBeat: Int = 1,
-            refuseGotoPosition: Bool = false
+            refuseGotoPosition: Bool = false,
+            defaultPosition: Bool = false
         ) throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-marker-cleanup-\(UUID().uuidString)", isDirectory: true)
@@ -47,6 +48,9 @@ import Testing
             script = script.replacingOccurrences(of: "start_beat=1", with: "start_beat=\(startBeat)")
             if refuseGotoPosition {
                 script = script.replacingOccurrences(of: "refuse_goto_position=false", with: "refuse_goto_position=true")
+            }
+            if defaultPosition {
+                script = script.replacingOccurrences(of: "default_position=false", with: "default_position=true")
             }
             try Data(script.utf8).write(to: executableURL)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
@@ -98,6 +102,7 @@ import Testing
         # `refuse_goto_position=true`: every goto_position is refused, so only goto_bar can move the
         # playhead, and it lands on a bar's first beat.
         refuse_goto_position=false
+        default_position=false
         echo 0 > ghost-left
         : > ghost
         created=false
@@ -176,7 +181,9 @@ import Testing
                 if [ "$readable" = true ] && [ ! -s cache ]; then empty=true; else empty=false; fi
                 printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://markers","text":"{\\"cache_age_sec\\":%s,\\"fetched_at\\":%s,\\"ax_occluded\\":false,%s\\"readable\\":%s,\\"source\\":\\"%s\\",\\"verified_empty\\":%s,\\"data\\":[%s]}"}]}}\n' "$id" "$age" "$fetched" "$extra" "$readable" "$source" "$empty" "$(rows_json cache)" ;;
               *'"uri":"logic://transport/state"'*)
-                printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"data\\":{\\"state\\":{\\"isPlaying\\":false,\\"isRecording\\":false,\\"tempo\\":120,\\"position\\":\\"%s.%s.1.1\\"}}}"}]}}\n' "$id" "$(cat bar)" "$(cat beat)" ;;
+                if [ "$default_position" = true ]; then readback_json=
+                else readback_json=",\\\"positionReadback\\\":{\\\"value\\\":\\\"$(cat bar).$(cat beat).1.1\\\",\\\"observedComponents\\\":[\\\"bar\\\",\\\"beat\\\",\\\"subdivision\\\",\\\"tick\\\"]}"; fi
+                printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"data\\":{\\"state\\":{\\"isPlaying\\":false,\\"isRecording\\":false,\\"tempo\\":120,\\"position\\":\\"%s.%s.1.1\\"%s}}}"}]}}\n' "$id" "$(cat bar)" "$(cat beat)" "$readback_json" ;;
               *'"command":"create_marker"'*)
                 created=true
                 open_list
@@ -372,5 +379,21 @@ import Testing
         #expect(observed?.mutationRestore != nil, "\(observed?.mutationRestoreRefusal ?? "no refusal")")
         #expect(fixture.bar == 1 && fixture.beat == 2, "the playhead is back at 1.2: bar \(fixture.bar.map(String.init) ?? "unread") beat \(fixture.beat.map(String.init) ?? "unread")")
         #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    /// With the position controls unreadable the resource publishes the display default `1.1.1.1`
+    /// and no `positionReadback`. That is no origin: the marker and bar recipes refuse before the
+    /// first position-changing call.
+    @Test(arguments: [OperationID.navigateGotoMarker])
+    func aDefaultPositionWithNoReadbackIsRefusedBeforeTheFirstMove(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, defaultPosition: true)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("position"), "the unreadable origin is named: \(refusal)")
+        let moves = fixture.writes.filter { $0.contains("goto_bar") || $0.contains("goto_position") || $0.hasPrefix("create") }
+        #expect(moves.isEmpty, "nothing moved or created: \(fixture.writes)")
     }
 }

@@ -3430,10 +3430,11 @@ struct QualificationTransport: Sendable {
         let pre = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.pre_state")
         // Playback moves the playhead, and restoring the MOTION does not bring it back: every
         // play, pause and stop cycle left the playhead elsewhere, and the next run started from
-        // a different place (measured: 30.3 before a gate, 5.2 after). From a stopped start the
-        // exact position is read here and put back, verified, on every exit.
-        let prePosition = pre.motion == .stopped ? Self.observedPlayheadPosition(pre.raw) : nil
-        if pre.motion == .stopped, prePosition == nil {
+        // a different place (measured: 30.3 before a gate, 5.2 after). From a stopped or paused
+        // start the exact position is read here and put back, verified, on every exit. A moving
+        // start has no stationary origin to return to.
+        let prePosition = pre.motion != .moving ? Self.observedPlayheadPosition(pre.raw) : nil
+        if pre.motion != .moving, prePosition == nil {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.pre_state: the playhead position did not read, so it could not be put "
                     + "back; nothing is moved")
@@ -4056,13 +4057,20 @@ struct QualificationTransport: Sendable {
     }
 
     /// The playhead as `logic://transport/state` shows it (`data.state.position`, `bar.beat` on
-    /// Logic 13), or nil when it is absent or not a position a `goto_position` can name.
+    /// Logic 13), or nil when it is absent, not a position a `goto_position` can name, or not
+    /// backed by a real readback. `position` alone is the display default `1.1.1.1` when the
+    /// controls were unreadable, so it is an origin only when `positionReadback` carries the same
+    /// value with observed components starting at the bar.
     static func observedPlayheadPosition(_ raw: String) -> String? {
         guard let data = raw.data(using: .utf8),
               let envelope = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let payload = envelope["data"] as? [String: Any],
               let state = payload["state"] as? [String: Any],
               let position = state["position"] as? String,
+              let witness = state["positionReadback"] as? [String: Any],
+              witness["value"] as? String == position,
+              let components = witness["observedComponents"] as? [String],
+              components.first == "bar",
               gotoPositionRequest(for: position) != nil else { return nil }
         return position
     }

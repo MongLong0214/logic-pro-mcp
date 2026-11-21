@@ -2370,6 +2370,91 @@ struct QualificationRunnerTests {
         }
     }
 
+    /// The display default is not an origin. `position: "1.1.1.1"` with no `positionReadback` is
+    /// what the resource publishes when the position controls did not read, so a cycle that
+    /// takes it as the origin would "restore" to somewhere the playhead never was. It refuses
+    /// before the first position-changing call.
+    @Test(arguments: ["play", "stop", "pause"], ["stopped", "paused"])
+    func aDefaultPositionWithNoReadbackIsRefusedBeforeAnyPositionChangingCall(
+        command: String, original: String
+    ) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, transportFault: "default_position",
+            initialTransportMotion: original)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(result.mutationRestoreRecords.isEmpty)
+        #expect(observed.mutationRestore == nil)
+        #expect(observed.mutationRestoreRefusal?.contains("position") == true,
+                "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let requests = try String(
+            contentsOf: fixture.directory.appendingPathComponent("requests"), encoding: .utf8)
+            .split(separator: "\n").filter { !$0.contains("__adr001b_no_write_probe") }
+            .joined(separator: "\n")
+        for write in ["play", "stop", "pause", "goto_position", "goto_bar"] {
+            #expect(!requests.contains("\"command\":\"\(write)\""),
+                    "no position-changing call before the origin is known: \(write) in \(requests)")
+        }
+    }
+
+    /// Positive control: a real 1.1.1.1 confirmed by a readback is an origin like any other.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aRealOneOneOneOneConfirmedByAReadbackIsAnOrigin(command: String) throws {
+        let fixture = try SlowHandshakeFixture(transportNativePause: true, transportFault: "full_origin")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status == .passed, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(!result.mutationRestoreRecords.isEmpty)
+        let position = try String(
+            contentsOf: fixture.directory.appendingPathComponent("transport-position"), encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(position == "1", "playhead at bar \(position); it started at 1.1.1.1")
+    }
+
+    /// A paused start has a stationary origin, and restoring only the motion left the playhead
+    /// wherever the play had carried it. The exact position is put back and read.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aPausedStartGetsItsExactPlayheadBack(command: String) throws {
+        let fixture = try SlowHandshakeFixture(transportNativePause: true, initialTransportMotion: "paused")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status == .passed, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let position = try String(
+            contentsOf: fixture.directory.appendingPathComponent("transport-position"), encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(position == "1", "playhead at bar \(position) after the cycle; it was paused at bar 1")
+    }
+
+    /// When the paused origin cannot be put back, the cycle is not a success.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aPausedStartWhoseOriginIsNotRestoredIsNotRecordedAsSuccess(command: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, transportFault: "goto_ignored", initialTransportMotion: "paused")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.mutationRestore == nil)
+        #expect(result.mutationRestoreRecords.isEmpty)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true,
+                "\(observed.mutationRestoreRefusal ?? "no refusal")")
+    }
+
     @Test(arguments: [false, true])
     func stoppedTransportMustBeObservedBeforeARecipeAcquiresChanges(cached: Bool) throws {
         let fixture = try SlowHandshakeFixture(transportNativePause: true, cachedTransport: cached)
@@ -6817,8 +6902,16 @@ struct QualificationRunnerTests {
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"tempo\\":120}}}"}]}}\n' "$id" "$resource_source" "$resource_unverified" "$playing"
                             continue
                         fi
+                        if [ "$transport_fault" = default_position ]; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"unverified\\":false,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"1.1.1.1\\"}}}"}]}}\n' "$id" "$playing"
+                            continue
+                        fi
                         if [ "$moving" = true ]; then position=$((position + 1)); fi
                         printf '%s\n' "$position" > transport-position
+                        if [ "$transport_fault" = full_origin ]; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"unverified\\":false,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1.1.1\\",\\"positionReadback\\":{\\"value\\":\\"%s.1.1.1\\",\\"observedComponents\\":[\\"bar\\",\\"beat\\",\\"subdivision\\",\\"tick\\"]}}}}"}]}}\n' "$id" "$playing" "$position" "$position"
+                            continue
+                        fi
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1\\",\\"positionReadback\\":{\\"value\\":\\"%s.1\\",\\"observedComponents\\":[\\"bar\\",\\"beat\\"]}}}}"}]}}\n' "$id" "$resource_source" "$resource_unverified" "$playing" "$position" "$position" ;;
                       *'"uri":"logic://system/operations"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/operations","text":"{\\"schema_version\\":1,\\"generated_at\\":\\"1970-01-01T00:00:00Z\\",\\"operation_count\\":0,\\"operations\\":[]}"}]}}\n' "$id" ;;
@@ -6952,7 +7045,7 @@ struct QualificationRunnerTests {
                         # Outside the step recipes a goto_position moves the playhead to the bar it names.
                         if [ "$playhead_step" = none ]; then
                             to=$(printf '%s' "$request" | /usr/bin/sed -n 's/.*"position":"\([0-9][0-9]*\)\..*/\1/p')
-                            [ -n "$to" ] && position=$to
+                            if [ "$transport_fault" != goto_ignored ]; then [ -n "$to" ] && position=$to; fi
                             printf '%s\n' "$position" > transport-position
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
                             continue
