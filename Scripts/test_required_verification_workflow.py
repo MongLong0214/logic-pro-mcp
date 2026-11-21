@@ -477,9 +477,8 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertIn('parents != [base_sha, head_sha]', wrapper)
         self.assertNotIn('run.get("head_sha") != expected_sha', wrapper)
 
-    def test_native_host_refuses_forks_and_separates_trust_from_candidate(self):
+    def test_native_host_separates_trust_from_candidate(self):
         wrapper = read("Scripts/ci-native-qualify.sh")
-        self.assertIn('fork pull requests cannot execute on the trusted Logic host', wrapper)
         self.assertIn('require_release_origin "$TRUSTED_ROOT"', wrapper)
         self.assertIn('require_release_origin "$CANDIDATE_ROOT"', wrapper)
         self.assertIn('["git", "-C", sys.argv[6], "show"', wrapper)

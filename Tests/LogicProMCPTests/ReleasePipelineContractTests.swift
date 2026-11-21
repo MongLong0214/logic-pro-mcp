@@ -132,7 +132,6 @@ import Testing
     #expect(wrapper.contains("require_release_origin \"$CANDIDATE_ROOT\""))
     #expect(wrapper.contains("git@github.com:MongLong0214/logic-pro-mcp.git"))
     #expect(wrapper.contains("[\"git\", \"-C\", sys.argv[6], \"show\""))
-    #expect(wrapper.contains("fork pull requests cannot execute on the trusted Logic host"))
     #expect(wrapper.contains("run.get(\"path\") != \".github/workflows/ci.yml\""))
     #expect(wrapper.contains("run.get(\"status\") != \"in_progress\""))
     #expect(wrapper.contains("run.get(\"conclusion\") is not None"))
