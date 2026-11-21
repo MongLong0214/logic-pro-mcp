@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Procedural sound design for the film (numpy only, deterministic, royalty-free because it is generated here).
+"""The film's soundtrack: Logic's own output from the take, plus procedural sound design (numpy only, deterministic,
+royalty-free because it is generated here).
 
-Hits are tuned to the song's key (A minor): dings are A5/E6, the boom is A1. The sound-design bus is mixed 14-18 dB
-under the music bed, so it punctuates scene changes without masking the song.
+  sound_design.py --cues work/cues.json --take raw/take.audio.wav --out work/mix.wav [--social]
 
-  sound_design.py --cues cues.json --bed bed.wav --out mix.wav [--social]
-
-cues.json is the output of motion/scripts/export-cues.mjs. bed.wav is Logic's own output of the song (take B),
-already trimmed to start on the first note.
+The bed is the take's audio at 1.0x from the film's first frame, so every change heard happens when it is seen.
+Logic plays nothing until Claude starts playback, and nothing after Claude stops it, so two generated layers keep the
+film from ever going silent, both in the song's key (A minor):
+  * an ambient bed (A2/E3/C4/E4) under the opening, fading out as Logic's own pad comes up;
+  * an outro swell (Am7) from the stop into the end card, fading to silence at the very end.
+Hits: ticks when Logic answers a call (very low), a riser into the drop, whooshes into the cards, a boom on the end
+card. The sound-design bus sits 14-26 dB under the music.
 """
 import argparse
 import json
@@ -16,11 +19,6 @@ import wave
 import numpy as np
 
 SR = 48000
-
-
-def env(n, a, d):
-    t = np.arange(n) / SR
-    return np.minimum(1, t / max(a, 1e-4)) * np.exp(-t / d)
 
 
 def lp(x, cutoff):
@@ -40,38 +38,24 @@ def stereo(x, spread=0.0):
 
 def whoosh(rng, dur=0.9):
     n = int(dur * SR)
-    noise = rng.standard_normal(n)
     t = np.linspace(0, 1, n)
-    cutoff = 250 * (28 ** np.sin(np.pi * t) ** 0.8)  # 250 Hz -> ~7 kHz -> back
-    x = lp(lp(noise, cutoff), cutoff * 1.2)
-    x -= lp(x, np.full(n, 140.0))  # remove the rumble
-    shape = np.sin(np.pi * t) ** 2.2
-    return stereo(x * shape * 0.9, 0.0007)
+    cutoff = 250 * (28 ** np.sin(np.pi * t) ** 0.8)
+    x = lp(lp(rng.standard_normal(n), cutoff), cutoff * 1.2)
+    x -= lp(x, np.full(n, 140.0))
+    return stereo(x * np.sin(np.pi * t) ** 2.2 * 0.9, 0.0007)
 
 
 def tick(rng):
-    n = int(0.09 * SR)
+    n = int(0.07 * SR)
     t = np.arange(n) / SR
-    x = np.sin(2 * np.pi * 2600 * t) * np.exp(-t / 0.012) + 0.4 * np.sin(2 * np.pi * 5200 * t) * np.exp(-t / 0.006)
-    return stereo(x * 0.8)
-
-
-def ding(rng):
-    n = int(1.6 * SR)
-    t = np.arange(n) / SR
-    x = np.zeros(n)
-    for f, g in ((880.0, 1.0), (1318.5, 0.5), (1760.0, 0.25), (2637.0, 0.12)):
-        x += g * np.sin(2 * np.pi * f * t) * np.exp(-t / (0.55 / (1 + 0.5 * (f / 880 - 1))))
-    x *= np.minimum(1, t / 0.003)
-    return stereo(x * 0.45, 0.0004)
+    x = np.sin(2 * np.pi * 2200 * t) * np.exp(-t / 0.010)
+    return stereo(x * 0.6)
 
 
 def riser(rng, dur=0.9):
     n = int(dur * SR)
     t = np.linspace(0, 1, n)
-    noise = rng.standard_normal(n)
-    cutoff = 300 + 9000 * t ** 2.2
-    x = lp(noise, cutoff)
+    x = lp(rng.standard_normal(n), 300 + 9000 * t ** 2.2)
     x -= lp(x, np.full(n, 200.0))
     tone = np.sin(2 * np.pi * np.cumsum(220 * 2 ** (2 * t)) / SR) * 0.25
     return stereo((x * 0.8 + tone) * t ** 1.8 * 0.9, 0.0009)
@@ -86,7 +70,22 @@ def boom(rng):
     return stereo((sub + burst) * 0.9)
 
 
-KINDS = {"whoosh": (whoosh, -17.0), "tick": (tick, -26.0), "ding": (ding, -19.0), "riser": (riser, -20.0), "boom": (boom, -17.0)}
+def chord(rng, dur, notes, attack, release_at, release):
+    """A soft detuned-saw pad, low-passed: the generated layers that fill where Logic is silent."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = np.zeros(n)
+    for k, midi in enumerate(notes):
+        f = 440.0 * 2 ** ((midi - 69) / 12)
+        for det in (-0.06, 0.0, 0.07):
+            ph = rng.uniform(0, 1)
+            x += ((f * (1 + det / 100) * t + ph) % 1.0 * 2 - 1) / (1 + k * 0.3)
+    x = lp(x, np.full(n, 1400.0) + 400 * np.sin(2 * np.pi * 0.11 * t))
+    env = np.minimum(1, t / max(attack, 1e-3))
+    if release_at is not None:
+        env *= np.clip(1 - (t - release_at) / release, 0, 1) ** 1.6
+    x = x * env
+    return np.stack([x, np.roll(x, int(0.011 * SR))], axis=1)
 
 
 def place(fx, s, t, total):
@@ -96,66 +95,87 @@ def place(fx, s, t, total):
         fx[i:end] += s[: end - i]
 
 
+def read_wav(path):
+    with wave.open(path) as w:
+        assert w.getframerate() == SR and w.getnchannels() == 2, "take audio must be 48 kHz stereo"
+        return np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).reshape(-1, 2).astype(np.float64) / 32768
+
+
+def film_mix(cues, take, rng):
+    """The full film on its own clock (tau)."""
+    total = int(cues["total"] * SR)
+    off = int(cues["F0"] * SR)
+    sess = int(cues["sessionEnd"] * SR)
+    bed = np.zeros((total, 2))
+    # film tau 0 may fall before the capture's first sample (F0 < 0): that stretch stays empty and the ambient bed fills it
+    lead = max(0, -off)
+    n = min(sess, len(take) - off) - lead
+    if n > 0:
+        bed[lead: lead + n] = take[off + lead: off + lead + n]
+    # whatever Logic still rings after the session (its reverb tail) keeps playing under the end card
+    tail = min(total - sess, len(take) - off - sess)
+    if tail > 0:
+        bed[sess: sess + tail] = take[off + sess: off + sess + tail]
+    loud = bed[np.sqrt((bed ** 2).mean(axis=1)) > 1e-4]
+    rms = np.sqrt(np.mean(loud ** 2)) if len(loud) else 0.05
+    gen = np.zeros_like(bed)
+    # ambient bed: from frame 0 until Logic's pad has come up
+    pad_in = next((e["tau"] for e in cues["entrances"] if e["track"] == "Pad"), cues.get("musicTau") or 4.0)
+    amb = chord(rng, pad_in + 3.0, [45, 52, 60, 64], 0.05, pad_in + 0.2, 2.6)
+    place(gen, amb / (np.max(np.abs(amb)) + 1e-9) * rms * 0.5, 0.0, total)
+    # outro: from the stop through the end card, fading to silence at the end
+    st = cues.get("stopTau") or cues["sessionEnd"]
+    out_len = cues["total"] - st
+    outro = chord(rng, out_len, [45, 57, 60, 64, 67], 0.25, out_len - 2.2, 2.2)
+    place(gen, outro / (np.max(np.abs(outro)) + 1e-9) * rms * 0.55, st, total)
+    mix = bed + gen
+    fx = np.zeros_like(mix)
+    for t, kind in cues["sfx"]:
+        fn, db = KINDS[kind]
+        s = fn(rng)
+        place(fx, s / (np.max(np.abs(s)) + 1e-9) * rms * 10 ** (db / 20) * 4.0, t, total)
+    mix = mix + fx
+    fade = int(0.04 * SR)
+    mix[:fade] *= np.linspace(0, 1, fade)[:, None]
+    return mix
+
+
+KINDS = {"whoosh": (whoosh, -18.0), "tick": (tick, -32.0), "riser": (riser, -20.0), "boom": (boom, -16.0)}
+
+
 def main():
-    global SR
     ap = argparse.ArgumentParser()
     ap.add_argument("--cues", required=True)
-    ap.add_argument("--bed", required=True, help="wav of Logic's output starting on bar 1")
+    ap.add_argument("--take", required=True, help="wav of Logic's output for the whole take (48 kHz stereo)")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--sr", type=int, default=48000)
-    ap.add_argument("--social", action="store_true", help="assemble the social cut from bar-line excerpts of the same song")
+    ap.add_argument("--social", action="store_true", help="assemble the social/vertical cut from the film's own mix")
     a = ap.parse_args()
-    SR = a.sr
     cues = json.load(open(a.cues))
-    P = cues["P"]
-    with wave.open(a.bed) as w:
-        assert w.getframerate() == SR and w.getnchannels() == 2
-        raw = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).reshape(-1, 2).astype(np.float64) / 32768
-    rng = np.random.default_rng(7)
-    sfx = cues["sfx"]
+    take = read_wav(a.take)
+    mix = film_mix(cues, take, np.random.default_rng(7))
     if a.social:
         segs = cues["social"]["segments"]
-        total = int(cues["social"]["total"] * SR)
-        bed = np.zeros((total, 2))
-        keep = []
+        total = int(round(cues["social"]["total"] * SR))
+        out = np.zeros((total, 2))
+        xf = int(0.03 * SR)  # 30 ms equal-power joins: cuts land on bar lines or on the generated beds, never mid-note
         for seg in segs:
-            s0 = int(seg["s0"] * SR)
-            if seg["kind"] == "song":
-                n = int(seg["len"] * SR)
-                src = raw[int(seg["from"] * SR): int(seg["from"] * SR) + n].copy()
-                src = np.pad(src, ((0, n - len(src)), (0, 0)))
-                f = int(0.012 * SR)  # 12 ms edge fades: bar-line cuts, no clicks
-                src[:f] *= np.linspace(0, 1, f)[:, None]
-                src[-f:] *= np.linspace(1, 0, f)[:, None]
-                bed[s0: s0 + n] += src
-            lo, hi = (0, P) if seg["kind"] == "pre" else (P + seg["from"], P + seg["from"] + seg["len"])
-            keep += [[seg["s0"] + (t - lo), k] for t, k in sfx if lo <= t < hi]
-        keep += [[seg["s0"] - 0.05, "whoosh"] for seg in segs[1:]]
-        sfx = keep
-        bed[-int(1.0 * SR):] *= np.linspace(1, 0, int(1.0 * SR))[:, None] ** 1.5
-    else:
-        total = int(cues["total"] * SR)
-        bed = np.zeros((total, 2))
-        off = int(P * SR)
-        n = min(total - off, len(raw))
-        bed[off: off + n] = raw[:n]
-        fade = int(1.8 * SR)
-        bed[-fade:] *= np.linspace(1, 0, fade)[:, None] ** 1.5
-    rms = np.sqrt(np.mean(raw[int(8 * SR): int(40 * SR)] ** 2) + 1e-12)
-    fx = np.zeros_like(bed)
-    for t, kind in sfx:
-        fn, db = KINDS[kind]
-        sound = fn(rng)
-        sound = sound / (np.max(np.abs(sound)) + 1e-9) * rms * 10 ** (db / 20) * 4.0
-        place(fx, sound, t, total)
-    out = bed + fx
-    peak = np.max(np.abs(out))
+            s0, n, src0 = int(round(seg["s0"] * SR)), int(round(seg["len"] * SR)), int(round(seg["tau0"] * SR))
+            piece = mix[src0: src0 + n + xf].copy()
+            piece = np.pad(piece, ((0, n + xf - len(piece)), (0, 0)))
+            ramp = np.sin(np.linspace(0, np.pi / 2, xf)) ** 2
+            if s0 > 0:
+                piece[:xf] *= ramp[:, None]
+            piece[n:] *= ramp[::-1][:, None]
+            end = min(total, s0 + n + xf)
+            out[s0:end] += piece[: end - s0]
+        mix = out
+    peak = np.max(np.abs(mix))
     if peak > 0.95:
-        out *= 0.95 / peak
-    pcm = (np.clip(out, -1, 1) * 32767).astype(np.int16)
+        mix *= 0.95 / peak
+    pcm = (np.clip(mix, -1, 1) * 32767).astype(np.int16)
     with wave.open(a.out, "wb") as w:
         w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes(pcm.tobytes())
-    print(f"wrote {a.out}: {total / SR:.2f}s, bed rms {20 * np.log10(rms):.1f} dBFS, {len(sfx)} hits")
+    print(f"wrote {a.out}: {len(mix) / SR:.2f}s")
 
 
 if __name__ == "__main__":

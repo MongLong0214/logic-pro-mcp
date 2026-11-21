@@ -2,11 +2,11 @@
   "title": "Signal",
   "bpm": 120,
   "key": "A minor",
-  "bars": 24,
+  "bars": 48,
   "ppq": 960,
   "seed": 20261120,
   "seconds_per_bar": 2.0,
-  "duration_seconds": 48.0,
+  "duration_seconds": 96.0,
   "track_order": [
     "Keys",
     "Pad",
@@ -16,24 +16,24 @@
   ],
   "sections": [
     {
-      "name": "intro",
-      "from_bar": 1,
-      "to_bar": 4
-    },
-    {
-      "name": "build",
-      "from_bar": 5,
-      "to_bar": 8
-    },
-    {
       "name": "A",
-      "from_bar": 9,
+      "from_bar": 1,
       "to_bar": 16
     },
     {
       "name": "B",
       "from_bar": 17,
       "to_bar": 24
+    },
+    {
+      "name": "A2",
+      "from_bar": 25,
+      "to_bar": 40
+    },
+    {
+      "name": "B2",
+      "from_bar": 41,
+      "to_bar": 48
     }
   ],
   "progression": {
@@ -53,28 +53,28 @@
   "tracks": [
     {
       "name": "Keys",
-      "entry_bar": 3,
-      "notes": 256
+      "entry_bar": 1,
+      "notes": 560
     },
     {
       "name": "Pad",
       "entry_bar": 1,
-      "notes": 96
+      "notes": 192
     },
     {
       "name": "Bass",
-      "entry_bar": 5,
-      "notes": 72
+      "entry_bar": 1,
+      "notes": 236
     },
     {
       "name": "Drums",
-      "entry_bar": 7,
-      "notes": 363
+      "entry_bar": 1,
+      "notes": 1223
     },
     {
       "name": "Lead",
-      "entry_bar": 9,
-      "notes": 63
+      "entry_bar": 1,
+      "notes": 200
     }
   ]
 }

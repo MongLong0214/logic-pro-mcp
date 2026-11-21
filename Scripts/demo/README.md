@@ -1,48 +1,64 @@
 # Launch film pipeline
 
-Re-renders the Logic Pro MCP launch film (`docs/media/logic-pro-mcp-demo.*`) from a live Logic Pro session.
-Only the recording needs a Mac with Logic; everything after it is scripted and deterministic.
+Re-renders the Logic Pro MCP launch film (`docs/media/logic-pro-mcp-demo.*`) from a live session in which a real
+Claude Code client drives Logic Pro. Only the recording needs a Mac with Logic; everything after it is scripted and
+deterministic.
 
 ## What the film claims, and what backs it
 
-Every operation on screen is a live MCP call against the **published release binary** (`fetch-binary.sh`, checked
-against the release's `SHA256SUMS.txt`) driving Logic Pro. The driver (`driver.py`) refuses any mutating call that is not
-one of the 17 operations live-qualified on Logic Pro 13.0 (`docs/qualification/not-qualified-logic13.json` lists the
-other 121; `driver.py --list-ops` prints the allowed set). Request, response and measured round-trip of every call go to
-a JSONL log, and the transcript, timers and "verified" captions in the film are rendered from that log, never typed.
+The take is a real Claude Code session. Its only MCP server is the **published release binary** (`fetch-binary.sh`,
+checked against the release's `SHA256SUMS.txt`), registered with `--strict-mcp-config`, and Claude Code runs without
+the owner's user settings, hooks or plugins (`--setting-sources project`). Plain-language requests are typed into it at
+a human pace by `typist.py`; Claude chooses every tool call and its arguments itself. `mcp_tap.py` sits on the server's
+stdio and records every JSON-RPC line, unchanged, with the wall-clock time it passed. The captions, before → after
+values and timings in the film are rendered from that log, never typed. Claude Code's own session transcript is kept
+next to it.
+
+Both windows are recorded at the same time with ScreenCaptureKit: Logic's window with Logic's own audio, and the
+client's Terminal window. Footage plays at 1.0x and nothing inside the session is cut.
 
 Not shown as MCP work (done as preparation, listed in `docs/media/README.md`): creating the tracks, importing the MIDI,
-choosing instruments and plug-ins, and the channel-strip processing. Those are either not qualified on 13.0 or not
-exposed by the server yet.
+choosing instruments, naming tracks and regions, hiding the track headers' Record Enable and Input Monitoring
+buttons (display only; no track is armed), and the start state set by `driver.py --scenario reset`.
 
 ## Layout
 
 | path | role |
 |---|---|
-| `music/compose.py` | deterministic arrangement ("Signal", 120 BPM, A minor, 24 bars): writes `music/out/*.mid` + `arrangement.json` |
-| `capture/LogicCapture.swift` | ScreenCaptureKit recorder: Logic's window at native Retina pixels, 60 fps, plus Logic's own audio |
-| `driver.py` | scripted MCP client (stdio JSON-RPC), scenarios `reset` and `film` (the single take) |
-| `record_take.sh` | runs capture + driver together; run it in the terminal that holds Screen Recording permission |
-| `align.py` | driver log + capture metadata -> `motion/public/data/session.json` (fits the beat grid to find when bar 1 started) |
-| `scan_frames.py` | per-frame luma scan: fails the build on any dropout frame |
-| `motion/` | Remotion project: scenes, kinetic captions, transcript, camera moves (brand tokens from the landing site) |
-| `sound_design.py` | generated UI/whoosh sound design (numpy), mixed under the song |
-| `qa_audio.py` | LUFS, true peak, clipping, silence gaps, click detection |
-| `build.sh` | `process`, `render`, `audio`, `encode`, `check`, `all`; `check` is a hard gate: every output needs an audio stream, about -14 LUFS, true peak at or under -1.0 dBTP, and no dropout frames |
+| `music/compose.py` | deterministic arrangement ("Signal", 120 BPM, A minor, 48 bars): every part written from bar 1, so a fader write is heard whenever Claude makes it |
+| `capture/LogicCapture.swift` | ScreenCaptureKit recorder: one app window at native pixels, 60 fps, plus that app's audio (`--title`, `--no-audio` for the client window) |
+| `capture/TerminalProfile.swift` | writes the on-camera Terminal profile (opaque, large font, brand colours) |
+| `record_claude_take.sh` | `prepare`, `launch` (Claude Code in tmux session `lpmdemo` + the Terminal window), `start`/`stop` (both captures), `teardown` |
+| `typist.py` | types the requests into the Claude Code pane and waits for each turn to finish |
+| `mcp_tap.py` | pass-through stdio logger between Claude Code and the server |
+| `driver.py` | scripted client used only for `--scenario reset` (off camera: tempo 90, faders down, pans centred, metronome and count-in off) |
+| `align_claude.py` | tap log + prompts + capture metadata -> `motion/public/data/session.json` (before → after, no-op flags, latency stats, bar-1 time) |
+| `motion/` | Remotion project: split client/Logic layout, close-ups per write, captions, cards (brand tokens from the landing site) |
+| `sound_design.py` | the take's audio plus generated beds where Logic is silent (opening, after stop) and sound design |
+| `scan_frames.py` | per-frame luma scan at 3 luma: fails on any isolated dropout; run on every master and deliverable |
+| `qa_audio.py` | LUFS, true peak, clipping, silence gaps from the first sample, LRA range, entrance steps, clicks |
+| `build.sh` | `process`, `render`, `audio`, `encode`, `check`, `all`; `check` is the hard gate |
 
-## Re-render
+## Re-record and re-render
 
 ```bash
-Scripts/demo/fetch-binary.sh v3.19.0          # the exact published binary
-python3 Scripts/demo/music/compose.py         # regenerate the MIDI (identical every run)
-# live: prepare the fixture project (docs/media/README.md), then in the permitted terminal:
-Scripts/demo/record_take.sh reset && Scripts/demo/record_take.sh film
-Scripts/demo/build.sh all                     # PREVIEW=1 for a fast 540p draft
+Scripts/demo/fetch-binary.sh v3.19.0           # the exact published binary
+python3 Scripts/demo/music/compose.py          # regenerate the MIDI (identical every run)
+# live, in the terminal that holds Screen Recording and Accessibility (tmux -L logic-aqua):
+#   prepare the project (docs/media/README.md), then
+Scripts/demo/driver.py --scenario reset --log Scripts/demo/out/reset.jsonl
+Scripts/demo/record_claude_take.sh prepare && Scripts/demo/record_claude_take.sh launch
+Scripts/demo/record_claude_take.sh start
+Scripts/demo/typist.py --target lpmdemo --log Scripts/demo/out/prompts.jsonl "Set the tempo to 120 …" …
+Scripts/demo/record_claude_take.sh stop && Scripts/demo/record_claude_take.sh teardown
+Scripts/demo/build.sh all                      # PREVIEW=1 for a fast 480p draft
 ```
 
-Outputs land in `Scripts/demo/out/` (the 4K master stays local; the repo carries the 1080p mp4, gif and posters).
+Outputs land in `Scripts/demo/out/` (the 4K master stays local; the repo carries the 1080p mp4, the GIF and the
+thumbnail).
 
 ## Timing honesty
 
-No clip is retimed. Footage plays at 1.0x everywhere. The one cut is the 2 s the driver waits for the track poller, on a
-static frame. If a future edit speeds a clip up, the on-screen label must say so.
+No clip is retimed and nothing inside the session is cut: the film shows the take at 1.0x from just before the first
+request to just after the stop. The proof card is laid over the live take; the end card comes after it. If a future
+edit speeds a clip up or cuts model think time, the on-screen label must say so.

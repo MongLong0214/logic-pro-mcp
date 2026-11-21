@@ -8,6 +8,10 @@
 // holds that permission (the project drives it through `tmux -L logic-aqua send-keys -t gate:0`).
 //
 //   LogicCapture --bundle com.apple.logic10 --out take.mov [--fps 60] [--max-seconds 120] [--list]
+//   LogicCapture --bundle com.apple.Terminal --title "Logic Pro MCP demo" --no-audio --out client.mov
+//
+// --title keeps only windows whose title contains the string (the client window among other Terminal windows);
+// --no-audio records picture only (the client makes no sound; Logic's audio comes from Logic's own capture).
 //
 // Stop with SIGINT/SIGTERM or by creating the file `<out>.stop`. On start it prints one JSON line
 // with the wall-clock epoch of the first video frame, so the MCP driver log can be aligned to it.
@@ -29,7 +33,10 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
     var audioBuffers = 0
     let queue = DispatchQueue(label: "capture.samples")
 
-    init(url: URL, width: Int, height: Int, fps: Int) throws {
+    let withAudio: Bool
+
+    init(url: URL, width: Int, height: Int, fps: Int, withAudio: Bool = true) throws {
+        self.withAudio = withAudio
         try? FileManager.default.removeItem(at: url)
         writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         // ProRes 422 LT: intra-frame, so a busy 4K60 stream (a scrolling playhead) cannot stall a long-GOP HEVC
@@ -51,7 +58,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
         ])
         audio.expectsMediaDataInRealTime = true
         writer.add(video)
-        writer.add(audio)
+        if withAudio { writer.add(audio) }
         super.init()
     }
 
@@ -75,7 +82,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
             }
             if video.isReadyForMoreMediaData { video.append(sb); videoFrames += 1 } else { droppedFrames += 1 }
         case .audio:
-            guard started, CMTimeCompare(CMSampleBufferGetPresentationTimeStamp(sb), firstVideoPTS) >= 0 else { return }
+            guard withAudio, started, CMTimeCompare(CMSampleBufferGetPresentationTimeStamp(sb), firstVideoPTS) >= 0 else { return }
             if audio.isReadyForMoreMediaData { audio.append(sb); audioBuffers += 1 }
         default: break
         }
@@ -87,7 +94,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func finish() async {
         guard started else { return }
-        video.markAsFinished(); audio.markAsFinished()
+        video.markAsFinished(); if withAudio { audio.markAsFinished() }
         await writer.finishWriting()
         print("{\"event\":\"finished\",\"video_frames\":\(videoFrames),\"dropped_frames\":\(droppedFrames),\"audio_buffers\":\(audioBuffers),\"status\":\(writer.status.rawValue)}")
         fflush(stdout)
@@ -109,8 +116,11 @@ struct Main {
             let fps = Int(arg("--fps") ?? "60") ?? 60
             let maxSeconds = Double(arg("--max-seconds") ?? "180") ?? 180
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            let title = arg("--title")
+            let withAudio = !CommandLine.arguments.contains("--no-audio")
             let windows = content.windows
-                .filter { $0.owningApplication?.bundleIdentifier == bundle && $0.frame.width > 800 && $0.windowLayer == 0 }
+                .filter { $0.owningApplication?.bundleIdentifier == bundle && $0.frame.width > 600 && $0.windowLayer == 0 }
+                .filter { title == nil || ($0.title ?? "").contains(title!) }
                 .sorted { $0.frame.width * $0.frame.height > $1.frame.width * $1.frame.height }
             if CommandLine.arguments.contains("--list") {
                 for w in windows { print("\(w.windowID)\t\(w.frame)\t\(w.title ?? "")") }
@@ -129,15 +139,15 @@ struct Main {
             cfg.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
             cfg.pixelFormat = kCVPixelFormatType_32BGRA
             cfg.showsCursor = false
-            cfg.capturesAudio = true
+            cfg.capturesAudio = withAudio
             cfg.sampleRate = 48000
             cfg.channelCount = 2
             cfg.queueDepth = 8
-            let rec = try Recorder(url: URL(fileURLWithPath: out), width: width, height: height, fps: fps)
+            let rec = try Recorder(url: URL(fileURLWithPath: out), width: width, height: height, fps: fps, withAudio: withAudio)
             let stream = SCStream(filter: filter, configuration: cfg, delegate: rec)
             try stream.addStreamOutput(rec, type: .screen, sampleHandlerQueue: rec.queue)
-            try stream.addStreamOutput(rec, type: .audio, sampleHandlerQueue: rec.queue)
-            print("{\"event\":\"window\",\"id\":\(win.windowID),\"pixels\":[\(width),\(height)],\"fps\":\(fps)}"); fflush(stdout)
+            if withAudio { try stream.addStreamOutput(rec, type: .audio, sampleHandlerQueue: rec.queue) }
+            print("{\"event\":\"window\",\"id\":\(win.windowID),\"title\":\"\(win.title ?? "")\",\"frame\":[\(win.frame.origin.x),\(win.frame.origin.y),\(win.frame.width),\(win.frame.height)],\"pixels\":[\(width),\(height)],\"fps\":\(fps)}"); fflush(stdout)
             try await stream.startCapture()
             var stop = false
             signal(SIGINT, SIG_IGN); signal(SIGTERM, SIG_IGN)

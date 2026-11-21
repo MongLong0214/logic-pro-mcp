@@ -13,8 +13,7 @@ Honest by construction:
 
 Usage:
   driver.py --scenario reset --log out/reset.jsonl      # not filmed: tempo 90, faders down, count-in/metronome off
-  driver.py --scenario film  --log out/film.jsonl       # the film: one take, in order (read, tempo, pan, play, entrances, rides)
-  driver.py --scenario setup --mock ...                 # no Logic: canned responses, for plumbing tests
+  driver.py --scenario film  --log out/film.jsonl       # the film: one take, in order (read, tempo, pan, play, entrances, rides, stop)
 
 Env: LOGIC_PRO_MCP_BINARY (default: the published v3.19.0 binary fetched by fetch-binary.sh).
 """
@@ -115,54 +114,94 @@ def transport_flags(c):
 
 
 def scenario_film(c, a):
-    """The film: ONE take, in order. Read, tempo, placement, play, five entrances, mixing rides, readback, stop.
+    """The film: ONE take, in order, on the film clock tau (0 = the `film_start` marker, 1 s after the capture began).
 
-    Mute/solo/arm/rename act only on the selected track on Logic 13 and `tracks.select` is not qualified, so parts
-    enter by fader moves (`mixer.set_volume`, qualified); each call moves the fader through its detents while the call
-    runs, which is the fade-in you hear.
+      0.0-2.0   headline holds over live Logic; the track poller needs ~2 s after the first read, so the driver waits
+                for real here instead of cutting the wait out of the footage
+      2.0-4.0   READ    reads logic://tracks and the transport state
+      4.0-6.0   SET     transport.set_tempo 90 -> 120, then reads the transport back
+      6.0-8.5   PLACE   mixer.set_pan on the four tracks that move (bass stays centre; a pan of 0 on a centred track
+                        is a no-op and is not filmed)
+      8.6       PLAY    transport.play, then the five parts enter by fader on their bars, four mixing rides, a read-back
+                        that waits for the poller, stop
+
+    Mute/solo/arm/rename act only on the selected track on Logic 13 and `tracks.select` is not qualified, so parts enter
+    by fader moves (`mixer.set_volume`, qualified); each call moves the fader through its detents while it runs, which
+    is the fade-in you hear. Nothing is retimed or cut: the schedule below only decides when each call is sent.
     """
     spb = PLAN["seconds_per_bar"]
-    entry = {t["name"]: t["entry_bar"] for t in PLAN["tracks"]}
-    c.read("logic://system/health", label="read: health")
-    c.read("logic://transport/state", label="read: transport")
-    time.sleep(2.0)  # the track poller needs one cycle after the first read; this wait is cut from the film
+    c.read("logic://tracks", label="prep: poller")  # starts the track poller; not captioned
+    c.read("logic://system/health", label="prep: health")
     c.log.write(json.dumps({"marker": "film_start", "t_epoch": time.time()}) + "\n")
+    t0 = time.monotonic()
+    clock = lambda: time.monotonic() - t0
+
+    def at(sec):
+        wait = sec - clock()
+        if wait > 0:
+            time.sleep(wait)
+
+    at(2.0)
     c.read("logic://tracks", label="read: tracks")
+    c.read("logic://transport/state", label="read: transport")
+    at(4.0)
     c.tool("logic_transport", "set_tempo", {"tempo": a["tempo"]}, label="set tempo")
     c.read("logic://transport/state", label="read: tempo readback")
-    for i, (vol, pan) in enumerate(a["mix"]):
-        c.tool("logic_mixer", "set_pan", {"track": i, "value": pan}, label=f"pan {TRACKS[i]}")
+    at(6.0)
+    for k, (name, pan) in enumerate(a["pans"]):
+        at(6.0 + 0.55 * k)
+        c.tool("logic_mixer", "set_pan", {"track": TRACKS.index(name), "value": pan}, label=f"pan {name}")
+    at(a["play_at"])
     c.log.write(json.dumps({"marker": "pre_play", "t_epoch": time.time()}) + "\n")
     t_sent = time.monotonic()
     t_epoch = time.time()
     c.tool("logic_transport", "play", label="play")
     c.log.write(json.dumps({"marker": "play_started", "t_epoch": t_epoch, "spb": spb}) + "\n")
-    t0 = t_sent + a["start_latency"]  # Logic starts about half a second into the play call (measured: bar-1 downbeat)
-    lead = a["lead_seconds"]
+    b0 = t_sent + a["start_latency"]  # Logic starts about half a second into the play call (measured: bar-1 downbeat)
     cues = []
     for name in TRACKS:
         idx = TRACKS.index(name)
-        at = (entry[name] - 1) * spb - lead
-        if name == "Pad":
-            at = a["start_latency"] + 0.15  # right after the play call returns; the pad swells in from there
-        cues.append((at, "logic_mixer", "set_volume", {"track": idx, "value": a["mix"][idx][0]}, f"bring in {name}"))
+        at_s = (a["enter_bar"][name] - 1) * spb - a["lead_seconds"]
+        if name == a["first_part"]:
+            at_s = 0.15  # just after the play call returns; the first part swells in from there
+        cues.append((at_s, "logic_mixer", "set_volume", {"track": idx, "value": a["volume"][name]}, f"bring in {name}"))
     for sec, command, track, value, label in a["rides"]:
         cues.append((sec, "logic_mixer", command, {"track": TRACKS.index(track), "value": value}, label))
     cues.append((a["read_at"], None, "read", None, "read: tracks after the mix"))
     cues.sort(key=lambda x: x[0])
-    for at, tool, command, params, label in cues:
-        wait = (t0 + at) - time.monotonic()
+    for sec, tool, command, params, label in cues:
+        wait = (b0 + sec) - time.monotonic()
         if wait > 0:
             time.sleep(wait)
         if tool is None:
             c.read("logic://tracks", label=label)
         else:
             c.tool(tool, command, params, label=label)
-    wait = (t0 + PLAN["duration_seconds"] + 0.25) - time.monotonic()
+    wait = (b0 + a["stop_at"]) - time.monotonic()
     if wait > 0:
         time.sleep(wait)
     c.tool("logic_transport", "stop", label="stop")
-    c.read("logic://transport/state", label="read: transport")
+    c.log.write(json.dumps({"marker": "stopped", "t_epoch": time.time()}) + "\n")
+    c.read("logic://transport/state", label="read: transport after stop")
+
+
+def scenario_cal(c, a):
+    """Not filmed. Level calibration for the mix: play, then bring each part in alone at one fader value and back out,
+    with the pad also at three values to measure the fader law. The analysis (not in the film) reads the captured audio."""
+    c.read("logic://tracks", label="prep: poller")
+    time.sleep(2.0)
+    c.tool("logic_transport", "play", label="play")
+    time.sleep(0.6)
+    plan = [("Pad", 0.4), ("Pad", 0.6), ("Pad", 0.8), ("Keys", 0.8), ("Bass", 0.8), ("Drums", 0.8), ("Lead", 0.8)]
+    for name, v in plan:
+        idx = TRACKS.index(name)
+        c.log.write(json.dumps({"marker": f"cal_in {name} {v}", "t_epoch": time.time()}) + "\n")
+        c.tool("logic_mixer", "set_volume", {"track": idx, "value": v}, label=f"cal in {name} {v}")
+        time.sleep(2.4)
+        c.log.write(json.dumps({"marker": f"cal_out {name} {v}", "t_epoch": time.time()}) + "\n")
+        c.tool("logic_mixer", "set_volume", {"track": idx, "value": 0.0}, label=f"cal out {name}")
+        time.sleep(0.3)
+    c.tool("logic_transport", "stop", label="stop")
 
 
 def scenario_reset(c, a):
@@ -187,23 +226,29 @@ ARGS = {
     "start_volume": 0.0,
     "tempo": 120,
     "start_latency": 0.5,
-    # per track in project order (Keys, Pad, Bass, Drums, Lead): (volume 0..1, pan -1..1)
-    "mix": [(0.72, -0.25), (0.80, 0.0), (0.50, 0.0), (0.66, 0.0), (0.72, 0.30)],
+    "play_at": 8.6,  # film clock: after the READ, SET and PLACE captions have each had their 2 s
+    "first_part": "Pad",
+    # the four tracks that move; the bass stays centred (a pan of 0 on a centred track would be a no-op)
+    "pans": [("Keys", -0.25), ("Pad", 0.20), ("Drums", 0.10), ("Lead", 0.30)],
+    # fader value per part (0..1) when it enters, and the bar it enters on (every part is written from bar 1, the fader decides)
+    "volume": {"Keys": 0.48, "Pad": 0.43, "Bass": 0.41, "Drums": 0.59, "Lead": 0.92},
+    "enter_bar": {"Pad": 1, "Keys": 3, "Bass": 5, "Drums": 7, "Lead": 9},
     "lead_seconds": 0.3,
-    # (seconds after bar 1, command, track, value, label): the mixing section, bars 11-16
+    # (seconds after bar 1, command, track, value, label): the mixing section, bars 10-13
     "rides": [
-        (20.0, "set_pan", "Keys", -0.55, "ride: Keys wider"),
-        (22.5, "set_volume", "Lead", 0.78, "ride: Lead up"),
-        (25.0, "set_volume", "Drums", 0.60, "ride: Drums down"),
-        (27.5, "set_pan", "Pad", 0.35, "ride: Pad right"),
+        (18.0, "set_pan", "Keys", -0.55, "ride: Keys wider"),
+        (20.0, "set_volume", "Pad", 0.52, "ride: Pad up"),
+        (22.0, "set_volume", "Drums", 0.54, "ride: Drums down"),
+        (24.0, "set_pan", "Lead", 0.12, "ride: Lead nearer the centre"),
     ],
-    "read_at": 30.0,
+    "read_at": 33.5,   # 9.5 s after the last write: the track cache needs about that long to catch up (docs/media/README.md)
+    "stop_at": 36.0,
 }
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--scenario", choices=["film", "reset"])
+    ap.add_argument("--scenario", choices=["film", "reset", "cal"])
     ap.add_argument("--log")
     ap.add_argument("--mock", action="store_true")
     ap.add_argument("--list-ops", action="store_true")
@@ -223,7 +268,7 @@ def main():
     binary = os.environ.get("LOGIC_PRO_MCP_BINARY", os.path.join(HERE, ".cache", "release", "LogicProMCP"))
     c = Client(binary, a.log, mock=a.mock)
     try:
-        {"film": scenario_film, "reset": scenario_reset}[a.scenario](c, ARGS)
+        {"film": scenario_film, "reset": scenario_reset, "cal": scenario_cal}[a.scenario](c, ARGS)
     finally:
         c.close()
 

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Objective audio checks on a finished mix: loudness, true peak, clipping, silence gaps, discontinuities.
 
-  qa_audio.py final.wav [--start-guard 0.0]   -> prints a JSON report, exit 1 if a check fails
+  qa_audio.py final.wav [--entrances t1,t2,...] [--lra 6,8] [--end-guard 1.5]   -> JSON report, exit 1 if a check fails
 
 Checks (all measured, none assumed):
   * integrated loudness (EBU R128) and true peak via ffmpeg ebur128 (target -14 LUFS, true peak <= -1.0 dBTP)
   * clipping: count of samples at full scale (must be 0)
-  * short-term loudness of the opening and the loudness range (reported; the build targets LRA <= 7)
-  * silence gaps: any run below -60 dBFS longer than 0.35 s inside the body (must be none)
+  * loudness range (EBU R128 LRA); with --lra LO,HI it must fall inside that range
+  * silence gaps: any run below -60 dBFS longer than 0.35 s anywhere from the first sample (no opening exemption);
+    only the last --end-guard seconds (the intentional closing fade) are exempt
+  * entrance steps: with --entrances, the RMS level of the 2 s after each time minus the 2 s before (must be >= 3 dB)
   * clicks: sample-to-sample jumps far outside the signal's own distribution (reported, must be 0 over 6 sigma-of-diff x 40)
 """
 import json
@@ -19,8 +21,15 @@ import wave
 import numpy as np
 
 
+def opt(name, default=None):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
+
+
 def main():
     path = sys.argv[1]
+    end_guard = float(opt("--end-guard", "1.5"))
+    entrances = [float(v) for v in opt("--entrances", "").split(",") if v.strip()]
+    lra_range = [float(v) for v in opt("--lra").split(",")] if opt("--lra") else None
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128=peak=true", "-f", "null", "-"], capture_output=True, text=True)
     tail = r.stderr[r.stderr.rfind("Summary:"):]
     lufs = float(re.search(r"I:\s+(-?[0-9.]+) LUFS", tail).group(1))
@@ -47,13 +56,24 @@ def main():
         run = run + 1 if q else 0
         if run * 0.05 > 0.35 and (i + 1 == n or not quiet[i + 1]):
             gaps.append(round((i - run + 1) * 0.05, 2))
-    gaps = [g for g in gaps if 1.5 < g < len(x) / sr - 3.0]  # the opening fade-in (a fader rising from zero) and closing fade are intentional  # the closing fade-out is meant to reach silence
+    gaps = [g for g in gaps if g < len(x) / sr - end_guard]  # only the closing fade may reach silence
     d = np.abs(np.diff(x, axis=0)).max(axis=1)
     thr = 40 * (np.std(d) + 1e-9)
     clicks = int(np.sum(d > max(thr, 0.5)))
+    def rms(a, b):
+        seg = x[max(0, int(a * sr)): max(0, int(b * sr))]
+        return 20 * np.log10(np.sqrt(np.mean(seg ** 2)) + 1e-9) if len(seg) else -120.0
+    steps = [{"t": t, "before_db": round(rms(t - 2, t), 1), "after_db": round(rms(t, t + 2), 1), "step_db": round(rms(t, t + 2) - rms(t - 2, t), 1)}
+             for t in entrances]
     rep = {"integrated_lufs": lufs, "loudness_range_lu": lra, "true_peak_dbtp": tp, "clipped_samples": clipped,
-           "silence_gaps_start_s": gaps, "click_candidates": clicks, "duration_s": round(len(x) / sr, 2)}
-    rep["pass"] = bool(abs(lufs + 14) <= 1.0 and tp <= -1.0 and clipped == 0 and not gaps and clicks == 0)
+           "silence_gaps_start_s": gaps, "end_guard_s": end_guard, "click_candidates": clicks, "duration_s": round(len(x) / sr, 2),
+           "entrance_steps": steps}
+    ok = abs(lufs + 14) <= 1.0 and tp <= -1.0 and clipped == 0 and not gaps and clicks == 0
+    ok = ok and all(s_["step_db"] >= 3.0 for s_ in steps)
+    if lra_range:
+        rep["lra_range"] = lra_range
+        ok = ok and lra_range[0] <= lra <= lra_range[1]
+    rep["pass"] = bool(ok)
     print(json.dumps(rep, indent=1))
     sys.exit(0 if rep["pass"] else 1)
 

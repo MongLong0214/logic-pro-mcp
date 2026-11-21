@@ -1,48 +1,70 @@
-// The film's structure. No imports so scripts/export-cues.mjs can read it with plain node.
-// Two clocks: v = seconds of the finished video, t = seconds of the song (bar 1 = t 0, a bar is 2.0 s at 120 BPM).
-export const BPM = 120;
-export const BAR = (60 / BPM) * 4;
-export const bar = (n: number) => (n - 1) * BAR;
-export const SONG = 24 * BAR; // 48 s
+// The film's structure, derived from the take. No value imports, so scripts/export-cues.mjs can load it with plain node.
+//
+// One clock only: the film plays the take at 1.0x from F0 (just before the first request is typed) to the end of the
+// session, with nothing cut or retimed. The cards are laid over the live footage (the proof card) or come after the
+// session has stopped (the end card).
+import type { Ev, Session } from "./types";
 
-// Footage clock. The driver waits 2 s after its first reads (the track poller needs a cycle); that dead time is cut:
-// footage [SEG_A0, SEG_A1] plays first, then footage jumps to SEG_B0. Nothing is retimed; the jump is on a static frame.
-export const SEG_A0 = 1.15;
-export const SEG_A1 = 1.75;
-export const SEG_B0 = 3.45;
-export const vOfFootage = (f: number) => (f <= SEG_A1 ? f - SEG_A0 : SEG_A1 - SEG_A0 + (f - SEG_B0));
-export const footageOfV = (v: number) => (v <= SEG_A1 - SEG_A0 ? SEG_A0 + v : SEG_B0 + (v - (SEG_A1 - SEG_A0)));
+export const HEAD = 2.2; // the headline (frame 0, poster) is fully up for 1.8 s, then wipes away over 0.4 s
+export const PROOF = 3.0; // the proof card, laid over the take while the full mix plays, before "stop" is typed
+export const END = 4.5; // the end card, after the session
 
-// Scenes, in song time t (video time v = t + P, where P is the pre-roll before the first note, from session.json).
-export const scenes = {
-  entrances: [
-    { name: "Pad", t: 0, title: "The pad comes in", track: 1 },
-    { name: "Keys", t: bar(3), title: "Then the keys", track: 0 },
-    { name: "Bass", t: bar(5), title: "The bass", track: 2 },
-    { name: "Drums", t: bar(7), title: "The drums", track: 3 },
-    { name: "Lead", t: bar(9), title: "And the hook", track: 4 },
-  ],
-  mix: { from: bar(11), to: bar(17) },
-  verify: { from: bar(17), to: bar(19) + 1 },
-  speed: { from: bar(19) + 1, to: bar(22) },
-  close: { from: bar(22), to: SONG },
+export type Mode = { from: number; to: number; kind: "type" | "act" };
+export type Plan = {
+  F0: number; // take seconds at film tau 0
+  total: number; // film length
+  sessionEnd: number; // tau after which footage holds still
+  musicTau: number | null;
+  proof: { from: number; to: number } | null;
+  end: { from: number; to: number };
+  modes: Mode[];
+  steps: Array<Ev & { tau: number; tauEnd: number; n: number }>;
+  social: Array<{ s0: number; len: number; tau0: number }>;
 };
 
-// 26-second social cut / GIF: [song time range] segments, cut on bar lines. `at` is the social-clock start.
-export const social = {
-  // pre-roll (hook + visible tempo/pan writes), the drums and the hook entering with their faders on screen, the end card
-  segments: [
-    { kind: "pre" as const, len: 0 }, // len filled from P at render time
-    { kind: "song" as const, from: bar(7) - 0.5, len: 14.5 },
-    { kind: "song" as const, from: bar(22), len: 6 },
-  ],
-};
+export function plan(session: Session): Plan {
+  const f = session.film;
+  const ps = f.prompts;
+  const F0 = ps[0].t_start - HEAD;
+  const tau = (t: number) => t - F0;
+  const stopEnd = f.stopAt ?? ps[ps.length - 1].t_idle;
+  const sessionEnd = tau(stopEnd) + 0.9;
+  const last = ps[ps.length - 1];
+  const proofTo = tau(last.t_start) - 0.25;
+  const proof = proofTo - PROOF > tau(ps[ps.length - 2]?.t_idle ?? 0) - 0.6 ? { from: proofTo - PROOF, to: proofTo } : null;
+  const end = { from: sessionEnd, to: sessionEnd + END };
+  const modes: Mode[] = [];
+  let cursor = 0;
+  for (const [i, p] of ps.entries()) {
+    const a = i === 0 ? 0 : Math.max(cursor, tau(p.t_start) - 0.35); // the film opens on the client, about to type
+    if (a > cursor) modes.push({ from: cursor, to: a, kind: "act" });
+    const b = tau(p.t_enter) + 0.45;
+    modes.push({ from: a, to: b, kind: "type" });
+    cursor = b;
+  }
+  modes.push({ from: cursor, to: end.to, kind: "act" });
+  let n = 0;
+  const steps = f.events
+    .filter((e) => e.kind === "tool" || e.target === "tracks")
+    .map((e) => ({ ...e, tau: tau(e.t), tauEnd: tau(e.t_end), n: ++n }));
+  // social / vertical cut: the headline and first request, then from the "play" request through the drop, then the end card
+  const play = ps.findIndex((p) => /play/i.test(p.text));
+  const drop = ps.findIndex((p) => /drum/i.test(p.text));
+  const social: Plan["social"] = [];
+  let s = 0;
+  const seg = (a: number, b: number) => { social.push({ s0: s, len: b - a, tau0: a }); s += b - a; };
+  if (play > 0 && drop >= play) {
+    seg(0, tau(ps[play].t_start) - 0.35);
+    // second segment ends one bar after the drop request went idle, on a bar line of the song
+    const mt = f.musicStart != null ? tau(f.musicStart) : tau(ps[play].t_enter);
+    const want = tau(ps[drop].t_idle) + 2.0;
+    const barEnd = mt + Math.ceil((want - mt) / 2.0) * 2.0;
+    seg(tau(ps[play].t_start) - 0.35, barEnd);
+  } else {
+    seg(0, sessionEnd);
+  }
+  seg(end.from - 0.15, end.to);
+  return { F0, total: end.to, sessionEnd, musicTau: f.musicStart != null ? tau(f.musicStart) : null, proof, end, modes, steps, social };
+}
 
-// Sound-design hits in video seconds are built in export-cues.mjs from these song-time cues plus the real write times.
-export const sfxSong: Array<[number, "whoosh" | "ding" | "boom" | "riser"]> = [
-  [bar(7) - 0.0, "whoosh"],
-  [bar(11), "whoosh"],
-  [bar(17), "whoosh"],
-  [bar(19) + 1, "whoosh"],
-  [bar(22) - 0.05, "boom"],
-];
+export const modeAt = (p: Plan, t: number) => p.modes.find((m) => t >= m.from && t < m.to) ?? p.modes[p.modes.length - 1];

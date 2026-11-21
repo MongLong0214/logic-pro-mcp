@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """Compose the demo track as Standard MIDI Files (stdlib only, deterministic).
 
-"Signal" -- 120 BPM, A minor, 24 bars (48 s). Bars are exactly 2.0 s, so every entrance lands on a round second.
+"Signal" v3 -- 120 BPM, A minor, 48 bars (96 s). Bars are exactly 2.0 s.
 
-  bars  1-4    intro    : pad (bar 1), keys arpeggio (bar 3)
-  bars  5-8    build    : bass (bar 5), drums (bar 7) with a fill into bar 9
-  bars  9-16   A        : Am7 | Fmaj7 | Cmaj7 | G/B ; lead hook (bar 9), full groove
-  bars 17-24   B        : contrast -- Fmaj7 | G | Em7 | Am7 twice, half-time drums, a new, higher melody, keys on pedal,
-                          full groove again from bar 21, last chord rings through bar 24
+The film is driven by a real AI client (Claude Code), so nobody can promise on which bar a request lands. Every part is
+therefore written from bar 1 to the end and the session starts with every fader down: a part becomes audible the moment
+Claude raises its fader, whenever that is, and the harmony is a four-bar loop so any entrance point works.
 
-Pad and keys voicings are open (no minor second below middle C) and move by step. Humanisation is seeded:
-Gaussian timing offsets (about 8-14 ms), velocity accents plus scatter, varied note lengths, and a sustain pedal
-(CC 64) on the keys. Outputs in ./out: arrangement.mid (format 1, tempo track + 5 named tracks), one .mid per track,
-arrangement.json (entry bars and the cue sheet the MCP driver follows).
+  bars  1-16   A  : Am7 | Fmaj7 | Cmaj7 | G   (x4), lead hook P1/P2
+  bars 17-24   B  : Fmaj7 | G | Em7 | Am7 (x2), higher answer melody, drums keep the groove
+  bars 25-40   A' : as A
+  bars 41-48   B' : as B, last chord rings through bar 48
+
+Registers are kept apart so the parts read separately on small speakers: bass A1-E2 roots with fifths (never above
+B2), pad voiced from E3 up (open, stepwise), keys an octave above the pad, lead on top. Humanisation is seeded:
+Gaussian timing offsets (about 5-13 ms), velocity accents plus scatter, varied note lengths, a sustain pedal (CC 64)
+on the keys. Outputs in ./out: arrangement.mid (format 1, tempo track + 5 named tracks), one .mid per track, and
+arrangement.json.
 """
 import json
 import os
@@ -23,47 +27,53 @@ PPQ = 960
 BEAT = PPQ
 BAR = 4 * PPQ
 BPM = 120
-BARS = 24
+BARS = 48
 SEED = 20261120
 MS = PPQ * BPM / 60000.0  # ticks per millisecond
 
-# chord per bar
 A_PROG = ["Am7", "Fmaj7", "Cmaj7", "G"]
 B_PROG = ["Fmaj7", "G", "Em7", "Am7"]
-CHORD_OF_BAR = [A_PROG[(b - 1) % 4] for b in range(1, 17)] + [B_PROG[(b - 17) % 4] for b in range(17, 25)]
 
-KEYS_V = {"Am7": [60, 64, 67, 71], "Fmaj7": [60, 64, 69, 72], "Cmaj7": [60, 64, 67, 71], "G": [59, 62, 67, 71], "Em7": [59, 64, 67, 71]}
-PAD_V = {"Am7": [45, 52, 55, 60], "Fmaj7": [41, 48, 52, 57], "Cmaj7": [48, 55, 59, 64], "G": [43, 50, 55, 59], "Em7": [40, 47, 50, 55]}
-BASS_ROOT = {"Am7": 45, "Fmaj7": 41, "Cmaj7": 48, "G": 43, "Em7": 40}  # A2 F2 C3 G2 E2: audible on small speakers
+
+def section(bar):
+    return "B" if (17 <= bar <= 24 or 41 <= bar <= 48) else "A"
+
+
+CHORD_OF_BAR = [(B_PROG if section(b) == "B" else A_PROG)[(b - 1) % 4] for b in range(1, BARS + 1)]
+
+# pad from E3 up (lowest 52), keys an octave above, bass below A2: no shared register between bass and pad
+PAD_V = {"Am7": [57, 60, 64, 67], "Fmaj7": [53, 57, 60, 64], "Cmaj7": [55, 59, 60, 64], "G": [55, 59, 62, 67], "Em7": [52, 55, 59, 62]}
+KEYS_V = {"Am7": [69, 72, 76, 79], "Fmaj7": [69, 72, 76, 77], "Cmaj7": [67, 71, 72, 76], "G": [67, 71, 74, 79], "Em7": [67, 71, 74, 76]}
+BASS_ROOT = {"Am7": 33, "Fmaj7": 29 + 12, "Cmaj7": 36, "G": 31 + 12, "Em7": 40}  # A1 F2 C2 G2 E2
 
 TRACKS = ["Keys", "Pad", "Bass", "Drums", "Lead"]
-ENTRY = {"Pad": 1, "Keys": 3, "Bass": 5, "Drums": 7, "Lead": 9}
+ENTRY = {n: 1 for n in TRACKS}  # all parts are written from bar 1; the fader decides when each is heard
 K, SN, CL, CH, OH, CR, T1, T2 = 36, 38, 39, 42, 46, 49, 45, 47
 
 # lead melodies: (beat, pitch, length, velocity) per bar
 P1 = [  # over Am7 F C G
-    [(0, 76, 1.5, 92), (1.5, 74, .5, 80), (2, 72, 1, 86), (3, 74, .5, 78), (3.5, 76, .5, 84)],
-    [(0, 77, 1.5, 94), (1.5, 76, .5, 80), (2, 72, 2, 88)],
-    [(0, 79, 1, 96), (1, 76, .5, 78), (1.5, 74, .5, 76), (2, 72, 1, 84), (3, 76, 1, 88)],
-    [(0, 74, 1.5, 90), (1.5, 71, .5, 76), (2, 74, 1.5, 88), (3.5, 76, .5, 82)],
+    [(0, 76, 1.5, 104), (1.5, 74, .5, 92), (2, 72, 1, 98), (3, 74, .5, 90), (3.5, 76, .5, 96)],
+    [(0, 77, 1.5, 106), (1.5, 76, .5, 92), (2, 72, 2, 100)],
+    [(0, 79, 1, 108), (1, 76, .5, 90), (1.5, 74, .5, 88), (2, 72, 1, 96), (3, 76, 1, 100)],
+    [(0, 74, 1.5, 102), (1.5, 71, .5, 88), (2, 74, 1.5, 100), (3.5, 76, .5, 94)],
 ]
 P2 = [
-    [(0, 69, .5, 80), (.5, 72, .5, 82), (1, 76, 1, 90), (2, 81, 1.5, 98), (3.5, 79, .5, 84)],
-    [(0, 77, 1, 92), (1, 81, 1, 96), (2, 79, 1, 90), (3, 77, .5, 82), (3.5, 76, .5, 84)],
-    [(0, 76, .75, 90), (.75, 79, .75, 88), (1.5, 84, 1, 100), (2.5, 83, .5, 86), (3, 79, 1, 90)],
-    [(0, 74, 1, 90), (1, 79, 1, 92), (2, 71, .5, 80), (2.5, 74, .5, 82), (3, 76, 1, 92)],
+    [(0, 69, .5, 92), (.5, 72, .5, 94), (1, 76, 1, 102), (2, 81, 1.5, 110), (3.5, 79, .5, 96)],
+    [(0, 77, 1, 104), (1, 81, 1, 108), (2, 79, 1, 102), (3, 77, .5, 94), (3.5, 76, .5, 96)],
+    [(0, 76, .75, 102), (.75, 79, .75, 100), (1.5, 84, 1, 112), (2.5, 83, .5, 98), (3, 79, 1, 102)],
+    [(0, 74, 1, 102), (1, 79, 1, 104), (2, 71, .5, 92), (2.5, 74, .5, 94), (3, 76, 1, 104)],
 ]
-B1 = [  # over Fmaj7 G Em7 Am7 (new, higher)
-    [(0, 81, 1.5, 94), (1.5, 79, .5, 82), (2, 77, 1, 88), (3, 76, 1, 84)],
-    [(0, 83, 1.5, 96), (1.5, 81, .5, 84), (2, 79, 2, 90)],
-    [(0, 79, 1, 92), (1, 76, 1, 86), (2, 79, .5, 82), (2.5, 81, .5, 84), (3, 83, 1, 94)],
-    [(0, 84, 2, 98), (2, 81, 1, 88), (3, 76, 1, 84)],
+B1 = [  # over Fmaj7 G Em7 Am7 (higher answer)
+    [(0, 81, 1.5, 106), (1.5, 79, .5, 94), (2, 77, 1, 100), (3, 76, 1, 96)],
+    [(0, 83, 1.5, 108), (1.5, 81, .5, 96), (2, 79, 2, 102)],
+    [(0, 79, 1, 104), (1, 76, 1, 98), (2, 79, .5, 94), (2.5, 81, .5, 96), (3, 83, 1, 106)],
+    [(0, 84, 2, 110), (2, 81, 1, 100), (3, 76, 1, 96)],
 ]
 B2 = [
-    [(0, 84, 1, 98), (1, 81, 1, 90), (2, 84, 1, 96), (3, 86, 1, 100)],
-    [(0, 86, 1.5, 100), (1.5, 83, .5, 86), (2, 79, 2, 90)],
-    [(0, 83, 1, 94), (1, 79, 1, 88), (2, 76, 2, 86)],
-    [(0, 81, 4, 96)],
+    [(0, 84, 1, 110), (1, 81, 1, 102), (2, 84, 1, 108), (3, 86, 1, 112)],
+    [(0, 86, 1.5, 112), (1.5, 83, .5, 98), (2, 79, 2, 102)],
+    [(0, 83, 1, 106), (1, 79, 1, 100), (2, 76, 2, 98)],
+    [(0, 81, 4, 108)],
 ]
 
 
@@ -124,98 +134,82 @@ def b0(bar):
 
 def compose():
     rng = random.Random(SEED)
-    P = {n: Part(rng, t, v) for n, t, v in [("Keys", 13, 9), ("Pad", 9, 4), ("Bass", 8, 6), ("Drums", 5, 7), ("Lead", 12, 6)]}
+    P = {n: Part(rng, t, v) for n, t, v in [("Keys", 11, 7), ("Pad", 8, 4), ("Bass", 7, 5), ("Drums", 5, 6), ("Lead", 10, 5)]}
+    last = BARS  # the final bar holds one chord
 
     pad = P["Pad"]
-    for bar in range(1, 24):
-        level = 58 if bar < 5 else 66
+    for bar in range(1, last):
         for n in PAD_V[CHORD_OF_BAR[bar - 1]]:
-            pad.note(b0(bar), BAR + 120, n, level, legato=(0.98, 1.02))  # overlap into the next bar: no gap between chords
+            pad.note(b0(bar), BAR + 120, n, 70, legato=(0.98, 1.02))  # overlap into the next bar: no gap between chords
     for n in PAD_V["Am7"]:
-        pad.note(b0(24), BAR, n, 64, legato=(0.97, 1.0))
+        pad.note(b0(last), BAR, n, 66, legato=(0.97, 1.0))
 
     keys = P["Keys"]
     arp = [0, 1, 2, 3, 2, 1, 2, 3]
-    for bar in list(range(3, 9)) + list(range(21, 24)):
+    stabs = [0, 0.75, 1.5, 2.5, 3.25]
+    for bar in range(1, last):
         ch = KEYS_V[CHORD_OF_BAR[bar - 1]]
         keys.cc(b0(bar) + 20, 64, 127)  # pedal down on the chord, up just before the next
-        for i in range(8):
-            acc = 14 if i % 4 == 0 else (5 if i % 2 == 0 else 0)
-            keys.note(b0(bar) + i * BEAT // 2, BEAT, ch[arp[i]] + (12 if i == 6 else 0), (58 if bar < 5 else 66) + acc)
+        if section(bar) == "A":
+            for i in range(8):
+                acc = 16 if i % 4 == 0 else (6 if i % 2 == 0 else 0)
+                keys.note(b0(bar) + i * BEAT // 2, BEAT, ch[arp[i]] + (12 if i == 6 else 0), 74 + acc)
+        else:
+            for si, pos in enumerate(stabs):
+                vel = 92 if si in (0, 3) else 76
+                for n in ch:
+                    keys.note(b0(bar) + int(pos * BEAT), int((0.6 if si != 2 else 0.9) * BEAT), n, vel)
         keys.cc(b0(bar) + BAR - 60, 64, 0)
-    stabs = [0, 0.75, 1.5, 2.5, 3.25]
-    for bar in range(9, 17):
-        ch = KEYS_V[CHORD_OF_BAR[bar - 1]]
-        keys.cc(b0(bar) + 20, 64, 127)
-        for si, pos in enumerate(stabs):
-            vel = 86 if si in (0, 3) else 70
-            for n in ch:
-                keys.note(b0(bar) + int(pos * BEAT), int((0.6 if si != 2 else 0.9) * BEAT), n, vel + (6 if n == ch[-1] else 0))
-        keys.cc(b0(bar) + BAR - 60, 64, 0)
-    for bar in range(17, 21):  # contrast: long pedalled chords, high sparkle on the offbeat
-        ch = KEYS_V[CHORD_OF_BAR[bar - 1]]
-        keys.cc(b0(bar) + 10, 64, 127)
-        for n in ch:
-            keys.note(b0(bar), int(3.6 * BEAT), n, 62)
-        keys.note(b0(bar) + int(2.5 * BEAT), BEAT, ch[-1] + 12, 56)
-        keys.cc(b0(bar) + BAR - 50, 64, 0)
-    keys.cc(b0(24) + 10, 64, 127)
+    keys.cc(b0(last) + 10, 64, 127)
     for n in KEYS_V["Am7"]:
-        keys.note(b0(24), 3 * BAR, n, 60)
-    keys.cc(b0(24) + 4 * BAR - 20, 64, 0)
+        keys.note(b0(last), BAR, n, 70)
+    keys.cc(b0(last) + BAR - 20, 64, 0)
 
     bass = P["Bass"]
-    for bar in range(5, 24):
+    for bar in range(1, last):
         r = BASS_ROOT[CHORD_OF_BAR[bar - 1]]
-        if bar < 9 or 17 <= bar <= 20:
-            for pos, ln in [(0, 1.8), (2, 1.8)]:
-                bass.note(b0(bar) + int(pos * BEAT), int(ln * BEAT), r, 84 if pos == 0 else 72)
-        else:
-            for pos, ln, p, v in [(0, .75, r, 100), (1.5, .5, r, 80), (2, .75, r + 12, 88), (2.75, .25, r, 70), (3.5, .5, r + 7, 86)]:
-                bass.note(b0(bar) + int(pos * BEAT), int(ln * BEAT), p, v)
-    bass.note(b0(24), 3 * BEAT, BASS_ROOT["Am7"], 84)
+        for pos, ln, p, v in [(0, .75, r, 104), (1.5, .5, r, 84), (2, .75, r + 7, 92), (2.75, .25, r, 74), (3.5, .5, r + 7, 88)]:
+            bass.note(b0(bar) + int(pos * BEAT), int(ln * BEAT), p, v)
+    bass.note(b0(last), 3 * BEAT, BASS_ROOT["Am7"], 96)
 
     d = P["Drums"]
     sw = 0.07
-    for bar in range(7, 24):
+    for bar in range(1, last):
         base = b0(bar)
-        full = 9 <= bar <= 16 or bar >= 21
-        half = 17 <= bar <= 20
         for beat in range(4):
-            if half and beat not in (0, 2):
-                continue
-            d.note(base + beat * BEAT, 90, K, (104 if beat == 0 else 92) if (full or half) else 80, tight=True)
-        if full:
-            d.note(base + int(3.5 * BEAT), 90, K, 72)
-        if full:
-            for beat in (1, 3):
-                d.note(base + beat * BEAT, 150, CL, 98)
-                d.note(base + beat * BEAT, 150, SN, 58)
-        if half:
-            d.note(base + 2 * BEAT, 150, SN, 96)
-        # hats: 16ths in the groove (brighter accents), 8ths in the half-time section, off-8ths in the build
-        steps = range(16) if full else (range(0, 16, 2) if half else range(2, 16, 4))
-        for s in steps:
+            d.note(base + beat * BEAT, 90, K, 106 if beat == 0 else 96, tight=True)
+        d.note(base + int(3.5 * BEAT), 90, K, 76)
+        for beat in (1, 3):
+            d.note(base + beat * BEAT, 150, CL, 100)
+            d.note(base + beat * BEAT, 150, SN, 62)
+        for s in range(16):
             pos = s * BEAT // 4 + (int(sw * BEAT) if s % 2 else 0)
-            vel = {0: 96, 1: 52, 2: 82, 3: 56}[s % 4] if full else 74
-            open_hat = full and s in (6, 14) and bar % 2 == 0
+            vel = {0: 96, 1: 52, 2: 82, 3: 56}[s % 4]
+            open_hat = s in (6, 14) and bar % 2 == 0
             d.note(base + pos, 100 if open_hat else 60, OH if open_hat else CH, vel + (6 if open_hat else 0))
-        if bar in (9, 17, 21):
+        if bar % 8 == 1:
             d.note(base, BAR, CR, 100, tight=True)
-        if bar in (8, 16, 20):
+        if bar % 8 == 0:
             for s, (p, v) in enumerate([(SN, 60), (SN, 66), (SN, 74), (SN, 82), (T1, 86), (T1, 92), (T2, 98), (SN, 108)]):
                 d.note(base + 2 * BEAT + s * BEAT // 4, 100, p, v)
-    d.note(b0(23) + 3 * BEAT, 2 * BEAT, CR, 90, tight=True)
+    d.note(b0(last), 2 * BEAT, CR, 96, tight=True)
+    d.note(b0(last), 90, K, 104, tight=True)
 
     lead = P["Lead"]
+
     def phrase(bars, phr, shift=0):
         for i, bar in enumerate(bars):
             for beat, pitch, ln, vel in phr[i % len(phr)]:
                 lead.note(b0(bar) + int(beat * BEAT), int(ln * BEAT) - 30, pitch + shift, min(120, vel))
-    phrase(range(9, 13), P1)
-    phrase(range(13, 17), P2)
+    for start in (1, 25):
+        phrase(range(start, start + 4), P1)
+        phrase(range(start + 4, start + 8), P2)
+        phrase(range(start + 8, start + 12), P1)
+        phrase(range(start + 12, start + 16), P2)
     phrase(range(17, 21), B1)
     phrase(range(21, 25), B2)
+    phrase(range(41, 45), B1)
+    phrase(range(45, 49), B2)
     return P
 
 
@@ -237,8 +231,7 @@ def plan(P):
     return {
         "title": "Signal", "bpm": BPM, "key": "A minor", "bars": BARS, "ppq": PPQ, "seed": SEED,
         "seconds_per_bar": spb, "duration_seconds": spb * BARS, "track_order": TRACKS,
-        "sections": [{"name": "intro", "from_bar": 1, "to_bar": 4}, {"name": "build", "from_bar": 5, "to_bar": 8},
-                     {"name": "A", "from_bar": 9, "to_bar": 16}, {"name": "B", "from_bar": 17, "to_bar": 24}],
+        "sections": [{"name": n, "from_bar": a, "to_bar": b} for n, a, b in [("A", 1, 16), ("B", 17, 24), ("A2", 25, 40), ("B2", 41, 48)]],
         "progression": {"A": A_PROG, "B": B_PROG},
         "tracks": [{"name": n, "entry_bar": ENTRY[n], "notes": sum(1 for e in P[n].ev if e[1] == 1)} for n in TRACKS],
     }
