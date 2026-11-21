@@ -51,6 +51,32 @@ Source build:
 claude mcp add --scope user logic-pro -- /absolute/path/to/.build/release/LogicProMCP
 ```
 
+Cursor (user or project scope):
+
+1. **One-shot on your Mac** (installs Homebrew binary if needed, merges `~/.cursor/mcp.json`, runs doctor):
+
+   ```bash
+   bash Scripts/mac-studio-cursor-mcp-setup.sh
+   ```
+
+2. **Manual** — add to `~/.cursor/mcp.json` or use this repo’s [`.cursor/mcp.json`](../.cursor/mcp.json) when the project is open:
+
+   ```json
+   {
+     "mcpServers": {
+       "logic-pro": {
+         "command": "LogicProMCP"
+       }
+     }
+   }
+   ```
+
+   For a source build, set `"command"` to the absolute path of `.build/release/LogicProMCP`.
+
+3. In Cursor: **Settings → MCP**, enable **logic-pro**, then reload MCP if the server stays disconnected.
+
+Cloud Agents cannot run `LogicProMCP` (macOS + Logic Pro only). Drive Logic from **Cursor on your Mac** or a Mac cloud worker with Logic installed.
+
 ## macOS Permissions
 
 Open **System Settings -> Privacy & Security**:
