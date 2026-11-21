@@ -5390,7 +5390,7 @@ extension AccessibilityChannel {
         // Live measurement (Logic 13.0, fresh project): the first AXPress on a slot's `열기`
         // returns success at once and opens nothing; a second press opens the editor in
         // ~0.4 s. Press the open control again only after the poll saw no editor.
-        let attempts = openControls + openControls
+        let attempts = openControls.flatMap { [$0, $0] }
             + [targetSlot]
             + rankedControls.filter { $0.rank != 0 }.map(\.element)
         for element in attempts {
@@ -5704,7 +5704,9 @@ extension AccessibilityChannel {
             }
             guard contextIsCurrent(), Date() < deadline else { break }
             try? await Task.sleep(for: .milliseconds(100))
-        } while Date() < deadline
+            // Sample once more after the last sleep even when it crossed the deadline, so an
+            // editor that opened during that sleep is seen before a caller presses again.
+        } while true
         if let lastUniqueWindow {
             return .unique(lastUniqueWindow)
         }
