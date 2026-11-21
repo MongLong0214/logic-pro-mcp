@@ -53,6 +53,8 @@ Or in Terminal:
 
 ```bash
 LogicProMCP doctor --json --client cursor
+bash Scripts/mcp-prove-connection.sh   # Linux: registry + .cursor/mcp.json; macOS: doctor + live tools/list
+python3 logic_mcp_proxy.py             # macOS only — JSON tools catalog on stdout
 ```
 
 ## Cloud Agents vs local Cursor

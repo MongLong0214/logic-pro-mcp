@@ -20,6 +20,8 @@ AGENTS.md
 .mcpregistry_github_token
 .mcpregistry_registry_token
 /LogicProMCP
+/mcp-publisher
+/mcp-publisher_*.tar.gz
 /LogicProMCP-macOS-*.tar.gz
 /RELEASE-METADATA.json
 /SHA256SUMS.txt
