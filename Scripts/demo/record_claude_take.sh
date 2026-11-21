@@ -49,6 +49,7 @@ PY
     "DISABLE_UPDATES": "1"
   },
   "permissions": {
+    "defaultMode": "default",
     "allow": ["mcp__logic-pro", "ListMcpResourcesTool", "ReadMcpResourceTool"],
     "deny": ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task", "NotebookEdit"]
   }
@@ -63,7 +64,7 @@ launch)
   # and no permission prompts: the MCP tools and the two MCP resource tools are allowed, everything else is denied
   # (settings.json written by `prepare`). Suggestions, tips and the update banner are off (see `prepare`).
   CMD="cd $DEMO_DIR && CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false DISABLE_AUTOUPDATER=1 exec claude --session-id $SID -n 'Logic Pro session' --strict-mcp-config --mcp-config $DEMO_DIR/mcp.json \
---setting-sources project --allowedTools 'mcp__logic-pro,ListMcpResourcesTool,ReadMcpResourceTool' \
+--setting-sources project --permission-mode default --allowedTools 'mcp__logic-pro,ListMcpResourcesTool,ReadMcpResourceTool' \
 --model ${CLIENT_MODEL:-sonnet} --append-system-prompt 'You are working in a Logic Pro session through the logic-pro MCP server. Answer in one short sentence.'"
   "${TMUX_CMD[@]}" new-session -d -s "$SESSION" -x "${COLS:-58}" -y "${ROWS:-22}" "$CMD"
   "${TMUX_CMD[@]}" set-option -t "$SESSION" status off

@@ -219,6 +219,17 @@ def scenario_reset(c, a):
         c.tool("logic_mixer", "set_pan", {"track": i, "value": 0.0}, label=f"reset: pan {TRACKS[i]}")
         c.tool("logic_mixer", "set_volume", {"track": i, "value": a["start_volume"]}, label=f"reset: volume {TRACKS[i]}")
     c.tool("logic_navigate", "goto_bar", {"bar": 1}, label="reset: bar 1")
+    # read back: the tracks resource reports volume on a 0..1 scale where 0 is fully down (-inf dB), not 0 dB
+    reply, _ = c.read("logic://tracks", label="reset: read back")
+    try:
+        rows = json.loads(text_of(reply))["data"]
+    except (KeyError, ValueError, TypeError):
+        rows = []
+    parts = {r.get("name"): r for r in rows if r.get("name") in TRACKS}
+    bad = [n for n in TRACKS if n not in parts or parts[n].get("volume") != 0 or abs(parts[n].get("pan", 0)) > 0.01]
+    if bad:
+        raise SystemExit(f"reset read-back failed: not down/centred or unread: {bad}")
+    print("reset read-back:", {n: (parts[n]["volume"], round(parts[n]["pan"], 3)) for n in TRACKS})
 
 
 ARGS = {
