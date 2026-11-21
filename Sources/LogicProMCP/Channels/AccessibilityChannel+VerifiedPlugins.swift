@@ -5386,7 +5386,11 @@ extension AccessibilityChannel {
         }
 
         let rankedControls = rankedPluginSlotOpenControls(in: targetSlot, runtime: runtime.ax)
-        let attempts = rankedControls.filter { $0.rank == 0 }.map(\.element)
+        let openControls = rankedControls.filter { $0.rank == 0 }.map(\.element)
+        // Live measurement (Logic 13.0, fresh project): the first AXPress on a slot's `열기`
+        // returns success at once and opens nothing; a second press opens the editor in
+        // ~0.4 s. Press the open control again only after the poll saw no editor.
+        let attempts = openControls + openControls
             + [targetSlot]
             + rankedControls.filter { $0.rank != 0 }.map(\.element)
         for element in attempts {
