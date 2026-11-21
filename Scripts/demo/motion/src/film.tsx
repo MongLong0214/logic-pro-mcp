@@ -330,7 +330,7 @@ export const LaunchFilm: React.FC = () => {
               </div>
               <div style={{ paddingBottom: 8, whiteSpace: "nowrap" }}>
                 <Mono size={38} color={C.paper}>{st.verifiedRealWrites} of {st.realWrites} verified by read-back (State A)</Mono>
-                <Mono size={38} color={C.sage} style={{ marginTop: 8 }}>{st.calls} MCP calls in the take, all logged</Mono>
+                <Mono size={38} color={C.sage} style={{ marginTop: 8 }}>{st.calls} MCP calls shown, every one logged</Mono>
               </div>
             </div>
           </div>

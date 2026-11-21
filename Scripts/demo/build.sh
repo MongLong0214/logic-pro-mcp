@@ -55,9 +55,14 @@ serve_footage() {
 # re-scanned; a dropout that survives the re-render (one that is really in the footage) still fails the build.
 render_comp() { # comp scale name
   local comp=$1 s=$2 name=$3 dir="${FRAMES_ROOT:-/private/tmp/lpm-demo-frames}/$3" out="work/$3.silent.mp4" conc="${CONCURRENCY:-6}"
-  rm -rf "$dir" && mkdir -p "$(dirname "$dir")"  # outside the worktree: Remotion rejects a sequence path with a dot in it
-  (cd motion && npx remotion render src/index.ts "$comp" "$dir" --sequence --scale="$s" --concurrency="$conc" --image-format=jpeg --jpeg-quality=95)
-  local first pad; first=$(ls "$dir" | head -1); pad=$(echo "$first" | sed -E 's/element-([0-9]+)\.jpeg/\1/' | tr -d '\n' | wc -c | tr -d ' ')
+  # outside the worktree: Remotion rejects a sequence path with a dot in it. A finished sequence (.complete) is reused.
+  if [ ! -f "$dir/.complete" ]; then
+    rm -rf "$dir" && mkdir -p "$(dirname "$dir")"
+    (cd motion && npx remotion render src/index.ts "$comp" "$dir" --sequence --scale="$s" --concurrency="$conc" --image-format=jpeg --jpeg-quality=95)
+    touch "$dir/.complete"
+  fi
+  local files=("$dir"/element-*.jpeg) first pad
+  first=$(basename "${files[0]}"); pad=${first#element-}; pad=${pad%.jpeg}; pad=${#pad}
   for pass in 1 2 3 4; do
     ffmpeg -y -hide_banner -loglevel error -framerate 60 -pattern_type glob -i "$dir/element-*.jpeg" \
       -vf "scale=in_range=full:out_range=tv:out_color_matrix=bt709,format=yuv420p" -c:v libx264 -preset slow -crf 14 \
@@ -139,7 +144,7 @@ stage_encode() {
   ffmpeg -y -hide_banner -loglevel error -i $S -i $SA "${map[@]}" -vf "$SCALE709" -c:v libx264 -preset slow -crf 21 -r 60 -g 120 "${COLOR[@]}" "${aac[@]}" -shortest -movflags +faststart out/logic-pro-mcp-demo-social.mp4
   ffmpeg -y -hide_banner -loglevel error -i $VV -i $SA "${map[@]}" -vf "scale=1080:1920:flags=lanczos:out_color_matrix=bt709,format=yuv420p" -c:v libx264 -preset slow -crf 21 -r 60 -g 120 "${COLOR[@]}" "${aac[@]}" -shortest -movflags +faststart out/logic-pro-mcp-demo-vertical.mp4
   # README GIF: the social cut's picture, silent by nature, sized to stay under 5 MB
-  ffmpeg -y -hide_banner -loglevel error -i $S -vf "fps=${GIF_FPS:-10},scale=${GIF_W:-640}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=${GIF_COLORS:-96}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" out/logic-pro-mcp-demo.gif
+  ffmpeg -y -hide_banner -loglevel error -i $S -vf "fps=${GIF_FPS:-10},scale=${GIF_W:-600}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=${GIF_COLORS:-80}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" out/logic-pro-mcp-demo.gif
   # poster and thumbnail: frame 0 of the film itself (the finished, branded headline), so pressing play changes nothing
   ffmpeg -y -hide_banner -loglevel error -i $V -frames:v 1 -vf "scale=1920:1080:flags=lanczos" out/poster-1080.png
   ffmpeg -y -hide_banner -loglevel error -i out/poster-1080.png -vf scale=1280:720:flags=lanczos out/logic-pro-mcp-thumbnail.png

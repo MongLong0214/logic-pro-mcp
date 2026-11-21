@@ -14,7 +14,7 @@ stdio and records every JSON-RPC line, unchanged, with the wall-clock time it pa
 values and timings in the film are rendered from that log, never typed. Claude Code's own session transcript is kept
 next to it.
 
-Both windows are recorded at the same time with ScreenCaptureKit: Logic's window with Logic's own audio, and the
+Both windows are recorded with ScreenCaptureKit (the two captures start one after the other, then run together): Logic's window with Logic's own audio, and the
 client's Terminal window. Footage plays at 1.0x and nothing inside the session is cut.
 
 Not shown as MCP work (done as preparation, listed in `docs/media/README.md`): creating the tracks, importing the MIDI,
@@ -51,7 +51,7 @@ Scripts/demo/record_claude_take.sh prepare && Scripts/demo/record_claude_take.sh
 Scripts/demo/record_claude_take.sh start
 Scripts/demo/typist.py --target lpmdemo --log Scripts/demo/out/prompts.jsonl "Set the tempo to 120 …" …
 Scripts/demo/record_claude_take.sh stop && Scripts/demo/record_claude_take.sh teardown
-Scripts/demo/build.sh all                      # PREVIEW=1 for a fast 480p draft
+KEEP_PROMPTS=10 Scripts/demo/build.sh all      # the 2026-11-21 take; PREVIEW=1 for a fast 480p draft
 ```
 
 Outputs land in `Scripts/demo/out/` (the 4K master stays local; the repo carries the 1080p mp4, the GIF and the
@@ -60,5 +60,7 @@ thumbnail).
 ## Timing honesty
 
 No clip is retimed and nothing inside the session is cut: the film shows the take at 1.0x from just before the first
-request to just after the stop. The proof card is laid over the live take; the end card comes after it. If a future
-edit speeds a clip up or cuts model think time, the on-screen label must say so.
+request to just after the last request it keeps (`KEEP_PROMPTS`; the 2026-11-21 take keeps ten of eleven, because the
+eleventh, "Stop playback.", returned State C and is not a change that was read back). Requests left out are listed in
+`session.json` under `film.omitted` and in `docs/media/README.md`. The proof card is laid over the take; the end card
+comes after it. If a future edit speeds a clip up or cuts model think time, the on-screen label must say so.
