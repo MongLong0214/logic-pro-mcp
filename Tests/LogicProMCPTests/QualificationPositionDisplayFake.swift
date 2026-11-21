@@ -30,6 +30,17 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
         case changedByOthersAfterFirstRead
         /// The popup stops reading after the first read.
         case unreadableAfterFirstRead
+        /// The checked menu item changes between two consecutive readings of it while the popup
+        /// keeps reporting the original: the first check answers the mode file, every later one
+        /// answers `Time & Project`. A switch made after the change leases what the menu then says.
+        case checkedChangesAfterFirstCheck
+        /// The checked menu item stops reading after the first check; the popup keeps reading.
+        case checkedUnreadableAfterFirstCheck
+        /// The checked menu item disagrees with the popup from the restore on: the restore is
+        /// applied and the popup reads the original, and the menu then says `Time & Project`.
+        case checkedChangesAfterRestore
+        /// The checked menu item cannot be read from the restore on.
+        case checkedUnreadableAfterRestore
     }
 
     static let beatsAndProject = "Beats & Project"
@@ -39,6 +50,8 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
     let fault: Fault
     private let lock = NSLock()
     private var reads = 0
+    private var checks = 0
+    private var restored = false
 
     init(directory: URL, start: String, fault: Fault = .none) throws {
         self.directory = directory
@@ -64,7 +77,7 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
                 return current
             },
             readChecked: { [self] in
-                let checked = fault == .checkedItemConflicts ? "Time & Project" : mode
+                let checked = checkedReading()
                 log("checked", mode: checked)
                 return checked
             },
@@ -73,16 +86,32 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
                 if fault == .switchUnavailable {
                     return .unavailable("display_mode_beats_item_not_pressed")
                 }
-                let found = fault == .checkedItemConflicts ? "Time & Project" : mode
+                let found = checkedReading(counting: false) ?? mode
                 if fault != .switchNotApplied { write(Self.beats) }
                 return .switched(lease(original: found))
             },
             restore: { [self] lease in
                 log("restore", mode: nil)
+                lock.lock(); restored = true; lock.unlock()
                 if fault == .restoreRefused { return .refused("display_mode_not_restored") }
                 if fault != .restoreNotApplied { write(lease.original) }
                 return .restored
             })
+    }
+
+    /// What the menu's checked item reads now. `counting: false` looks without counting the call
+    /// as one of the cycle's checks (the switch leases whatever is checked at that moment).
+    private func checkedReading(counting: Bool = true) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        if counting { checks += 1 }
+        switch fault {
+        case .checkedItemConflicts: return "Time & Project"
+        case .checkedChangesAfterFirstCheck: return checks > 1 ? "Time & Project" : mode
+        case .checkedUnreadableAfterFirstCheck: return checks > 1 ? nil : mode
+        case .checkedChangesAfterRestore: return restored ? "Time & Project" : mode
+        case .checkedUnreadableAfterRestore: return restored ? nil : mode
+        default: return mode
+        }
     }
 
     private func lease(original: String) -> ControlBarDisplayMode.Lease {
@@ -140,7 +169,11 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
     /// restore and the read that confirms it. Whatever the sweep reads after the cycle is not part
     /// of the cycle and is not looked at.
     static func closingModeCalls(in events: [String]) -> [String] {
-        let modeIndexes = events.indices.filter { events[$0].hasPrefix("mode_") }
+        // The menu's checked item is read after the popup, as the last check before credit; it is
+        // not one of the two calls this names.
+        let modeIndexes = events.indices.filter {
+            events[$0].hasPrefix("mode_") && !events[$0].hasPrefix("mode_checked")
+        }
         guard modeIndexes.count >= 2 else { return events }
         let last = modeIndexes[modeIndexes.count - 1], before = modeIndexes[modeIndexes.count - 2]
         return last == before + 1 ? [events[before], events[last]] : ["not adjacent"] + [events[before], events[last]]

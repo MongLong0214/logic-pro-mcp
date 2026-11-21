@@ -2648,6 +2648,7 @@ struct QualificationRunnerTests {
     }
 
     /// A cycle that fails after it moved still puts the playhead back, in Beats, before the mode.
+    /// A playhead that does not come back leaves the recovery unconfirmed, and the run halts.
     @Test(arguments: ["play", "stop", "pause"])
     func aFailedCycleRestoresThePlayheadBeforeItGivesTheModeBack(command: String) throws {
         let fixture = try SlowHandshakeFixture(
@@ -2656,10 +2657,12 @@ struct QualificationRunnerTests {
         defer { fixture.remove() }
         let fake = try QualificationPositionDisplayFake(
             directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
-        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
-        #expect(observed.mutationRestore == nil)
-        #expect(records == 0)
-        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        guard case .failure(let error) = try driveTransportOperations(
+            fixture, commands: [command], display: fake.display) else {
+            Issue.record("an unconfirmed position must halt the run")
+            return
+        }
+        #expect(String(describing: error).contains("position"), "\(error)")
         let events = displayEvents(fixture)
         #expect(QualificationPositionDisplayFake.containsInOrder(
             ["mode_switch", command, "goto_position", "mode_restore", "mode_read=Beats & Project"], in: events),
@@ -2776,6 +2779,177 @@ struct QualificationRunnerTests {
             #expect(!events.contains(change), "nothing is changed before the start is known to be stationary: \(events)")
         }
         #expect(fake.mode == mode)
+    }
+
+    // MARK: Round 6: a state that changes between two consecutive reads, and a failed pause
+
+    private func driveTransportOperations(
+        _ fixture: SlowHandshakeFixture, commands: [String], display: QualificationPositionDisplay? = nil
+    ) throws -> Result<QualificationDriveResult, Error> {
+        let specs = try commands.map { command in
+            try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
+        }
+        do {
+            return .success(try QualificationTransport(
+                uiObserver: unchangedUIForTests, positionDisplay: display, handshakeTimeout: 2,
+                requestTimeout: 2, shutdownGrace: 2, uiSettleSleep: { _ in })
+                .drive(.init(executableURL: fixture.executableURL,
+                    environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: specs)))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private func fixtureFile(_ fixture: SlowHandshakeFixture, _ name: String) -> String {
+        ((try? String(contentsOf: fixture.directory.appendingPathComponent(name), encoding: .utf8)) ?? "missing")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The request log up to the operation's own no-write probe: the recipe's part of the run.
+    private func recipeRequests(_ fixture: SlowHandshakeFixture) throws -> [String] {
+        var lines: [String] = []
+        for line in try requestLog(fixture).split(separator: "\n") {
+            if line.contains("__adr001b_no_write_probe") { break }
+            lines.append(String(line))
+        }
+        return lines
+    }
+
+    /// v-1, a Beats start. The mode is never switched, and the checked menu item changes (or stops
+    /// reading) between its first reading and the last one before credit while the popup keeps
+    /// reporting Beats. Credit needs both readings to agree with the original at the end.
+    @Test(arguments: ["play", "stop", "pause"],
+          [QualificationPositionDisplayFake.Fault.checkedChangesAfterFirstCheck, .checkedUnreadableAfterFirstCheck])
+    func aCheckedItemThatChangesAfterTheCycleIsNotCreditedWhileThePopupStillReadsBeats(
+        command: String, fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "paused", displayMode: "Beats")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beats, fault: fault)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.mutationRestore == nil)
+        #expect(records == 0)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let events = displayEvents(fixture)
+        #expect(!events.contains("mode_switch") && !events.contains("mode_restore"), "\(events)")
+        #expect(fake.mode == QualificationPositionDisplayFake.beats)
+    }
+
+    /// v-3. Both readings agree on Beats & Project at the start and the original changes before
+    /// `selectBeats` opens the menu: the popup, or the checked item, now says something else. The
+    /// switch would lease the wrong mode, so nothing is switched and nothing is sent.
+    @Test(arguments: ["play", "stop", "pause"],
+          [QualificationPositionDisplayFake.Fault.changedByOthersAfterFirstRead,
+           .checkedChangesAfterFirstCheck, .checkedUnreadableAfterFirstCheck])
+    func anOriginalModeThatChangesBeforeTheSwitchChangesNothing(
+        command: String, fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "paused", displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.mutationRestore == nil)
+        #expect(records == 0)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let events = displayEvents(fixture)
+        for change in ["mode_switch", "mode_restore", "play", "stop", "pause", "goto_position", "goto_bar"] {
+            #expect(!events.contains(change), "nothing is changed once the original is not what it was: \(events)")
+        }
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
+    }
+
+    /// v-2. The early guard sees a stationary start and playback begins before the recipe's own
+    /// pre-state read, the one the change is made from. That read shows playback moving, and the
+    /// recipe refuses before its first change: no transport command, no seek.
+    @Test(arguments: ["play", "stop", "pause"],
+          ["Beats & Project|stopped", "Beats & Project|paused", "Beats|stopped", "Beats|paused"])
+    func aRecipePreStateThatShowsPlaybackMovingRefusesBeforeTheFirstChange(
+        command: String, start: String
+    ) throws {
+        let parts = start.split(separator: "|").map(String.init)
+        let (mode, original) = (parts[0], parts[1])
+        // The transport reads before the recipe's own pre-state: the whole-run baseline, the early
+        // guard and the origin read (one read each when stopped, two for the first two when paused).
+        let flipAtRead = original == "stopped" ? 4 : 6
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: original, displayMode: mode,
+            startsMovingAtRead: flipAtRead)
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(directory: fixture.directory, start: mode)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.mutationRestore == nil)
+        #expect(records == 0)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("moving") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let recipe = try recipeRequests(fixture)
+        for change in ["play", "stop", "pause", "goto_position", "goto_bar"] {
+            #expect(!recipe.contains { $0.contains("\"command\":\"\(change)\"") },
+                    "nothing is sent once the recipe's own pre-state shows playback moving: \(recipe)")
+        }
+        #expect(fake.mode == mode)
+    }
+
+    /// The failed pause that was seen live: the staging `play` started playback, the motion read
+    /// that followed could not tell moving from still (the tempo did not read), and the compensation
+    /// could not read it either. The recovery stops playback and reads that it stopped, puts the
+    /// playhead back only after that, once, and the mode is read again. The case stays a failure
+    /// with no credit, and the state it ends with is the original one, not a later whole-run stop.
+    @Test func aPauseWhoseStagedReadFailsIsRecoveredStoppedAtTheExactOriginInTheOriginalMode() throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, displayMode: "Beats & Project",
+            recoveryFlags: "tempo_missing,goto_refused_playing")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        let result = try driveTransportOperations(fixture, commands: ["pause"], display: fake.display).get()
+        let observed = try #require(result.operationResults["transport.pause"])
+        #expect(observed.mutationRestore == nil)
+        #expect(result.mutationRestoreRecords.isEmpty)
+        #expect(observed.status != .passed)
+        let refusal = observed.mutationRestoreRefusal ?? "no refusal"
+        for named in ["stopped", "position", "display mode"] {
+            #expect(refusal.contains(named), "each of the three is reported: \(refusal)")
+        }
+        #expect(fixtureFile(fixture, "playing-at-probe") == "false", "playback is off when the case ends")
+        #expect(fixtureFile(fixture, "position-at-probe") == "1", "the playhead is at 1.1.1.1 when the case ends")
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
+        let events = displayEvents(fixture)
+        let seeks = events.indices.filter { events[$0] == "goto_position" }
+        #expect(seeks.count == 1, "the seek is made once: \(events)")
+        if let seek = seeks.first, let stop = events.firstIndex(of: "stop") {
+            #expect(stop < seek, "the seek waits for a stop that was read back: \(events)")
+        } else {
+            Issue.record("a stop and a seek were both expected: \(events)")
+        }
+    }
+
+    /// If the stop cannot be confirmed by a read, nothing else is attempted: no seek, and the run
+    /// halts. A later stop of the whole run is not evidence for this case.
+    @Test func aPauseWhoseStopIsNotConfirmedHaltsTheRunWithoutASeek() throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, displayMode: "Beats & Project",
+            recoveryFlags: "tempo_missing,stop_ignored")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        let outcome = try driveTransportOperations(fixture, commands: ["pause", "play"], display: fake.display)
+        guard case .failure(let error) = outcome else {
+            Issue.record("an unconfirmed recovery must halt the run")
+            return
+        }
+        #expect(String(describing: error).contains("recovery"), "\(error)")
+        #expect(String(describing: error).contains("stopped"), "\(error)")
+        let events = displayEvents(fixture)
+        #expect(!events.contains("goto_position"), "no seek while playback is not confirmed stopped: \(events)")
+        #expect(!(try requestLog(fixture)).contains("__adr001b_no_write_probe"), "nothing after the halt")
+        #expect(events.filter { $0 == "play" }.count == 1, "the second operation never started: \(events)")
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject, "the mode is still given back")
     }
 
     /// The shipped `--qualify` drive builds its transport with the production position display, so
@@ -7090,7 +7264,9 @@ struct QualificationRunnerTests {
              playheadOrigin: String? = nil, valueCycle: OperationID? = nil,
              valueFault: String = "none", supportBundleCycle: Bool = false,
              supportBundleFault: String = "none",
-             displayMode: String? = nil) throws {
+             displayMode: String? = nil,
+             startsMovingAtRead: Int = 0,
+             recoveryFlags: String = "") throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-slow-handshake-\(UUID().uuidString)", isDirectory: true)
             executableURL = directory.appendingPathComponent("server.sh")
@@ -7137,6 +7313,9 @@ struct QualificationRunnerTests {
                 transport_fault=none
                 transport_writes=0
                 transport_reads=0
+                flip_moving_at_read=0
+                recovery_flags=
+                has_flag() { case ",$recovery_flags," in *",$1,"*) return 0 ;; esac; return 1; }
                 resource_source=ax_live
                 resource_unverified=false
                 moving=$initial_moving
@@ -7187,6 +7366,15 @@ struct QualificationRunnerTests {
                     [ "$id" -ge 10 ] || continue
                     request=$(printf '%s' "$request" | /usr/bin/sed 's#\\/#/#g')
                     printf '%s\n' "$request" >> requests
+                    # The state the recipe left, taken when the operation's own probe arrives: the
+                    # probe follows the recipe and precedes the whole-run compensation.
+                    case "$request" in
+                      *__adr001b_no_write_probe*)
+                        if [ ! -f playing-at-probe ]; then
+                            printf '%s\n' "$playing" > playing-at-probe
+                            printf '%s\n' "$position" > position-at-probe
+                        fi ;;
+                    esac
                     case "$request" in
                       *'"uri":"logic://project/info"'*)
                         step_project_reads=$((step_project_reads + 1))
@@ -7240,6 +7428,13 @@ struct QualificationRunnerTests {
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\",\\"isSelected\\":%s},{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\",\\"isSelected\\":%s}]}"}]}}\n' "$id" "$first_name" "$first_ref" "$([ "$first_ref" = "$peer_ref" ] && echo $peer_selected || echo $track_selected)" "$second_name" "$second_ref" "$([ "$second_ref" = "$peer_ref" ] && echo $peer_selected || echo $track_selected)" ;;
                       *'"uri":"logic://transport/state"'*)
                         transport_reads=$((transport_reads + 1))
+                        # The transport's state changes BETWEEN two consecutive reads: from read N on
+                        # playback is moving, wherever the cycle then is.
+                        if [ "$flip_moving_at_read" != 0 ] && [ "$transport_reads" = "$flip_moving_at_read" ]; then
+                            playing=true; moving=true
+                            printf '%s\n' "$playing" > playing
+                            printf '%s\n' "$moving" > moving
+                        fi
                         if [ "$transport_fault" = baseline_malformed ] && [ "$transport_reads" = 1 ]; then
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"not-json"}]}}\n' "$id"
                             continue
@@ -7314,6 +7509,10 @@ struct QualificationRunnerTests {
                         fi
                         if [ "$moving" = true ]; then position=$((position + 1)); fi
                         printf '%s\n' "$position" > transport-position
+                        # While playing, once a command has been sent, the tempo does not read: motion
+                        # cannot be told from a stationary playhead (`transport motion tempo unavailable`).
+                        tempo_field='\"observed_tempo\":120,'
+                        if has_flag tempo_missing && [ "$transport_writes" -ge 1 ] && [ "$playing" = true ]; then tempo_field=''; fi
                         # What production emits: `state.position` and `positionReadback` carry the same
                         # value, and with the control bar in Beats mode all four components
                         # (AXValueExtractors tick tests). The faults are the other shapes the resource
@@ -7331,7 +7530,7 @@ struct QualificationRunnerTests {
                         if [ -f display-mode ] && [ "$(cat display-mode)" != Beats ]; then
                             origin_value=$position.1; origin_components='[\"bar\",\"beat\"]'
                         fi
-                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s\\",\\"positionReadback\\":{\\"value\\":\\"%s\\",\\"observedComponents\\":%s}}}}"}]}}\n' "$id" "$origin_source" "$origin_unverified" "$playing" "$origin_value" "$origin_value" "$origin_components" ;;
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,%s\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s\\",\\"positionReadback\\":{\\"value\\":\\"%s\\",\\"observedComponents\\":%s}}}}"}]}}\n' "$id" "$origin_source" "$origin_unverified" "$tempo_field" "$playing" "$origin_value" "$origin_value" "$origin_components" ;;
                       *'"uri":"logic://system/operations"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/operations","text":"{\\"schema_version\\":1,\\"generated_at\\":\\"1970-01-01T00:00:00Z\\",\\"operation_count\\":0,\\"operations\\":[]}"}]}}\n' "$id" ;;
                       *'"uri":"logic://system/health"'*)
@@ -7477,6 +7676,19 @@ struct QualificationRunnerTests {
                             # `verification_withheld: observed_effect_unavailable` and no such field.
                             prewrite_failed=$submitted',\"verification_withheld\":\"observed_effect_unavailable\",\"observed\":\"'$asked'\"'
                             submitted=$submitted',\"post_write_readback\":\"unavailable\"'
+                            # Playback is on and the seek is refused: the dialog was submitted and closed, the
+                            # dispatcher could not verify the landing, and playback carried on.
+                            if has_flag goto_refused_playing && [ "$playing" = true ]; then
+                                [ -n "$to" ] && position=$to
+                                printf '%s\n' "$position" > transport-position
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{%s}"}]}}\n' "$id" "$prewrite_failed"
+                                continue
+                            fi
+                            # A seek that is refused outright (State C, nothing written).
+                            if has_flag goto_refused; then
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"success\\":false,\\"write_attempted\\":false}"}]}}\n' "$id"
+                                continue
+                            fi
                             case "$transport_fault" in
                               goto_submitted_read_failed|goto_submitted_prewrite_failed|goto_submitted_mismatch|goto_submitted_unreadable_after|goto_submitted_error_state_c|goto_submitted_cleanup_unobserved|goto_submitted_unknown)
                                 [ "$transport_fault" != goto_submitted_mismatch ] && [ -n "$to" ] && position=$to
@@ -7678,6 +7890,10 @@ struct QualificationRunnerTests {
                             playing=true; moving=true ;;
                           *'"command":"stop"'*)
                             transport_writes=$((transport_writes + 1))
+                            if has_flag stop_ignored; then
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id"
+                                continue
+                            fi
                             if [ "$transport_writes" = 3 ]; then
                                 case "$transport_fault" in
                                   cleanup_state_c)
@@ -7707,6 +7923,14 @@ struct QualificationRunnerTests {
                 done
                 """#
                 if transportNativePause { script = script.replacingOccurrences(of: "native_pause=false", with: "native_pause=true") }
+                if startsMovingAtRead != 0 {
+                    script = script.replacingOccurrences(
+                        of: "flip_moving_at_read=0", with: "flip_moving_at_read=\(startsMovingAtRead)")
+                }
+                if !recoveryFlags.isEmpty {
+                    script = script.replacingOccurrences(
+                        of: "recovery_flags=\n", with: "recovery_flags=\(recoveryFlags)\n")
+                }
                 if transportFault != "none" {
                     script = script.replacingOccurrences(
                         of: "transport_fault=none", with: "transport_fault=\(transportFault)")
