@@ -86,6 +86,8 @@ jobs:
         # THAT pull request says it closes. Without it a PR closing an issue has no truthful row to
         # write: open while it is open, stale the instant it merges — which is what turned main red
         # on #684's own merge commit. On a push to main no number is passed and nothing is exempt.
+        # Forks may disable Issues and lag upstream roadmap rows; enforce live sync on upstream only.
+        if: github.repository == 'MongLong0214/logic-pro-mcp'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

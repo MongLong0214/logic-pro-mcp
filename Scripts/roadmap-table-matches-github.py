@@ -50,6 +50,8 @@ DEFAULT_ROADMAP = os.path.join(REPO_ROOT, "docs", "roadmap", "README.md")
 ROW = re.compile(r"\|\s*#(\d+)\s*\|\s*(OPEN|closed)\s*\|")
 
 ISSUE_LIMIT = 1000
+# Forks may disable Issues; roadmap rows reference the upstream tracker (ADR guard uses the same).
+ISSUES_REPO = os.environ.get("LOGIC_PRO_MCP_ISSUES_REPO", "MongLong0214/logic-pro-mcp")
 
 
 def parse_table(path):
@@ -66,7 +68,7 @@ def fetch_issues(fixture):
     else:
         try:
             out = subprocess.run(
-                ["gh", "issue", "list", "--state", "all",
+                ["gh", "issue", "list", "--repo", ISSUES_REPO, "--state", "all",
                  "--limit", str(ISSUE_LIMIT), "--json", "number,state"],
                 capture_output=True, text=True, check=True).stdout
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:

@@ -11,6 +11,33 @@ fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "Run on macOS only."
 
+ensure_repo_checkout() {
+  local url="${LOGIC_PRO_MCP_GIT_URL:-https://github.com/RolandGasparyan/logic-pro-mcp.git}"
+  local dest="${LOGIC_PRO_MCP_SOURCE:-$HOME/logic-pro-mcp}"
+  if [[ -f "$REPO_ROOT/Package.swift" ]]; then
+    return 0
+  fi
+  log "This folder is not a full logic-pro-mcp checkout (no Package.swift)."
+  if [[ -f "$dest/Package.swift" && -x "$dest/Scripts/mac-full-mcp-connect.sh" ]]; then
+    log "Re-running from $dest"
+    exec "$dest/Scripts/mac-full-mcp-connect.sh" "$@"
+  fi
+  log "Cloning via HTTPS (no GitHub SSH key required): $url"
+  mkdir -p "$(dirname "$dest")"
+  if [[ -d "$dest/.git" ]]; then
+    git -C "$dest" remote set-url origin "$url" 2>/dev/null || true
+    git -C "$dest" fetch origin main
+    git -C "$dest" checkout -f main
+    git -C "$dest" pull origin main
+  else
+    rm -rf "$dest"
+    git clone "$url" "$dest"
+  fi
+  exec "$dest/Scripts/mac-full-mcp-connect.sh" "$@"
+}
+
+ensure_repo_checkout
+
 open_privacy_panes() {
   log "Opening Privacy & Security (enable Terminal + Cursor: Accessibility & Automation)"
   open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" 2>/dev/null || true

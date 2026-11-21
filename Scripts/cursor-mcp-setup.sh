@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_GIT_URL="${LOGIC_PRO_MCP_GIT_URL:-git@github.com:RolandGasparyan/logic-pro-mcp.git}"
+REPO_GIT_URL="${LOGIC_PRO_MCP_GIT_URL:-https://github.com/RolandGasparyan/logic-pro-mcp.git}"
 DRY_RUN=0
 if [[ "${1:-}" == "--dry-run" ]]; then
   DRY_RUN=1

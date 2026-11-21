@@ -7,7 +7,7 @@ Logic Pro MCP talks to Logic Pro only on **macOS**. Cloud Agents that boot on Li
 1. Clone this fork if you do not already have it:
 
    ```bash
-   git clone git@github.com:RolandGasparyan/logic-pro-mcp.git ~/logic-pro-mcp
+   git clone https://github.com/RolandGasparyan/logic-pro-mcp.git ~/logic-pro-mcp
    cd ~/logic-pro-mcp
    ```
 
@@ -31,7 +31,7 @@ Logic Pro MCP talks to Logic Pro only on **macOS**. Cloud Agents that boot on Li
    bash Scripts/cursor-mcp-setup.sh
    ```
 
-   If `Package.swift` is not next to the script, the script clones `git@github.com:RolandGasparyan/logic-pro-mcp.git` into `~/logic-pro-mcp`. Set `LOGIC_PRO_MCP_SOURCE` to use another directory. `bash Scripts/cursor-mcp-setup.sh --dry-run` prints the checkout and MCP paths without installing.
+   If `Package.swift` is not next to the script, the script clones `https://github.com/RolandGasparyan/logic-pro-mcp.git` into `~/logic-pro-mcp` (HTTPS — no GitHub SSH key required). Set `LOGIC_PRO_MCP_SOURCE` to use another directory. `bash Scripts/cursor-mcp-setup.sh --dry-run` prints the checkout and MCP paths without installing.
 
 4. Complete permissions and Logic MCU wiring ([SETUP.md](SETUP.md#macos-permissions), [MCU setup](SETUP.md#mcu-control-surface)).
 
