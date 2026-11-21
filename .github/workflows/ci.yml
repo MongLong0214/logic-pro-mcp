@@ -501,7 +501,7 @@ jobs:
     needs: [release-build, product-validation]
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 190
     permissions:
       actions: read
       contents: read
@@ -510,6 +510,7 @@ jobs:
       - name: Require successful exact-artifact native Logic qualification
         env:
           GH_TOKEN: ${{ github.token }}
+          NATIVE_WAIT_MINUTES: ${{ vars.NATIVE_WAIT_MINUTES || '180' }}
           EXPECTED_ATTEMPT: ${{ github.run_attempt }}
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_TARGET: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
@@ -520,16 +521,21 @@ jobs:
           set -euo pipefail
           test "$RELEASE_BUILD" = success
           test "$PRODUCT_VALIDATION" = success
-          gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/status?per_page=100" \
-            > "$RUNNER_TEMP/combined-status.json"
-          gh api --paginate --slurp \
-            "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/statuses?per_page=100" \
-            > "$RUNNER_TEMP/status-pages.json"
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
-            > "$RUNNER_TEMP/artifacts.json"
-          python3 - "$RUNNER_TEMP/combined-status.json" "$RUNNER_TEMP/status-pages.json" \
-            "$RUNNER_TEMP/artifacts.json" \
-            "$EXPECTED_SHA" "$EXPECTED_TARGET" "$EXPECTED_ATTEMPT" "$RUN_ID" <<'PY'
+          # Exit 3 from the consumer means "no native status yet": keep this job (and so
+          # the run) active until the maintainer's Scripts/ci-native-qualify.sh posts it.
+          deadline=$((SECONDS + NATIVE_WAIT_MINUTES * 60))
+          while true; do
+            gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/status?per_page=100" \
+              > "$RUNNER_TEMP/combined-status.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/statuses?per_page=100" \
+              > "$RUNNER_TEMP/status-pages.json"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
+              > "$RUNNER_TEMP/artifacts.json"
+            set +e
+            python3 - "$RUNNER_TEMP/combined-status.json" "$RUNNER_TEMP/status-pages.json" \
+              "$RUNNER_TEMP/artifacts.json" \
+              "$EXPECTED_SHA" "$EXPECTED_TARGET" "$EXPECTED_ATTEMPT" "$RUN_ID" <<'PY'
           import json, re, sys
           status_response = json.load(open(sys.argv[1], encoding="utf-8"))
           status_pages = json.load(open(sys.argv[2], encoding="utf-8"))
@@ -558,9 +564,10 @@ jobs:
               raise SystemExit("native receipt exceeds GitHub's commit-status description limit")
           exact = [row for row in rows if row.get("context") == "logic-native-e2e"]
           if not exact:
-              raise SystemExit(
-                  "missing exact native status; run Scripts/ci-native-qualify.sh "
-                  f"for candidate {expected_sha} and run {run_id} on the trusted Logic host")
+              print("missing exact native status; run Scripts/ci-native-qualify.sh "
+                    f"for candidate {expected_sha} and run {run_id} on the trusted Logic host",
+                    file=sys.stderr)
+              raise SystemExit(3)
           latest = exact[0]
           if latest.get("target_url") != expected_target:
               raise SystemExit("native status belongs to another CI run attempt")
@@ -573,6 +580,16 @@ jobs:
               raise SystemExit("native status was not published by the trusted repository owner")
           print("Current run-attempt artifact passed native Logic qualification")
           PY
+            rc=$?
+            set -e
+            test "$rc" -eq 0 && exit 0
+            test "$rc" -eq 3 || exit "$rc"
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "timed out after $NATIVE_WAIT_MINUTES minutes without a native status" >&2
+              exit 1
+            fi
+            sleep 60
+          done
 
   build:
     name: build
