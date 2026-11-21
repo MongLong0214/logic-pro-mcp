@@ -4,7 +4,14 @@ Logic Pro MCP talks to Logic Pro only on **macOS**. Cloud Agents that boot on Li
 
 ## Quick connect (Mac)
 
-1. Install the server ([SETUP.md](SETUP.md#install)):
+1. Clone this fork if you do not already have it:
+
+   ```bash
+   git clone git@github.com:RolandGasparyan/logic-pro-mcp.git ~/logic-pro-mcp
+   cd ~/logic-pro-mcp
+   ```
+
+2. Install the server ([SETUP.md](SETUP.md#install)):
 
    ```bash
    brew tap MongLong0214/logic-pro-mcp https://github.com/MongLong0214/logic-pro-mcp
@@ -12,15 +19,17 @@ Logic Pro MCP talks to Logic Pro only on **macOS**. Cloud Agents that boot on Li
    brew install logic-pro-mcp
    ```
 
-2. Run the repo setup script (installs Homebrew package if needed, merges Cursor config, runs doctor):
+3. Run the repo setup script (installs Homebrew package if needed, merges Cursor config, runs doctor):
 
    ```bash
    bash Scripts/cursor-mcp-setup.sh
    ```
 
-3. Complete permissions and Logic MCU wiring ([SETUP.md](SETUP.md#macos-permissions), [MCU setup](SETUP.md#mcu-control-surface)).
+   If `Package.swift` is not next to the script, the script clones `git@github.com:RolandGasparyan/logic-pro-mcp.git` into `~/logic-pro-mcp`. Set `LOGIC_PRO_MCP_SOURCE` to use another directory. `bash Scripts/cursor-mcp-setup.sh --dry-run` prints the checkout and MCP paths without installing.
 
-4. Restart Cursor or reload the **logic-pro** server under **Settings → MCP**.
+4. Complete permissions and Logic MCU wiring ([SETUP.md](SETUP.md#macos-permissions), [MCU setup](SETUP.md#mcu-control-surface)).
+
+5. Restart Cursor or reload the **logic-pro** server under **Settings → MCP**.
 
 This repository ships a project config at [`.cursor/mcp.json`](../.cursor/mcp.json). Cursor merges it with your user `~/.cursor/mcp.json`. If you build from source, either put the binary on `PATH` as `LogicProMCP` or set an absolute path:
 

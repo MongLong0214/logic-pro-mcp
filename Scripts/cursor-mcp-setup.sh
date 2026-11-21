@@ -4,16 +4,51 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MCP_USER_JSON="${CURSOR_MCP_USER_JSON:-$HOME/.cursor/mcp.json}"
-MCP_PROJECT_JSON="$REPO_ROOT/.cursor/mcp.json"
-REPORT_DIR="${TMPDIR:-/tmp}/logic-pro-mcp-cursor-setup-$$"
-mkdir -p "$REPORT_DIR"
+SCRIPT_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_GIT_URL="${LOGIC_PRO_MCP_GIT_URL:-git@github.com:RolandGasparyan/logic-pro-mcp.git}"
+DRY_RUN=0
+if [[ "${1:-}" == "--dry-run" ]]; then
+  DRY_RUN=1
+fi
 
 log() { printf '%s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-[[ "$(uname -s)" == "Darwin" ]] || fail "This script must run on macOS (Logic Pro MCP is not available on Linux)."
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  [[ "$(uname -s)" == "Darwin" ]] || fail "This script must run on macOS (Logic Pro MCP is not available on Linux)."
+fi
+
+if [[ -n "${LOGIC_PRO_MCP_SOURCE:-}" ]]; then
+  REPO_ROOT="$LOGIC_PRO_MCP_SOURCE"
+elif [[ -f "$SCRIPT_REPO/Package.swift" ]]; then
+  REPO_ROOT="$SCRIPT_REPO"
+else
+  REPO_ROOT="${HOME}/logic-pro-mcp"
+fi
+
+if [[ ! -f "$REPO_ROOT/Package.swift" ]]; then
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "Would clone $REPO_GIT_URL into $REPO_ROOT"
+  else
+    log "Cloning $REPO_GIT_URL into $REPO_ROOT"
+    mkdir -p "$(dirname "$REPO_ROOT")"
+    git clone "$REPO_GIT_URL" "$REPO_ROOT"
+  fi
+fi
+
+MCP_USER_JSON="${CURSOR_MCP_USER_JSON:-$HOME/.cursor/mcp.json}"
+MCP_PROJECT_JSON="$REPO_ROOT/.cursor/mcp.json"
+REPORT_DIR="${TMPDIR:-/tmp}/logic-pro-mcp-cursor-setup-$$"
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  log "Source checkout: $REPO_ROOT"
+  log "Git URL: $REPO_GIT_URL"
+  log "User MCP: $MCP_USER_JSON"
+  log "Project MCP: $MCP_PROJECT_JSON"
+  exit 0
+fi
+
+mkdir -p "$REPORT_DIR"
 
 LOGIC_BIN="${LOGIC_PRO_MCP_BIN:-}"
 if [[ -n "$LOGIC_BIN" && -x "$LOGIC_BIN" ]]; then
@@ -23,7 +58,10 @@ elif command -v LogicProMCP >/dev/null 2>&1; then
 elif [[ -x "$REPO_ROOT/.build/release/LogicProMCP" ]]; then
   LOGIC_BIN="$REPO_ROOT/.build/release/LogicProMCP"
 elif command -v brew >/dev/null 2>&1 && brew list logic-pro-mcp >/dev/null 2>&1; then
-  LOGIC_BIN="$(brew --prefix logic-pro-mcp)/bin/LogicProMCP" 2>/dev/null || true
+  BREW_PREFIX="$(brew --prefix logic-pro-mcp 2>/dev/null || true)"
+  if [[ -n "$BREW_PREFIX" && -x "$BREW_PREFIX/bin/LogicProMCP" ]]; then
+    LOGIC_BIN="$BREW_PREFIX/bin/LogicProMCP"
+  fi
 fi
 
 if [[ -z "${LOGIC_BIN}" || ! -x "${LOGIC_BIN}" ]]; then
@@ -77,4 +115,6 @@ log "4. Restart Cursor (or Settings → MCP → reload logic-pro)."
 log "5. Ask: \"Check Logic Pro MCP health and show all ready channels.\""
 log ""
 log "Binary: $LOGIC_BIN"
+log "Source checkout: $REPO_ROOT"
+log "Git URL: $REPO_GIT_URL"
 log "Reports: $REPORT_DIR"
