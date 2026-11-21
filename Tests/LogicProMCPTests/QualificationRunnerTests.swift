@@ -2690,6 +2690,102 @@ struct QualificationRunnerTests {
             "the playhead is restored and verified before the mode: \(events)")
     }
 
+    // MARK: Round 5: one setting read two ways, a start that moves, a read that only half failed
+
+    /// B. The dispatcher's PRE-write read can fail while the dialog submits and closes and the
+    /// POST-write read succeeds at the exact origin: the reply is State B with
+    /// `verification_withheld: observed_effect_unavailable` and `observed`, and it has no
+    /// `post_write_readback`. The immediate post-write read worked, so there is no unread landing
+    /// for a follow-up to decide: the seek is a failed restore whatever the next read shows.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aSubmittedDialogWhoseOnlyPreWriteReadFailedIsNotDecidedByTheFollowUp(command: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, transportFault: "goto_submitted_prewrite_failed",
+            initialTransportMotion: "paused")
+        defer { fixture.remove() }
+        let (observed, records) = try driveGoto(fixture, command: command)
+        #expect(try requestLog(fixture).contains("\"command\":\"goto_position\""), "the restore must have been attempted")
+        #expect(observed.mutationRestore == nil)
+        #expect(records == 0)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+    }
+
+    /// v-1. A control bar already in Beats is not switched, so there is nothing to give back; the
+    /// mode is still read again before the cycle is credited. If it changed (someone else's choice)
+    /// or cannot be read, the cycle is not credited, and the other party's choice is NOT overwritten.
+    @Test(arguments: ["play", "stop", "pause"],
+          [QualificationPositionDisplayFake.Fault.changedByOthersAfterFirstRead, .unreadableAfterFirstRead])
+    func aModeThatChangesOrStopsReadingInABeatsStartIsNotCreditedAndNotOverwritten(
+        command: String, fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "paused", displayMode: "Beats")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beats, fault: fault)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.mutationRestore == nil)
+        #expect(records == 0)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let events = displayEvents(fixture)
+        #expect(!events.contains("mode_switch") && !events.contains("mode_restore"),
+                "this call never switched, so it never writes the mode: \(events)")
+        #expect(fake.mode == QualificationPositionDisplayFake.beats)
+    }
+
+    /// v-3. The popup says Beats & Project and the checked menu item says Time & Project. Which one
+    /// is the original is not known, so nothing is changed: no switch, no transport command.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aPopupTitleThatDisagreesWithTheCheckedItemRefusesBeforeTheFirstChange(command: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "paused", displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+            fault: .checkedItemConflicts)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.mutationRestore == nil)
+        #expect(records == 0)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let events = displayEvents(fixture)
+        for change in ["mode_switch", "mode_restore", "play", "stop", "pause", "goto_position", "goto_bar"] {
+            #expect(!events.contains(change), "nothing is changed before the original mode is known: \(events)")
+        }
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
+    }
+
+    /// v-2. A transport recipe whose playback is moving at the start has no stationary origin to put
+    /// back, so restoring the motion alone must not earn credit. With the position display in use
+    /// it refuses before the display mode is read or switched and before any transport command.
+    @Test(arguments: ["play", "stop", "pause"], ["Beats & Project", "Beats"])
+    func aMovingStartIsRefusedBeforeAnyDisplayModeOrTransportChange(command: String, mode: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "moving", displayMode: mode)
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(directory: fixture.directory, start: mode)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.mutationRestore == nil)
+        #expect(records == 0)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("moving") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let events = displayEvents(fixture)
+        for change in ["mode_switch", "mode_restore", "play", "stop", "pause", "goto_position", "goto_bar"] {
+            #expect(!events.contains(change), "nothing is changed before the start is known to be stationary: \(events)")
+        }
+        #expect(fake.mode == mode)
+    }
+
+    /// The shipped `--qualify` drive builds its transport with the production position display, so
+    /// the display handling above is what the live gate runs. (A drive whose display was dropped
+    /// would leave Logic's default Beats & Project in place and refuse every cycle.)
+    @Test func theShippedDriveSuppliesTheProductionPositionDisplay() {
+        let transport = QualificationRunner.Runtime.shippedTransport(uiObserver: unchangedUIForTests)
+        #expect(transport.positionDisplay?.isProduction == true)
+    }
+
     /// The parser every recipe shares, on what the resource can publish (StateReaders.swift
     /// `transportStateEnvelopeExtras`, StateModels `TransportPositionReadback`, the AX prefix rule).
     /// Only a live, verified, full four-component readback that equals the position is an origin.
@@ -7375,13 +7471,21 @@ struct QualificationRunnerTests {
                             # `verification_source`, as an error. The `goto_submitted_*` faults move the
                             # playhead to where it was asked to go, except `mismatch`.
                             submitted='\"state\":\"B\",\"success\":true,\"verified\":false,\"reason\":\"readback_unavailable\",\"requested\":\"'$asked'\",\"via\":\"dialog\",\"dialog_cleanup\":\"closed\",\"dialog_submission_attempted\":true,\"write_attempted\":true,\"menu_actuation_attempted\":true,\"verification_source\":\"transport_state\"'
+                            # What `finalizeGotoPositionResult` adds when the POST-write transport read
+                            # failed: `post_write_readback: unavailable`. When only the PRE-write read
+                            # failed and the post-write read matched, it carries `observed` and
+                            # `verification_withheld: observed_effect_unavailable` and no such field.
+                            prewrite_failed=$submitted',\"verification_withheld\":\"observed_effect_unavailable\",\"observed\":\"'$asked'\"'
+                            submitted=$submitted',\"post_write_readback\":\"unavailable\"'
                             case "$transport_fault" in
-                              goto_submitted_read_failed|goto_submitted_mismatch|goto_submitted_unreadable_after|goto_submitted_error_state_c|goto_submitted_cleanup_unobserved|goto_submitted_unknown)
+                              goto_submitted_read_failed|goto_submitted_prewrite_failed|goto_submitted_mismatch|goto_submitted_unreadable_after|goto_submitted_error_state_c|goto_submitted_cleanup_unobserved|goto_submitted_unknown)
                                 [ "$transport_fault" != goto_submitted_mismatch ] && [ -n "$to" ] && position=$to
                                 printf '%s\n' "$position" > transport-position
                                 [ "$transport_fault" = goto_submitted_unreadable_after ] && touch goto-unreadable
                                 body=$submitted
                                 case "$transport_fault" in
+                                  goto_submitted_prewrite_failed)
+                                    body=$prewrite_failed ;;
                                   goto_submitted_error_state_c)
                                     body=$(printf '%s' "$submitted" | /usr/bin/sed 's/\\"state\\":\\"B\\",\\"success\\":true/\\"state\\":\\"C\\",\\"success\\":false/') ;;
                                   goto_submitted_cleanup_unobserved)

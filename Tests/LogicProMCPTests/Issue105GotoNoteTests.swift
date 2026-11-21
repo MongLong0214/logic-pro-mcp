@@ -519,7 +519,49 @@ struct Issue105GotoNoteTests {
         #expect(try #require(envelope["verification_withheld"] as? String)
             == "observed_effect_unavailable")
         #expect(try #require(envelope["observed"] as? String) == "5.1.1.1")
+        #expect(envelope["post_write_readback"] == nil, "the post-write read worked; only the pre-write read failed")
         #expect(await channel.gotoExecutionCount() == 1, "the failed pre-read must not retire the operation")
+    }
+
+    @Test("a failed post-write read says so, apart from a failed pre-write read")
+    func failedPostWriteReadbackIsNamedInTheReply() async throws {
+        // Qualification's follow-up read for a submitted-but-unread seek is allowed only when the
+        // POST-write read failed. The reply must carry evidence specific to that read: the pre-write
+        // read worked here (4.1.1.1), the immediate post-write read did not.
+        let submittedDialogEnvelope = HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
+            extras: [
+                "requested": "5.1.1.1",
+                "via": "dialog",
+                "dialog_cleanup": "closed",
+                "dialog_submission_attempted": true,
+                "write_attempted": true,
+            ]
+        )
+        let router = ChannelRouter()
+        await router.register(StubTransportChannel(
+            gotoResult: .success(submittedDialogEnvelope),
+            readbackPosition: "",
+            readbackResults: [
+                Self.encodedTransportState("4.1.1.1"),
+                .error("post-write transport read failed"),
+            ]
+        ))
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("5.1.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+
+        #expect(result.isError == true)
+        let envelope = try #require(obj(result))
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(try #require(envelope["reason"] as? String) == "readback_unavailable")
+        #expect(try #require(envelope["verification_source"] as? String) == "transport_state")
+        #expect(try #require(envelope["post_write_readback"] as? String) == "unavailable")
+        #expect(envelope["verification_withheld"] == nil)
+        #expect(envelope["observed"] == nil)
     }
 
     @Test("an already-observed requested position is an explicit no-write result")

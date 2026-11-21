@@ -266,6 +266,14 @@ import Testing
                 printf '%s\n' "$to" > bar
                 if [ "$by_position" = true ] && [ "$goto_reply" != ok ]; then
                     submitted='\"state\":\"B\",\"success\":true,\"verified\":false,\"reason\":\"readback_unavailable\",\"requested\":\"'$at'\",\"via\":\"dialog\",\"dialog_cleanup\":\"closed\",\"dialog_submission_attempted\":true,\"write_attempted\":true,\"menu_actuation_attempted\":true,\"verification_source\":\"transport_state\"'
+                    # `finalizeGotoPositionResult` marks a failed POST-write read with
+                    # `post_write_readback: unavailable`. A failed PRE-write read with a matching
+                    # post-write read carries `observed` and `verification_withheld` instead.
+                    if [ "$goto_reply" = submitted_prewrite_failed ]; then
+                        submitted=$submitted',\"verification_withheld\":\"observed_effect_unavailable\",\"observed\":\"'$at'\"'
+                    else
+                        submitted=$submitted',\"post_write_readback\":\"unavailable\"'
+                    fi
                     if [ "$goto_reply" = submitted_unknown ]; then
                         submitted='\"state\":\"B\",\"success\":true,\"verified\":false,\"reason\":\"readback_unavailable\",\"operation\":\"transport.goto_position\",\"method\":\"dialog\",\"dialog_cleanup\":\"unobserved\",\"dialog_submission_indeterminate\":true,\"dialog_input_target\":\"unknown\",\"fallback_unsafe\":true,\"terminal\":true,\"safe_to_retry\":false,\"verification_source\":\"transport_state\"'
                     fi
@@ -586,5 +594,66 @@ import Testing
             "the playhead is restored and verified before the mode: \(events)")
         #expect(fixture.bar == 1 && fixture.beat == 2)
         #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    // MARK: Round 5: one setting read two ways, a read that only half failed
+
+    /// B. The dispatcher's PRE-write read failed and the POST-write read worked: `observed` and
+    /// `verification_withheld: observed_effect_unavailable`, no `post_write_readback`. The landing was
+    /// read, so there is nothing for a follow-up to decide; the seek is a failed restore.
+    @Test(arguments: playheadOperations)
+    func aSubmittedDialogWhoseOnlyPreWriteReadFailedIsNotDecidedByTheFollowUp(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, gotoReply: "submitted_prewrite_failed")
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(fixture.writes.contains { $0.hasPrefix("goto_position") }, "the exact restore was attempted: \(fixture.writes)")
+        #expect(observed?.mutationRestore == nil, "a restore the server did not confirm earns no cycle record")
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("playhead"), "the failed restore is named: \(refusal)")
+    }
+
+    /// v-1. Already in Beats: nothing is switched, so nothing is restored, but the mode is read
+    /// again before the cycle is credited. A mode that changed or stopped reading is a failure, and
+    /// the change is not overwritten.
+    @Test(arguments: playheadOperations,
+          [QualificationPositionDisplayFake.Fault.changedByOthersAfterFirstRead, .unreadableAfterFirstRead])
+    func aBeatsStartWhoseModeChangesOrStopsReadingIsNotRecordedAsSuccess(
+        operation: OperationID, fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beats, fault: fault)
+        let observed = try drive(fixture, operation, display: fake.display)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("display mode"), "\(refusal)")
+        let events = QualificationPositionDisplayFake.events(in: fixture.directory)
+        #expect(!events.contains("mode_switch") && !events.contains("mode_restore"),
+                "this call never switched, so it never writes the mode: \(events)")
+        #expect(fake.mode == QualificationPositionDisplayFake.beats)
+    }
+
+    /// v-3. The popup says Beats & Project and the checked item says Time & Project: nothing is
+    /// switched, moved or created.
+    @Test(arguments: playheadOperations)
+    func aPopupTitleThatDisagreesWithTheCheckedItemStartsNothing(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+            fault: .checkedItemConflicts)
+        let observed = try drive(fixture, operation, display: fake.display)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("display mode"), "\(refusal)")
+        let events = QualificationPositionDisplayFake.events(in: fixture.directory)
+        #expect(!events.contains("mode_switch") && !events.contains("mode_restore"), "\(events)")
+        #expect(fixture.writes.isEmpty, "nothing moved or created: \(fixture.writes)")
+        #expect(fixture.bar == 1 && fixture.beat == 2)
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
     }
 }

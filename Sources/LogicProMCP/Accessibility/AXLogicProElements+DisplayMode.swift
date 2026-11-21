@@ -68,6 +68,23 @@ enum ControlBarDisplayMode {
         return mode
     }
 
+    /// The mode the popup's menu has checked, observed without selecting anything: the menu is
+    /// opened, its unique checked item read, and the menu cancelled. nil when the window or popup
+    /// is missing, the menu cannot be opened or read in full, or it is not closed again. The
+    /// popup's own title can lag the menu (`selectBeats` leases the checked item for that reason),
+    /// so a caller that must know the original mode before changing anything compares the two.
+    static func checkedMode(runtime: AXLogicProElements.Runtime = .production) -> String? {
+        guard let window = AXLogicProElements.mainWindow(runtime: runtime),
+              let popup = popup(in: window, runtime: runtime.ax) else { return nil }
+        return checkedMode(in: popup, runtime: runtime.ax)
+    }
+
+    static func checkedMode(in popup: AXUIElement, runtime: AXHelpers.Runtime) -> String? {
+        guard case .observed(let observation) = openMenu(in: popup, runtime: runtime) else { return nil }
+        guard cancel(observation.menu, under: popup, runtime: runtime) else { return nil }
+        return observation.selectedTitle
+    }
+
     /// Whether a mode title is Beats itself (`Beats & Project` is not).
     static func isBeatsMode(_ title: String) -> Bool { isBeats(title) }
 

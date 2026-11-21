@@ -2023,7 +2023,9 @@ struct QualificationTransport: Sendable {
                         }
                         if let expected = Self.transportExpectedPlaying[spec.id] {
                             do {
-                                let cycle = try withBeatsPositionDisplay(session, nextID: &nextID) {
+                                let cycle = try withBeatsPositionDisplay(
+                                    session, nextID: &nextID, requiresStationaryStart: true
+                                ) {
                                     try transportRestoreCycle(
                                         session, startingAt: $0, spec: spec,
                                         expectedPlaying: expected)
@@ -4100,9 +4102,10 @@ struct QualificationTransport: Sendable {
     }
 
     /// A `goto_position` error reply that proves the Go To Position dialog was submitted and closed
-    /// and that only the dispatcher's immediate transport read failed
+    /// and that only the dispatcher's immediate POST-write transport read failed
     /// (`TransportDispatcher.finalizeGotoPositionResult`: the channel's State B receipt plus
-    /// `verification_source`, as an error). Every field is exact. A State C, a submission that is
+    /// `verification_source` and `post_write_readback: unavailable`, as an error). A failed
+    /// pre-write read with a good post-write read carries `verification_withheld` instead and is not it. Every field is exact. A State C, a submission that is
     /// indeterminate or unattempted, a dialog not observed closed, an unknown input target and a
     /// reply for another position are not it: they stay refusals.
     static func gotoPositionSubmittedButUnread(_ text: String, requested: String) -> Bool {
@@ -4118,6 +4121,8 @@ struct QualificationTransport: Sendable {
               object["dialog_cleanup"] as? String == "closed",
               exactJSONBoolean(object["write_attempted"], equals: true),
               object["verification_source"] as? String == "transport_state",
+              object["post_write_readback"] as? String == "unavailable",
+              object["verification_withheld"] == nil,
               object["dialog_input_target"] as? String != "unknown",
               object["fallback_unsafe"] == nil,
               object["write_attempted_indeterminate"] == nil,
@@ -4140,16 +4145,36 @@ struct QualificationTransport: Sendable {
     private func withBeatsPositionDisplay(
         _ session: QualificationSubprocessSession,
         nextID: inout Int,
+        requiresStationaryStart: Bool = false,
         cycle: (Int) throws -> (record: QualificationMutationRestoreRecord, nextID: Int)
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         guard let display = positionDisplay else { return try cycle(nextID) }
         func refusal(_ detail: String) -> QualificationTransportError {
             .protocolViolation("phase_b.display_mode: \(detail)")
         }
+        // A transport recipe cannot put back the exact origin of a start that is moving, so it
+        // refuses first: before the display mode is read or switched and before any command.
+        if requiresStationaryStart {
+            let start = try observedTransportMotion(
+                session, nextID: &nextID, phase: "phase_b.display_mode_start")
+            guard start.motion != .moving else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.display_mode: playback is moving at the start, so the exact playhead "
+                        + "origin cannot be put back; nothing is changed")
+            }
+        }
         guard let original = display.read(),
               !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw refusal("the control bar's display mode could not be read, so it could not be put "
                 + "back; nothing is changed")
+        }
+        // The popup's title and the menu's checked item are two readings of one setting. When they
+        // differ the original is not known, and nothing is guessed: nothing has been changed yet.
+        let checked = display.readChecked()
+        guard checked == original else {
+            throw refusal("the control bar's popup reads \(original) but its checked menu item "
+                + "reads \(checked ?? "nothing"); the original display mode is not known, "
+                + "so nothing is changed")
         }
         // Not restoring is only ever a claim about a mode this call changed.
         var lease: ControlBarDisplayMode.Lease?
@@ -4172,7 +4197,8 @@ struct QualificationTransport: Sendable {
             if let problem = giveBack() { return refusal("\(detail); \(problem)") }
             return refusal(detail)
         }
-        if !ControlBarDisplayMode.isBeatsMode(original) {
+        let switched = !ControlBarDisplayMode.isBeatsMode(original)
+        if switched {
             switch display.selectBeats() {
             case .switched(let held):
                 lease = held
@@ -4194,7 +4220,16 @@ struct QualificationTransport: Sendable {
         } catch {
             outcome = .failure(error)
         }
-        let problem = giveBack()
+        var problem = giveBack()
+        if problem == nil, !switched {
+            // Nothing was switched, so nothing is given back, and another party's change is not
+            // overwritten. The mode is still read again: a changed or unreadable mode is no credit.
+            if let now = display.read() {
+                if now != original { problem = "display mode reads \(now) after the cycle, expected \(original)" }
+            } else {
+                problem = "display mode could not be read again after the cycle"
+            }
+        }
         switch (outcome, problem) {
         case (.success(let cycleResult), nil):
             return cycleResult

@@ -347,6 +347,22 @@ func testDisplayModeRestoreActsOnlyWhileTheLeaseHolds(_ mode: String) throws {
     #expect(fixture.value == "Time & Project")
 }
 
+// A caller that must know the original mode BEFORE it changes anything reads the checked item
+// without selecting one: the menu is opened and cancelled, and the popup keeps its value. Here the
+// popup's title lags (Beats & Project) while the menu's checkmark is Time & Project.
+@Test func testDisplayModeCheckedModeReadsTheMenuWithoutSelectingAnything() {
+    let fixture = DisplayModeFixture(current: "Beats & Project", selected: "Time & Project")
+    #expect(ControlBarDisplayMode.checkedMode(in: fixture.popup, runtime: fixture.runtime()) == "Time & Project")
+    #expect(fixture.actions.calls.map(\.action) == [kAXShowMenuAction as String, kAXCancelAction as String])
+    #expect(fixture.value == "Beats & Project")
+}
+
+@Test func testDisplayModeCheckedModeIsUnknownWhenTheMenuCannotBeClosed() {
+    let fixture = DisplayModeFixture()
+    #expect(ControlBarDisplayMode.checkedMode(
+        in: fixture.popup, runtime: fixture.runtime(failingCancel: true)) == nil)
+}
+
 // A later user choice is likewise proved by the menu checkmark. A stale "Beats" AXValue must not
 // authorize overwriting that choice with the lease's original mode.
 @Test func testDisplayModeRestoreRefusesAUserCheckedModeWhenPopupValueStillSaysBeats() throws {

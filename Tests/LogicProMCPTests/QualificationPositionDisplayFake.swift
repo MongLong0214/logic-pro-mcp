@@ -20,6 +20,16 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
         case restoreRefused
         /// A restore that reports itself done and changes nothing, so the re-read disagrees.
         case restoreNotApplied
+        /// The popup's title says one thing and the menu's checked item another (Logic's popup
+        /// value can lag the menu): the title reads the mode file, the checked item is
+        /// `Time & Project`. A switch, if one is ever made, leases the checked item, as production
+        /// does.
+        case checkedItemConflicts
+        /// Someone else changes the mode while the cycle runs: the first popup read answers the
+        /// mode file and every later one answers `Time & Project`.
+        case changedByOthersAfterFirstRead
+        /// The popup stops reading after the first read.
+        case unreadableAfterFirstRead
     }
 
     static let beatsAndProject = "Beats & Project"
@@ -28,6 +38,7 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
     let directory: URL
     let fault: Fault
     private let lock = NSLock()
+    private var reads = 0
 
     init(directory: URL, start: String, fault: Fault = .none) throws {
         self.directory = directory
@@ -45,16 +56,24 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
     var display: QualificationPositionDisplay {
         QualificationPositionDisplay(
             read: { [self] in
-                let current: String? = fault == .unreadable ? nil : mode
+                reads += 1
+                var current: String? = fault == .unreadable ? nil : mode
+                if reads > 1, fault == .changedByOthersAfterFirstRead { current = "Time & Project" }
+                if reads > 1, fault == .unreadableAfterFirstRead { current = nil }
                 log("read", mode: current)
                 return current
+            },
+            readChecked: { [self] in
+                let checked = fault == .checkedItemConflicts ? "Time & Project" : mode
+                log("checked", mode: checked)
+                return checked
             },
             selectBeats: { [self] in
                 log("switch", mode: nil)
                 if fault == .switchUnavailable {
                     return .unavailable("display_mode_beats_item_not_pressed")
                 }
-                let found = mode
+                let found = fault == .checkedItemConflicts ? "Time & Project" : mode
                 if fault != .switchNotApplied { write(Self.beats) }
                 return .switched(lease(original: found))
             },

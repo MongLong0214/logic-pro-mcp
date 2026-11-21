@@ -14,13 +14,36 @@ import Foundation
 struct QualificationPositionDisplay: Sendable {
     /// The popup's current mode title, or nil when it cannot be read.
     let read: @Sendable () -> String?
+    /// The mode the popup's menu has checked, observed without selecting anything, or nil when it
+    /// cannot be read in full. The popup's title and the checked item are two readings of one
+    /// setting; a cycle starts only when they agree (`withBeatsPositionDisplay`).
+    let readChecked: @Sendable () -> String?
     /// Selects Beats. See `ControlBarDisplayMode.Switch` for what each answer obliges the caller to do.
     let selectBeats: @Sendable () -> ControlBarDisplayMode.Switch
     /// Puts back the mode a switch found, while the lease still holds.
     let restore: @Sendable (ControlBarDisplayMode.Lease) -> ControlBarDisplayMode.Restore
+    /// True only for the seam the shipped `--qualify` drive supplies, so a test can say the drive
+    /// is wired to it without driving Logic.
+    let isProduction: Bool
+
+    init(
+        read: @escaping @Sendable () -> String?,
+        readChecked: @escaping @Sendable () -> String?,
+        selectBeats: @escaping @Sendable () -> ControlBarDisplayMode.Switch,
+        restore: @escaping @Sendable (ControlBarDisplayMode.Lease) -> ControlBarDisplayMode.Restore,
+        isProduction: Bool = false
+    ) {
+        self.read = read
+        self.readChecked = readChecked
+        self.selectBeats = selectBeats
+        self.restore = restore
+        self.isProduction = isProduction
+    }
 
     static let production = QualificationPositionDisplay(
         read: { ControlBarDisplayMode.currentMode() },
+        readChecked: { ControlBarDisplayMode.checkedMode() },
         selectBeats: { ControlBarDisplayMode.selectBeats() },
-        restore: { ControlBarDisplayMode.restore($0) })
+        restore: { ControlBarDisplayMode.restore($0) },
+        isProduction: true)
 }
