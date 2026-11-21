@@ -49,7 +49,10 @@ package struct QualificationRunner: Sendable {
         static func transportDrive(
             uiObserver: @escaping @Sendable () -> QualificationUIObservation?
         ) -> @Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult {
-            { request in try QualificationTransport(uiObserver: uiObserver).drive(request) }
+            { request in
+                try QualificationTransport(uiObserver: uiObserver, positionDisplay: .production)
+                    .drive(request)
+            }
         }
     }
 

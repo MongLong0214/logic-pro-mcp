@@ -637,6 +637,20 @@ func testDisplayModePublicRestoreRenewsTheCurrentWindowAfterItsAction(_ mode: St
         == .restored)
 }
 
+@Test func testDisplayModeCurrentModeReadsThePopupWithoutPressingAnything() {
+    let fixture = DisplayModeFixture()
+    #expect(ControlBarDisplayMode.currentMode(runtime: fixture.logicRuntime(fixture.runtime())) == "Beats & Project")
+    #expect(fixture.actions.calls.isEmpty)
+    #expect(!ControlBarDisplayMode.isBeatsMode("Beats & Project"))
+    #expect(ControlBarDisplayMode.isBeatsMode("Beats"))
+}
+
+@Test func testDisplayModeCurrentModeIsNilWhenThePopupValueCannotBeRead() {
+    let fixture = DisplayModeFixture(current: nil)
+    #expect(ControlBarDisplayMode.currentMode(runtime: fixture.logicRuntime(fixture.runtime())) == nil)
+    #expect(fixture.actions.calls.isEmpty)
+}
+
 @Test func testDisplayModePublicSwitchRefusesAChangedCurrentWindow() {
     let fixture = DisplayModeFixture()
     let ax = fixture.runtime(mainWindowChangeOnPressTitle: "Beats")

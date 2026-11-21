@@ -58,6 +58,19 @@ enum ControlBarDisplayMode {
     static let positionComponentsTimeout: TimeInterval = 2.0
     static let positionComponentsPollInterval: TimeInterval = 0.05
 
+    /// The display-mode popup's current title in the main window's control bar, read only: no menu
+    /// is opened and nothing is pressed. nil when the window, the popup or its value cannot be read.
+    static func currentMode(runtime: AXLogicProElements.Runtime = .production) -> String? {
+        guard let window = AXLogicProElements.mainWindow(runtime: runtime),
+              let popup = popup(in: window, runtime: runtime.ax),
+              let mode = title(of: popup, runtime: runtime.ax),
+              !mode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return mode
+    }
+
+    /// Whether a mode title is Beats itself (`Beats & Project` is not).
+    static func isBeatsMode(_ title: String) -> Bool { isBeats(title) }
+
     /// Selects the Beats display mode in the main window's control bar.
     static func selectBeats(runtime: AXLogicProElements.Runtime = .production) -> Switch {
         guard let window = AXLogicProElements.mainWindow(runtime: runtime),
