@@ -6,12 +6,31 @@ import sys
 import threading
 import queue
 import os
+import shutil
 
-MCP_SERVER = "/Users/rolandgasparyan/.local/bin/LogicProMCP"
+def resolve_logic_server() -> str:
+    override = os.environ.get("LOGIC_PRO_MCP_BIN", "").strip()
+    if override:
+        return override
+    found = shutil.which("LogicProMCP")
+    if found:
+        return found
+    return "LogicProMCP"
 
 def main():
+    logic_bin = resolve_logic_server()
+    if logic_bin != "LogicProMCP" and not os.path.isfile(logic_bin):
+        print(f"ERROR: LogicProMCP binary not found at {logic_bin}", file=sys.stderr)
+        sys.exit(127)
+    if logic_bin == "LogicProMCP" and shutil.which("LogicProMCP") is None:
+        print(
+            "ERROR: LogicProMCP not on PATH. Install with Homebrew or set LOGIC_PRO_MCP_BIN.",
+            file=sys.stderr,
+        )
+        sys.exit(127)
+
     proc = subprocess.Popen(
-        [MCP_SERVER],
+        [logic_bin],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

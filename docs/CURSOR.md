@@ -19,7 +19,13 @@ Logic Pro MCP talks to Logic Pro only on **macOS**. Cloud Agents that boot on Li
    brew install logic-pro-mcp
    ```
 
-3. Run the repo setup script (installs Homebrew package if needed, merges Cursor config, runs doctor):
+3. Run the one-shot Mac connect script while you approve permission dialogs:
+
+   ```bash
+   bash Scripts/mac-full-mcp-connect.sh
+   ```
+
+   Or step-by-step only:
 
    ```bash
    bash Scripts/cursor-mcp-setup.sh
@@ -53,6 +59,8 @@ Or in Terminal:
 
 ```bash
 LogicProMCP doctor --json --client cursor
+bash Scripts/mcp-prove-connection.sh   # Linux: registry + .cursor/mcp.json; macOS: doctor + live tools/list
+python3 logic_mcp_proxy.py             # macOS only — JSON tools catalog on stdout
 ```
 
 ## Cloud Agents vs local Cursor
