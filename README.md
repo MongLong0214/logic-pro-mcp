@@ -159,6 +159,8 @@ Generic MCP client config:
 }
 ```
 
+**Cursor users:** this repo ships [`.cursor/mcp.json`](.cursor/mcp.json). On your Mac, `bash Scripts/cursor-mcp-setup.sh` installs (via Homebrew if needed), updates Cursor config, and runs doctor. See [docs/CURSOR.md](docs/CURSOR.md) for Cloud Agent vs desktop Cursor.
+
 If you built from source, point the command at `.build/release/LogicProMCP`.
 
 ### 3. Complete Logic Pro setup

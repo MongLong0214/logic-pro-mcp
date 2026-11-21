@@ -39,6 +39,8 @@ The installer trust model is in [SECURITY.md](../SECURITY.md#installer-trust-mod
 
 ## Register MCP Client
 
+**Cursor:** see [docs/CURSOR.md](CURSOR.md). The repo includes `.cursor/mcp.json`; on macOS you can run `bash Scripts/cursor-mcp-setup.sh` to merge Homebrew or source builds into user and project MCP config.
+
 Claude Code:
 
 ```bash

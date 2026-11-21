@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "logic-pro": {
+      "command": "LogicProMCP"
+    }
+  }
+}
