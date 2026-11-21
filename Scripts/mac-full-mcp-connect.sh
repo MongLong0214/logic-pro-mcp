@@ -38,6 +38,21 @@ ensure_repo_checkout() {
 
 ensure_repo_checkout
 
+ensure_https_origin() {
+  local url="${LOGIC_PRO_MCP_GIT_URL:-https://github.com/RolandGasparyan/logic-pro-mcp.git}"
+  [[ -d "$REPO_ROOT/.git" ]] || return 0
+  local origin
+  origin="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+  if [[ "$origin" == git@github.com:* ]] || [[ -n "$origin" && "$origin" != "$url" ]]; then
+    log "Rewriting git origin to HTTPS (avoids SSH key errors)"
+    git -C "$REPO_ROOT" remote set-url origin "$url"
+  fi
+  set +e
+  git -C "$REPO_ROOT" fetch origin main
+  git -C "$REPO_ROOT" pull --ff-only origin main
+  set -e
+}
+
 open_privacy_panes() {
   log "Opening Privacy & Security (enable Terminal + Cursor: Accessibility & Automation)"
   open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" 2>/dev/null || true
@@ -83,6 +98,7 @@ wait_for_live_mcp() {
 }
 
 main() {
+  ensure_https_origin
   log "1/5 Homebrew + Cursor MCP registration"
   bash "$SCRIPT_DIR/cursor-mcp-setup.sh"
 

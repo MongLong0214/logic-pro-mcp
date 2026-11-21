@@ -19,7 +19,13 @@ Logic Pro MCP talks to Logic Pro only on **macOS**. Cloud Agents that boot on Li
    brew install logic-pro-mcp
    ```
 
-3. Run the one-shot Mac connect script while you approve permission dialogs:
+3. Run the one-shot Mac bootstrap (fixes `git@github.com` SSH remotes, installs Agent CLI, then connects MCP):
+
+   ```bash
+   bash Scripts/mac-bootstrap-all.sh
+   ```
+
+   Or only MCP connect:
 
    ```bash
    bash Scripts/mac-full-mcp-connect.sh
