@@ -2419,6 +2419,88 @@ struct QualificationRunnerTests {
         #expect(position == "1", "playhead at bar \(position); it started at 1.1.1.1")
     }
 
+    /// A paused origin at 1.2.2.120 can publish a readback that stops at bar and beat (`1.2`). Seeking
+    /// back to `1.2.1.1` and matching `1.2` would credit a restore whose subdivision and tick
+    /// changed, so a prefix is no origin and the cycle refuses before any position-changing call.
+    @Test(arguments: ["play", "stop", "pause"], ["stopped", "paused"])
+    func aPartialPrefixReadbackIsRefusedBeforeAnyPositionChangingCall(
+        command: String, original: String
+    ) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, transportFault: "prefix_origin", initialTransportMotion: original)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(result.mutationRestoreRecords.isEmpty)
+        #expect(observed.mutationRestore == nil)
+        #expect(observed.mutationRestoreRefusal?.contains("position") == true,
+                "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let requests = try String(
+            contentsOf: fixture.directory.appendingPathComponent("requests"), encoding: .utf8)
+            .split(separator: "\n").filter { !$0.contains("__adr001b_no_write_probe") }
+            .joined(separator: "\n")
+        for write in ["play", "stop", "pause", "goto_position", "goto_bar"] {
+            #expect(!requests.contains("\"command\":\"\(write)\""),
+                    "no position-changing call before the origin is known: \(write) in \(requests)")
+        }
+    }
+
+    /// A seek the server refused is a failed restore whatever the next read shows: the playhead may
+    /// have drifted back by itself, and that is not the restore doing its work.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aRefusedPlayheadRestoreIsNotCreditedEvenWhenTheNextReadMatches(command: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, transportFault: "goto_refused_lands", initialTransportMotion: "paused")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        let requests = try String(
+            contentsOf: fixture.directory.appendingPathComponent("requests"), encoding: .utf8)
+        #expect(requests.contains("\"command\":\"goto_position\""), "the restore must have been attempted")
+        #expect(observed.mutationRestore == nil)
+        #expect(result.mutationRestoreRecords.isEmpty)
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true,
+                "\(observed.mutationRestoreRefusal ?? "no refusal")")
+    }
+
+    /// The parser every recipe shares, on what the resource can publish (StateReaders.swift
+    /// `transportStateEnvelopeExtras`, StateModels `TransportPositionReadback`, the AX prefix rule).
+    /// Only a live, verified, full four-component readback that equals the position is an origin.
+    @Test(arguments: [
+        ("ax_live", "false", "1.2.2.120", ["bar", "beat", "subdivision", "tick"], "1.2.2.120"),
+        ("ax_live", "absent", "1.1.1.1", ["bar", "beat", "subdivision", "tick"], "1.1.1.1"),
+        ("cache", "true", "1.2.1.1", ["bar", "beat", "subdivision", "tick"], "nil"),
+        ("cache", "absent", "1.2.1.1", ["bar", "beat", "subdivision", "tick"], "nil"),
+        ("default", "true", "1.1.1.1", ["bar", "beat", "subdivision", "tick"], "nil"),
+        ("ax_live", "true", "1.2.1.1", ["bar", "beat", "subdivision", "tick"], "nil"),
+        ("ax_live", "absent", "1.2", ["bar", "beat"], "nil"),
+        ("ax_live", "absent", "1.2.2", ["bar", "beat", "subdivision"], "nil"),
+        ("ax_live", "absent", "1", ["bar"], "nil"),
+    ] as [(String, String, String, [String], String)])
+    func onlyALiveVerifiedFourComponentReadbackIsAPlayheadOrigin(
+        source: String, unverified: String, position: String, components: [String], expected: String
+    ) throws {
+        var envelope: [String: Any] = ["source": source, "cache_age_sec": 0,
+            "data": ["state": ["position": position,
+                "positionReadback": ["value": position, "observedComponents": components]]]]
+        if unverified != "absent" { envelope["unverified"] = unverified == "true" }
+        let raw = String(decoding: try JSONSerialization.data(withJSONObject: envelope), as: UTF8.self)
+        #expect(QualificationTransport.observedPlayheadPosition(raw) ?? "nil" == expected)
+    }
+
+    @Test func theSeekRequestForAnOriginIsItsExactFourComponents() {
+        #expect(QualificationTransport.gotoPositionRequest(for: "1.2.2.120") == "1.2.2.120")
+        #expect(QualificationTransport.gotoPositionRequest(for: "1.2") == nil)
+        #expect(QualificationTransport.gotoPositionRequest(for: "1") == nil)
+    }
+
     /// A paused start has a stationary origin, and restoring only the motion left the playhead
     /// wherever the play had carried it. The exact position is put back and read.
     @Test(arguments: ["play", "stop", "pause"])
@@ -6908,11 +6990,19 @@ struct QualificationRunnerTests {
                         fi
                         if [ "$moving" = true ]; then position=$((position + 1)); fi
                         printf '%s\n' "$position" > transport-position
-                        if [ "$transport_fault" = full_origin ]; then
-                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"unverified\\":false,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1.1.1\\",\\"positionReadback\\":{\\"value\\":\\"%s.1.1.1\\",\\"observedComponents\\":[\\"bar\\",\\"beat\\",\\"subdivision\\",\\"tick\\"]}}}}"}]}}\n' "$id" "$playing" "$position" "$position"
-                            continue
-                        fi
-                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1\\",\\"positionReadback\\":{\\"value\\":\\"%s.1\\",\\"observedComponents\\":[\\"bar\\",\\"beat\\"]}}}}"}]}}\n' "$id" "$resource_source" "$resource_unverified" "$playing" "$position" "$position" ;;
+                        # What production emits: `state.position` and `positionReadback` carry the same
+                        # value, and with the control bar in Beats mode all four components
+                        # (AXValueExtractors tick tests). The faults are the other shapes the resource
+                        # can publish: a readback that stops at bar and beat, a cache snapshot, and a
+                        # live snapshot marked unverified.
+                        origin_value=$position.1.1.1; origin_components='[\"bar\",\"beat\",\"subdivision\",\"tick\"]'
+                        origin_source=$resource_source; origin_unverified=$resource_unverified
+                        case "$transport_fault" in
+                          prefix_origin) origin_value=$position.2; origin_components='[\"bar\",\"beat\"]' ;;
+                          cache_origin) origin_source=cache; origin_unverified=true ;;
+                          unverified_origin) origin_unverified=true ;;
+                        esac
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s\\",\\"positionReadback\\":{\\"value\\":\\"%s\\",\\"observedComponents\\":%s}}}}"}]}}\n' "$id" "$origin_source" "$origin_unverified" "$playing" "$origin_value" "$origin_value" "$origin_components" ;;
                       *'"uri":"logic://system/operations"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/operations","text":"{\\"schema_version\\":1,\\"generated_at\\":\\"1970-01-01T00:00:00Z\\",\\"operation_count\\":0,\\"operations\\":[]}"}]}}\n' "$id" ;;
                       *'"uri":"logic://system/health"'*)
@@ -7047,6 +7137,12 @@ struct QualificationRunnerTests {
                             to=$(printf '%s' "$request" | /usr/bin/sed -n 's/.*"position":"\([0-9][0-9]*\)\..*/\1/p')
                             if [ "$transport_fault" != goto_ignored ]; then [ -n "$to" ] && position=$to; fi
                             printf '%s\n' "$position" > transport-position
+                            # `goto_refused_lands`: the reply refuses (State C, nothing attempted) and the
+                            # playhead is where it was asked to be anyway, so the NEXT read matches.
+                            if [ "$transport_fault" = goto_refused_lands ]; then
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"success\\":false,\\"write_attempted\\":false}"}]}}\n' "$id"
+                                continue
+                            fi
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
                             continue
                         fi

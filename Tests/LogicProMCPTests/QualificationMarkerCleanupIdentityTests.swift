@@ -27,7 +27,8 @@ import Testing
             barWriteOvershoot: Bool = false,
             startBeat: Int = 1,
             refuseGotoPosition: Bool = false,
-            defaultPosition: Bool = false
+            defaultPosition: Bool = false,
+            transportShape: String = "live_full"
         ) throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-marker-cleanup-\(UUID().uuidString)", isDirectory: true)
@@ -52,6 +53,7 @@ import Testing
             if defaultPosition {
                 script = script.replacingOccurrences(of: "default_position=false", with: "default_position=true")
             }
+            script = script.replacingOccurrences(of: "transport_shape=live_full", with: "transport_shape=\(transportShape)")
             try Data(script.utf8).write(to: executableURL)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
         }
@@ -103,6 +105,10 @@ import Testing
         # playhead, and it lands on a bar's first beat.
         refuse_goto_position=false
         default_position=false
+        # What else the resource can publish for the position: `cache` (the live read failed and the
+        # cache answers, StateReaders.swift:98), `unverified` (a live source flagged unverified) and
+        # `prefix` (a readback that stops at bar and beat, AXValueExtractors.swift:754).
+        transport_shape=live_full
         echo 0 > ghost-left
         : > ghost
         created=false
@@ -181,9 +187,16 @@ import Testing
                 if [ "$readable" = true ] && [ ! -s cache ]; then empty=true; else empty=false; fi
                 printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://markers","text":"{\\"cache_age_sec\\":%s,\\"fetched_at\\":%s,\\"ax_occluded\\":false,%s\\"readable\\":%s,\\"source\\":\\"%s\\",\\"verified_empty\\":%s,\\"data\\":[%s]}"}]}}\n' "$id" "$age" "$fetched" "$extra" "$readable" "$source" "$empty" "$(rows_json cache)" ;;
               *'"uri":"logic://transport/state"'*)
+                shape_source=ax_live; shape_unverified=; shape_value="$(cat bar).$(cat beat).1.1"
+                shape_components='[\"bar\",\"beat\",\"subdivision\",\"tick\"]'
+                case "$transport_shape" in
+                  cache) shape_source=cache; shape_unverified='\"unverified\":true,' ;;
+                  unverified) shape_unverified='\"unverified\":true,' ;;
+                  prefix) shape_value="$(cat bar).$(cat beat)"; shape_components='[\"bar\",\"beat\"]' ;;
+                esac
                 if [ "$default_position" = true ]; then readback_json=
-                else readback_json=",\\\"positionReadback\\\":{\\\"value\\\":\\\"$(cat bar).$(cat beat).1.1\\\",\\\"observedComponents\\\":[\\\"bar\\\",\\\"beat\\\",\\\"subdivision\\\",\\\"tick\\\"]}"; fi
-                printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"data\\":{\\"state\\":{\\"isPlaying\\":false,\\"isRecording\\":false,\\"tempo\\":120,\\"position\\":\\"%s.%s.1.1\\"%s}}}"}]}}\n' "$id" "$(cat bar)" "$(cat beat)" "$readback_json" ;;
+                else readback_json=",\\\"positionReadback\\\":{\\\"value\\\":\\\"$shape_value\\\",\\\"observedComponents\\\":$shape_components}"; fi
+                printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",%s\\"cache_age_sec\\":0,\\"data\\":{\\"state\\":{\\"isPlaying\\":false,\\"isRecording\\":false,\\"tempo\\":120,\\"position\\":\\"%s\\"%s}}}"}]}}\n' "$id" "$shape_source" "$shape_unverified" "$shape_value" "$readback_json" ;;
               *'"command":"create_marker"'*)
                 created=true
                 open_list
@@ -395,5 +408,26 @@ import Testing
         #expect(refusal.contains("position"), "the unreadable origin is named: \(refusal)")
         let moves = fixture.writes.filter { $0.contains("goto_bar") || $0.contains("goto_position") || $0.hasPrefix("create") }
         #expect(moves.isEmpty, "nothing moved or created: \(fixture.writes)")
+    }
+
+    /// The origin must come from a live, verified read. When the live read fails the resource answers
+    /// from its cache, `unverified: true`, and that snapshot can still carry a complete readback of
+    /// where the playhead WAS. A readback that stops at bar and beat is no better: the recipe could
+    /// not put the subdivision and tick back. Each is refused before the first move.
+    @Test(arguments: [OperationID.navigateGotoMarker, .navigateGotoBar, .transportGotoPosition],
+          ["cache", "unverified", "prefix"])
+    func anOriginThatIsNotALiveVerifiedFullReadbackIsRefusedBeforeTheFirstMove(
+        operation: OperationID, shape: String
+    ) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, transportShape: shape)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("position"), "the unreadable origin is named: \(refusal)")
+        let moves = fixture.writes.filter { $0.contains("goto_bar") || $0.contains("goto_position") || $0.hasPrefix("create") }
+        #expect(moves.isEmpty, "nothing moved or created: \(fixture.writes)")
+        #expect(fixture.bar == 1 && fixture.beat == 2, "the playhead did not move: \(fixture.writes)")
     }
 }

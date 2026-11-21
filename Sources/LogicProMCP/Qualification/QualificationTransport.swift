@@ -4056,32 +4056,35 @@ struct QualificationTransport: Sendable {
         )
     }
 
-    /// The playhead as `logic://transport/state` shows it (`data.state.position`, `bar.beat` on
-    /// Logic 13), or nil when it is absent, not a position a `goto_position` can name, or not
-    /// backed by a real readback. `position` alone is the display default `1.1.1.1` when the
-    /// controls were unreadable, so it is an origin only when `positionReadback` carries the same
-    /// value with observed components starting at the bar.
+    /// The playhead as `logic://transport/state` shows it (`data.state.position`), or nil unless it
+    /// is an origin a restore can be verified against: a LIVE read (`source: ax_live`, not flagged
+    /// `unverified`) whose `positionReadback` carries all four components (bar, beat, subdivision,
+    /// tick) with the same value as `position`. `position` alone is the display default `1.1.1.1`
+    /// when the controls were unreadable; a cache snapshot (what the resource answers when the live
+    /// read failed) says where the playhead WAS; and a readback that stops at bar and beat cannot
+    /// say what subdivision and tick to put back. None of those is an origin.
     static func observedPlayheadPosition(_ raw: String) -> String? {
         guard let data = raw.data(using: .utf8),
               let envelope = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              envelope["source"] as? String == "ax_live",
+              envelope["unverified"] == nil || exactJSONBoolean(envelope["unverified"], equals: false),
               let payload = envelope["data"] as? [String: Any],
               let state = payload["state"] as? [String: Any],
               let position = state["position"] as? String,
               let witness = state["positionReadback"] as? [String: Any],
               witness["value"] as? String == position,
-              let components = witness["observedComponents"] as? [String],
-              components.first == "bar",
+              witness["observedComponents"] as? [String] == ["bar", "beat", "subdivision", "tick"],
               gotoPositionRequest(for: position) != nil else { return nil }
         return position
     }
 
-    /// The `goto_position` request for an observed position. Components the transport does not
-    /// show are the first division and tick, so the request reads back as the same position.
+    /// The `goto_position` request for an observed origin: its exact four components, or nil when
+    /// the position is not four integers a `goto_position` accepts. Nothing is padded — a padded
+    /// request would restore to a position the playhead was never at.
     static func gotoPositionRequest(for observed: String) -> String? {
         let parts = observed.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
-        guard (1...4).contains(parts.count), parts.allSatisfy({ Int($0) != nil }) else { return nil }
-        let request = (parts + Array(repeating: "1", count: 4 - parts.count)).joined(separator: ".")
-        return TransportDispatcher.isValidPositionString(request) ? request : nil
+        guard parts.count == 4, parts.allSatisfy({ Int($0) != nil }) else { return nil }
+        return TransportDispatcher.isValidPositionString(observed) ? observed : nil
     }
 
     /// Puts the playhead back at `observed` and reads it there. The reply is not the evidence —
@@ -4098,10 +4101,16 @@ struct QualificationTransport: Sendable {
             return (false, "playhead not restored: \(observed) is not a position goto_position can name")
         }
         do {
-            _ = try invoke(
+            let reply = try invoke(
                 session, id: nextID, tool: "logic_transport", command: "goto_position",
                 params: ["position": request], phase: phase, timeout: 30)
             nextID += 1
+            // A refused or errored seek is a failed restore whatever the next read shows: the
+            // playhead may have come back by itself, and that is not the restore working.
+            guard !reply.isError, !Self.mutationSaysItFailed(reply.text) else {
+                return (false, "playhead restore refused: goto_position \(request) answered "
+                    + String(reply.text.prefix(160)))
+            }
             let read = try observedTransportPosition(session, id: nextID, phase: "\(phase)_readback")
             nextID += read.spent
             guard let now = Self.observedPlayheadPosition(read.raw) else {
