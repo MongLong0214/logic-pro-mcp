@@ -24,7 +24,9 @@ import Testing
             closeAfterCreate: Bool = false,
             refreshPolls: String = "when_open",
             ghostPolls: Int = 0,
-            barWriteOvershoot: Bool = false
+            barWriteOvershoot: Bool = false,
+            startBeat: Int = 1,
+            refuseGotoPosition: Bool = false
         ) throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-marker-cleanup-\(UUID().uuidString)", isDirectory: true)
@@ -42,6 +44,10 @@ import Testing
             if barWriteOvershoot {
                 script = script.replacingOccurrences(of: "bar_overshoot=false", with: "bar_overshoot=true")
             }
+            script = script.replacingOccurrences(of: "start_beat=1", with: "start_beat=\(startBeat)")
+            if refuseGotoPosition {
+                script = script.replacingOccurrences(of: "refuse_goto_position=false", with: "refuse_goto_position=true")
+            }
             try Data(script.utf8).write(to: executableURL)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
         }
@@ -57,6 +63,8 @@ import Testing
         var writes: [String] { lines("writes") }
         /// The playhead's bar as the double holds it. Every recipe starts at bar 1.
         var bar: Int? { lines("bar").first.flatMap { Int($0) } }
+        /// The playhead's beat within the bar. Every recipe starts at beat `startBeat`.
+        var beat: Int? { lines("beat").first.flatMap { Int($0) } }
 
         func remove() { try? FileManager.default.removeItem(at: directory) }
 
@@ -87,6 +95,9 @@ import Testing
         # `bar_overshoot=true`: the first bar write lands one bar past the request, so the
         # cycle's readback disagrees and it refuses with the playhead moved.
         bar_overshoot=false
+        # `refuse_goto_position=true`: every goto_position is refused, so only goto_bar can move the
+        # playhead, and it lands on a bar's first beat.
+        refuse_goto_position=false
         echo 0 > ghost-left
         : > ghost
         created=false
@@ -96,7 +107,9 @@ import Testing
         : > cache
         echo false > cache-readable
         echo null > cache-epoch
+        start_beat=1
         echo 1 > bar
+        echo $start_beat > beat
         [ "$list_open_initially" = true ] && touch list-open
         now_epoch() { /usr/bin/perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
         iso_of() { /usr/bin/perl -MPOSIX=strftime -e '$t = shift; printf "%s.%03dZ", strftime("%Y-%m-%dT%H:%M:%S", gmtime(int $t)), int(($t - int $t) * 1000)' "$1"; }
@@ -163,7 +176,7 @@ import Testing
                 if [ "$readable" = true ] && [ ! -s cache ]; then empty=true; else empty=false; fi
                 printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://markers","text":"{\\"cache_age_sec\\":%s,\\"fetched_at\\":%s,\\"ax_occluded\\":false,%s\\"readable\\":%s,\\"source\\":\\"%s\\",\\"verified_empty\\":%s,\\"data\\":[%s]}"}]}}\n' "$id" "$age" "$fetched" "$extra" "$readable" "$source" "$empty" "$(rows_json cache)" ;;
               *'"uri":"logic://transport/state"'*)
-                printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"data\\":{\\"state\\":{\\"isPlaying\\":false,\\"isRecording\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1.1.1\\"}}}"}]}}\n' "$id" "$(cat bar)" ;;
+                printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"data\\":{\\"state\\":{\\"isPlaying\\":false,\\"isRecording\\":false,\\"tempo\\":120,\\"position\\":\\"%s.%s.1.1\\"}}}"}]}}\n' "$id" "$(cat bar)" "$(cat beat)" ;;
               *'"command":"create_marker"'*)
                 created=true
                 open_list
@@ -204,10 +217,14 @@ import Testing
                 if [ -n "$to" ]; then
                     if [ "$bar_overshoot" = true ]; then to=$((to + 1)); bar_overshoot=false; fi
                     printf 'goto_bar %s\n' "$to" >> writes
+                    echo 1 > beat
                 else
+                    if [ "$refuse_goto_position" = true ]; then refuse write_refused; continue; fi
                     at=$(param_string position)
                     to=${at%%.*}
+                    rest=${at#*.}
                     printf 'goto_position %s\n' "$at" >> writes
+                    echo "${rest%%.*}" > beat
                 fi
                 printf '%s\n' "$to" > bar
                 ok ;;
@@ -215,7 +232,7 @@ import Testing
                 # The product resolves a marker name against its cached list.
                 name=$(param_string name)
                 row=$(/usr/bin/grep "^$name|" cache | /usr/bin/head -1)
-                if [ -n "$row" ]; then at=${row#*|}; printf '%s\n' "${at%%.*}" > bar; ok
+                if [ -n "$row" ]; then at=${row#*|}; printf '%s\n' "${at%%.*}" > bar; echo 1 > beat; ok
                 else refuse element_not_found; fi ;;
               *) refuse unsupported_by_fixture ;;
             esac
@@ -328,5 +345,32 @@ import Testing
         #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
         #expect(observed?.mutationRestore != nil, "\(observed?.mutationRestoreRefusal ?? "no refusal")")
         #expect(observed?.mutationRestoreRefusal == nil)
+    }
+
+    /// The cycle's own return is a `goto_bar`, which lands on a bar's first beat. From a start off
+    /// that beat the exact origin is put back by a `goto_position` — and when that is refused the
+    /// playhead is left at 1.1, a position this cycle never started from. The refusal must reach
+    /// the caller, and no cycle record may be kept.
+    @Test func aRefusedExactOriginMoveAfterTheBarReturnIsNotACredit() throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, refuseGotoPosition: true)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, .navigateGotoMarker)
+
+        #expect(observed?.mutationRestore == nil, "a playhead left off its origin earns no cycle record: \(fixture.writes)")
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("playhead"), "the failed restore is named: \(refusal)")
+        #expect(fixture.live == Self.originals, "the probe is still removed: live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    /// Positive control for the case above: the same start off the bar's first beat, with the exact
+    /// move accepted, completes the cycle and leaves the playhead where it started.
+    @Test func anExactOriginMoveAfterTheBarReturnCompletesTheCycle() throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, .navigateGotoMarker)
+
+        #expect(observed?.mutationRestore != nil, "\(observed?.mutationRestoreRefusal ?? "no refusal")")
+        #expect(fixture.bar == 1 && fixture.beat == 2, "the playhead is back at 1.2: bar \(fixture.bar.map(String.init) ?? "unread") beat \(fixture.beat.map(String.init) ?? "unread")")
+        #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
     }
 }

@@ -3433,6 +3433,11 @@ struct QualificationTransport: Sendable {
         // a different place (measured: 30.3 before a gate, 5.2 after). From a stopped start the
         // exact position is read here and put back, verified, on every exit.
         let prePosition = pre.motion == .stopped ? Self.observedPlayheadPosition(pre.raw) : nil
+        if pre.motion == .stopped, prePosition == nil {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: the playhead position did not read, so it could not be put "
+                    + "back; nothing is moved")
+        }
         var playheadRestoreAttempted = false
         var workMayHaveLanded = false
         do {
@@ -4026,8 +4031,17 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: playhead is at bar \(restoredBar), expected \(preBar)")
         }
-        // Exact, not just the bar: the cycle's own return is a goto_bar.
-        if Self.observedPlayheadPosition(restored.raw) == originPosition { playheadOwed = false }
+        // Exact, not just the bar: the cycle's own return is a goto_bar, which lands on the bar's
+        // first beat. A failed exact move is a failed restore: it is thrown, so no cycle record is
+        // kept for a playhead that is not where it started (the defer above tries once more).
+        if Self.observedPlayheadPosition(restored.raw) != originPosition {
+            let fix = restorePlayhead(
+                session, nextID: &nextID, to: originPosition, phase: "phase_b.playhead_restore")
+            guard fix.restored else {
+                throw QualificationTransportError.protocolViolation("phase_b.playhead_restore: \(fix.summary)")
+            }
+        }
+        playheadOwed = false
         return (
             QualificationMutationRestoreRecord(
                 operationID: spec.id.rawValue,

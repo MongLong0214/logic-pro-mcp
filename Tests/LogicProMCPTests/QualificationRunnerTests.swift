@@ -2343,6 +2343,33 @@ struct QualificationRunnerTests {
                 "\(result.operationResults[operation.rawValue]?.mutationRestoreRefusal ?? "no refusal")")
     }
 
+    /// A transport cycle owes the playhead back to where it started, and that needs the start. A
+    /// stopped transport whose position does not read has no origin to restore, so the cycle
+    /// refuses BEFORE its first write — skipping the restoration after a failure is not a refusal.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aStoppedTransportWhoseOriginDoesNotReadIsRefusedBeforeAnyWrite(command: String) throws {
+        let fixture = try SlowHandshakeFixture(transportNativePause: true, transportFault: "position_unreadable")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(result.mutationRestoreRecords.isEmpty)
+        #expect(observed.mutationRestore == nil)
+        let refusal = observed.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("position"), "the unreadable origin is named: \(refusal)")
+        // The no-write probe names a command with `__adr001b_no_write_probe` and moves nothing.
+        let requests = try String(
+            contentsOf: fixture.directory.appendingPathComponent("requests"), encoding: .utf8)
+            .split(separator: "\n").filter { !$0.contains("__adr001b_no_write_probe") }
+            .joined(separator: "\n")
+        for write in ["play", "stop", "pause", "goto_position", "goto_bar"] {
+            #expect(!requests.contains("\"command\":\"\(write)\""),
+                    "no position-changing call before the origin is known: \(write) in \(requests)")
+        }
+    }
+
     @Test(arguments: [false, true])
     func stoppedTransportMustBeObservedBeforeARecipeAcquiresChanges(cached: Bool) throws {
         let fixture = try SlowHandshakeFixture(transportNativePause: true, cachedTransport: cached)
@@ -6784,6 +6811,10 @@ struct QualificationRunnerTests {
                         if [ "$transport_fault" = cleanup_malformed_readback ] && [ -f transport-cleanup-command ] && [ ! -f transport-cleanup-read-fault-consumed ]; then
                             touch transport-cleanup-read-fault-consumed
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"not-json"}]}}\n' "$id"
+                            continue
+                        fi
+                        if [ "$transport_fault" = position_unreadable ]; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"tempo\\":120}}}"}]}}\n' "$id" "$resource_source" "$resource_unverified" "$playing"
                             continue
                         fi
                         if [ "$moving" = true ]; then position=$((position + 1)); fi
