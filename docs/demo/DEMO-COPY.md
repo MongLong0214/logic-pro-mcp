@@ -1,19 +1,6 @@
-# Demo — titles / descriptions / captions (3 options)
+# Demo copy
 
-## Option A — capability-forward
-- **Title:** Build a lofi beat in Logic Pro — entirely from natural language (MCP demo)
-- **Description:** Watch the Logic Pro MCP server drive Logic Pro end-to-end: set the tempo, generate chord / bass / lead MIDI, add a Drummer, name the tracks, and play it back — a full 82 BPM D-minor lofi loop, no mouse, no keyboard. Every write is verified against Logic's own Accessibility readback (the "Honest Contract").
-- **Caption (social):** No hands. Just prompts. 🎹 A lofi loop built in Logic Pro by an MCP server — tempo, 3 MIDI parts, a drummer, and playback, all verified. #LogicPro #MCP #AImusic
-
-## Option B — engineering-forward
-- **Title:** Logic Pro MCP — 10 tools, 18 resources, verified DAW control
-- **Description:** A Model Context Protocol server that controls Logic Pro through Accessibility + CoreMIDI + AppleScript. This demo composes a lofi track live: set_tempo → record_sequence (chords/bass/lead) → create_drummer → rename → play. State A = confirmed by readback; nothing is faked.
-- **Caption (social):** DAW automation that doesn't lie. Each op reports State A (verified), B (sent, unverified), or C (honest failure). Demo: a full lofi loop built by prompts. #LogicPro #MCP
-
-## Option C — short / punchy
-- **Title:** "Make me a lofi beat" → Logic Pro does it
-- **Description:** The Logic Pro MCP server turns intent into a real project: 5 tracks, D-minor lofi, 82 BPM — composed and played back live, verified note-by-note.
-- **Caption (social):** From empty project to lofi loop, hands-free. 🎛️ Built with the Logic Pro MCP server. #LogicPro #lofi #MCP
-
----
-Recommended: **Option A** for the README/landing; **Option C** for social.
+- **Title:** Ask Claude. Logic Pro does it. (Logic Pro MCP launch film, v3.19.0)
+- **Description:** A real Claude Code session (Sonnet 5.5) drives a live Logic Pro 13 session over MCP from plain-language requests: it reads the session, sets the tempo, pans five tracks, starts playback, brings in the five parts of an original track one by one and adjusts the mix, then reads every value back. All 14 writes returned State A (verified), counting transport.play, at a 437 ms median. One continuous take at 1.0x; the film ends after the read-back and does not show the final stop request, which Logic 13 did not confirm (State C, see docs/media/README.md).
+- **Caption (social):** Drive Logic Pro from any MCP client. `brew tap MongLong0214/logic-pro-mcp https://github.com/MongLong0214/logic-pro-mcp` then `brew install logic-pro-mcp`. github.com/MongLong0214/logic-pro-mcp
+- Provenance and the list of what is and is not MCP-driven: `docs/media/README.md`.
