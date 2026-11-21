@@ -6,8 +6,10 @@
 import type { Ev, Session } from "./types";
 
 export const HEAD = 2.2; // the headline (frame 0, poster) is fully up for 1.8 s, then wipes away over 0.4 s
-export const PROOF = 3.0; // the proof card, laid over the take while the full mix plays, before "stop" is typed
-export const END = 4.5; // the end card, after the session
+export const READ_HOLD = 3.4; // Claude's last answer stays on screen this long after the turn goes idle (it is on screen by then)
+export const PROOF = 3.0; // the proof card, over the live take, after the read-back: every count on it has already happened
+export const END = 8.5; // the end card: its last element is in at about 2.4 s, so the complete card is held for more than 6 s
+export const PROMPT_HOLD = 2.3; // a finished request stays up this long after its turn goes idle
 
 export type Mode = { from: number; to: number; kind: "type" | "act" };
 export type Plan = {
@@ -28,10 +30,9 @@ export function plan(session: Session): Plan {
   const F0 = ps[0].t_start - HEAD;
   const tau = (t: number) => t - F0;
   const stopEnd = f.stopAt ?? ps[ps.length - 1].t_idle;
-  const sessionEnd = tau(stopEnd) + 0.9;
-  const last = ps[ps.length - 1];
-  const proofTo = tau(last.t_start) - 0.25;
-  const proof = proofTo - PROOF > tau(ps[ps.length - 2]?.t_idle ?? 0) - 0.6 ? { from: proofTo - PROOF, to: proofTo } : null;
+  const readEnd = tau(stopEnd) + READ_HOLD;
+  const proof = { from: readEnd, to: readEnd + PROOF }; // after the last answer: all calls have happened by now
+  const sessionEnd = proof.to; // the footage runs live to here and is held still under the end card
   const end = { from: sessionEnd, to: sessionEnd + END };
   const modes: Mode[] = [];
   let cursor = 0;
@@ -45,19 +46,21 @@ export function plan(session: Session): Plan {
   modes.push({ from: cursor, to: end.to, kind: "act" });
   let n = 0;
   const steps = f.events
-    .filter((e) => e.kind === "tool" || ["tracks", "transport/state", "session"].includes(e.target ?? ""))
+    .filter((e) => e.kind === "tool" || ["tracks", "transport/state", "session", "mixer"].includes(e.target ?? ""))
     .map((e) => ({ ...e, tau: tau(e.t), tauEnd: tau(e.t_end), n: ++n }));
-  // social / vertical cut: the headline, then from the "play" request through the drums entrance (to a bar line), then the end card
+  // social / vertical cut: the headline, then from the "play" request through the Lead's entrance (to a bar line, with the
+  // finished request still up), then the end card. The middle segment is one unbroken stretch of the take at 1.0x.
   const play = ps.findIndex((p) => /play/i.test(p.text));
   const drop = ps.findIndex((p, i) => i > play && /drum/i.test(p.text)); // the drums entrance, after playback started
+  const lead = ps.findIndex((p, i) => i > drop && /lead/i.test(p.text)); // the last part to come in
   const social: Plan["social"] = [];
   let s = 0;
   const seg = (a: number, b: number) => { social.push({ s0: s, len: b - a, tau0: a }); s += b - a; };
   if (play > 0 && drop >= play) {
     seg(0, HEAD + 0.3); // the headline, then a cut straight to the request that starts playback
-    // second segment ends one bar after the drop request went idle, on a bar line of the song
+    const last = lead > drop ? lead : drop;
     const mt = f.musicStart != null ? tau(f.musicStart) : tau(ps[play].t_enter);
-    const want = tau(ps[drop].t_idle) + 2.0;
+    const want = tau(ps[last].t_idle) + 1.0; // one beat of the finished request, then the next bar line
     const barEnd = mt + Math.ceil((want - mt) / 2.0) * 2.0;
     seg(tau(ps[play].t_start) - 0.35, barEnd);
   } else {

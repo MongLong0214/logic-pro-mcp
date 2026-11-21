@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Objective audio checks on a finished mix: loudness, true peak, clipping, silence gaps, discontinuities.
 
-  qa_audio.py final.wav [--entrances t1,t2,...] [--lra 6,8] [--end-guard 1.5]   -> JSON report, exit 1 if a check fails
+  qa_audio.py final.wav [--entrances t1,t2,...] [--lra 6,8] [--end-guard 1.5] [--first-step 6]   -> JSON report, exit 1 if a check fails
 
 Checks (all measured, none assumed):
   * integrated loudness (EBU R128) and true peak via ffmpeg ebur128 (target -14 LUFS, true peak <= -1.0 dBTP)
@@ -9,8 +9,10 @@ Checks (all measured, none assumed):
   * loudness range (EBU R128 LRA); with --lra LO,HI it must fall inside that range
   * silence gaps: any run below -60 dBFS longer than 0.35 s anywhere from the first sample (no opening exemption);
     only the last --end-guard seconds (the intentional closing fade) are exempt
-  * entrance steps: with --entrances t[:t_done],..., the RMS level of the 2 s from t_done (the server confirmed the fader at its
-    value; t_done = t if omitted) minus the 2 s before t, when the request was sent (must be >= 3 dB)
+  * entrance steps: with --entrances t[:t_done],..., the K-weighted loudness (EBU R128, gated) of the 2 s from t_done (the server
+    confirmed the fader at its value; t_done = t if omitted) minus that of the 2 s before t, when the request was sent. The
+    "before" level is the plateau as it was playing before the request, with no dip or duck in front of it. Every step must
+    be >= 3 LU, and the first (the first sound Logic makes, against the generated opening bed) >= --first-step (default 6 LU).
   * clicks: sample-to-sample jumps far outside the signal's own distribution (reported, must be 0 over 6 sigma-of-diff x 40)
 """
 import json
@@ -61,16 +63,24 @@ def main():
     d = np.abs(np.diff(x, axis=0)).max(axis=1)
     thr = 40 * (np.std(d) + 1e-9)
     clicks = int(np.sum(d > max(thr, 0.5)))
-    def rms(a, b):
-        seg = x[max(0, int(a * sr)): max(0, int(b * sr))]
-        return 20 * np.log10(np.sqrt(np.mean(seg ** 2)) + 1e-9) if len(seg) else -120.0
-    steps = [{"t": t, "t_done": td, "before_db": round(rms(t - 2, t), 1), "after_db": round(rms(td, td + 2), 1),
-              "step_db": round(rms(td, td + 2) - rms(t - 2, t), 1)} for t, td in entrances]
+    def kw(a, b):
+        r_ = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{max(0.0, a):.3f}", "-t", f"{b - max(0.0, a):.3f}", "-i", path, "-af", "ebur128", "-f", "null", "-"],
+                            capture_output=True, text=True)
+        m_ = re.search(r"I:\s+(-?[0-9.]+) LUFS", r_.stderr[r_.stderr.rfind("Summary:"):])
+        return float(m_.group(1)) if m_ else -70.0
+    steps = []
+    for t, td in entrances:
+        b_, a_ = kw(t - 2, t), kw(td, td + 2)
+        steps.append({"t": t, "t_done": td, "before_lufs": round(b_, 1), "after_lufs": round(a_, 1), "step_lu": round(a_ - b_, 1)})
     rep = {"integrated_lufs": lufs, "loudness_range_lu": lra, "true_peak_dbtp": tp, "clipped_samples": clipped,
            "silence_gaps_start_s": gaps, "end_guard_s": end_guard, "click_candidates": clicks, "duration_s": round(len(x) / sr, 2),
            "entrance_steps": steps}
     ok = abs(lufs + 14) <= 1.0 and tp <= -1.0 and clipped == 0 and not gaps and clicks == 0
-    ok = ok and all(s_["step_db"] >= 3.0 for s_ in steps)
+    ok = ok and all(s_["step_lu"] >= 3.0 for s_ in steps)
+    if steps:
+        first_min = float(opt("--first-step", "6"))
+        rep["first_entrance_min_lu"] = first_min
+        ok = ok and steps[0]["step_lu"] >= first_min
     if lra_range:
         rep["lra_range"] = lra_range
         ok = ok and lra_range[0] <= lra <= lra_range[1]

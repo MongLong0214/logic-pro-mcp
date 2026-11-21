@@ -9,7 +9,8 @@ Everything on screen about a call is taken from the tap log (mcp_tap.py), which 
 Claude Code and the server with the wall-clock time the tap saw it. Times are put on one clock: seconds since the
 first frame of the Logic capture. Values are shown as before -> after, where "before" is the server's own
 `observed_before` (fader, pan) or, for the tempo, the tempo the server last read before the call. A write whose before
-and after agree is flagged `noop` and is kept out of the latency statistics; reads, play and stop are not writes.
+and after agree is flagged `noop` and is kept out of the latency statistics. stats.commands counts every command that
+changed Logic (mixer and tempo writes plus play and stop); stats.realWrites keeps the mixer and tempo writes alone.
 """
 import argparse
 import datetime
@@ -150,6 +151,9 @@ def main():
                 st = (d or {}).get("data", {}).get("state", {}) if isinstance(d, dict) else {}
                 ev["summary"] = f"tempo {st.get('tempo')} · bar {st.get('position')} · {'playing' if st.get('isPlaying') else 'stopped'}"
                 ev["metronome"] = st.get("isMetronomeEnabled")
+            elif uri == "logic://mixer" and isinstance(d, dict) and "strips" in d:
+                n_ = len(d["strips"] or [])
+                ev["summary"] = f"{n_} strips returned · {str(d.get('data_source', '?')).replace('_', ' ')}"
             else:
                 ev["summary"] = (text[:80] + "…") if len(text) > 80 else text
             evs.append(ev)
@@ -221,6 +225,9 @@ def main():
     writes = [e for e in evs if e["kind"] == "tool" and not e["call"].endswith((".play", ".stop"))]
     real = [e for e in writes if not e["noop"] and e["ok"]]
     lat = sorted(e["ms"] for e in real)
+    # every command Claude sent that changed Logic: the mixer and tempo writes plus play and stop (the proof card counts these)
+    cmds = [e for e in evs if e["kind"] == "tool" and e["ok"] and not e["noop"]]
+    clat = sorted(e["ms"] for e in cmds)
     out = {"film": {"fps": 60, "seqStart": a.seq_start,
                     "take": {"seq": a.take_seq, "width": tw, "height": th, "duration": tdur},
                     "client": {"seq": a.client_seq, "width": cw, "height": ch, "duration": cdur, "offset": round(meta["client"] - e0, 3)},
@@ -228,6 +235,8 @@ def main():
                     "playAt": play["t"] if play else None, "stopAt": stop["t_end"] if stop else None, "omitted": omitted},
            "stats": {"calls": len(evs), "writes": len(writes), "realWrites": len(real), "noopWrites": sum(1 for e in writes if e["noop"]),
                      "verifiedRealWrites": sum(1 for e in real if e.get("verified") is True and e.get("state") == "A"),
+                     "commands": len(cmds), "commandsVerified": sum(1 for e in cmds if e.get("verified") is True and e.get("state") == "A"),
+                     "commandsMedianMs": round(statistics.median(clat)) if clat else None,
                      "medianMs": round(statistics.median(lat)) if lat else None, "maxMs": round(lat[-1]) if lat else None,
                      "minMs": round(lat[0]) if lat else None},
            "meta": {"version": a.version, "logic": a.logic, "macos": a.macos, "locale": a.locale, "bpm": a.bpm,

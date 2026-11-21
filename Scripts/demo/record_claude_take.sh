@@ -33,18 +33,39 @@ json.dump({"mcpServers": {"logic-pro": {"type": "stdio", "command": py, "args": 
           open(out, "w"), indent=2)
 PY
   .cache/TerminalProfile --out "$DEMO_DIR/client.terminal" --command "tmux -L logic-aqua attach -t $SESSION" \
-    --font-size "${FONT_SIZE:-24}" --cols "${COLS:-70}" --rows "${ROWS:-22}" --name "$TITLE"
+    --font-size "${FONT_SIZE:-30}" --cols "${COLS:-58}" --rows "${ROWS:-22}" --name "$TITLE"
+  # Client chrome kept off camera (project settings; the launch line reads only these): no prompt suggestions (the grey
+  # ghost text after a turn), no spinner tips, no update banner. No --permission-mode is passed, so the "don't ask on"
+  # footer line is not shown either; the MCP tools are allowed and every built-in tool is denied instead.
+  mkdir -p "$DEMO_DIR/.claude"
+  cat > "$DEMO_DIR/.claude/settings.json" <<'JSON'
+{
+  "promptSuggestionEnabled": false,
+  "spinnerTipsEnabled": false,
+  "autoUpdatesChannel": "stable",
+  "env": {
+    "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": "false",
+    "DISABLE_AUTOUPDATER": "1",
+    "DISABLE_UPDATES": "1"
+  },
+  "permissions": {
+    "allow": ["mcp__logic-pro", "ListMcpResourcesTool", "ReadMcpResourceTool"],
+    "deny": ["Bash", "Edit", "Write", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task", "NotebookEdit"]
+  }
+}
+JSON
   uuidgen | tr 'A-Z' 'a-z' > "$DEMO_DIR/session-id"
   echo "client dir $DEMO_DIR, session $(cat "$DEMO_DIR/session-id")"
   ;;
 launch)
   SID="$(cat "$DEMO_DIR/session-id")"
   # Only the logic-pro server (--strict-mcp-config), no user settings, hooks or plugins (--setting-sources project),
-  # and no permission prompts: the MCP tools and the two MCP resource tools are allowed, everything else is denied.
-  CMD="cd $DEMO_DIR && exec claude --session-id $SID -n 'Logic Pro session' --strict-mcp-config --mcp-config $DEMO_DIR/mcp.json \
---setting-sources project --permission-mode dontAsk --allowedTools 'mcp__logic-pro,ListMcpResourcesTool,ReadMcpResourceTool' \
+  # and no permission prompts: the MCP tools and the two MCP resource tools are allowed, everything else is denied
+  # (settings.json written by `prepare`). Suggestions, tips and the update banner are off (see `prepare`).
+  CMD="cd $DEMO_DIR && CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false DISABLE_AUTOUPDATER=1 exec claude --session-id $SID -n 'Logic Pro session' --strict-mcp-config --mcp-config $DEMO_DIR/mcp.json \
+--setting-sources project --allowedTools 'mcp__logic-pro,ListMcpResourcesTool,ReadMcpResourceTool' \
 --model ${CLIENT_MODEL:-sonnet} --append-system-prompt 'You are working in a Logic Pro session through the logic-pro MCP server. Answer in one short sentence.'"
-  "${TMUX_CMD[@]}" new-session -d -s "$SESSION" -x "${COLS:-70}" -y "${ROWS:-22}" "$CMD"
+  "${TMUX_CMD[@]}" new-session -d -s "$SESSION" -x "${COLS:-58}" -y "${ROWS:-22}" "$CMD"
   "${TMUX_CMD[@]}" set-option -t "$SESSION" status off
   open "$DEMO_DIR/client.terminal"
   echo "launched $SESSION"

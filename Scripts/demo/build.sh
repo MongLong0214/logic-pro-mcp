@@ -2,6 +2,7 @@
 # Re-render the launch film from the recorded Claude Code take. Everything except the live recording is scripted here.
 #
 #   build.sh process     raw/take.mov + raw/client.mov + logs -> JPEG frame sequences, session.json
+#   build.sh data        only session.json again (after a change to align_claude.py); the frame sequences are reused
 #   build.sh render      Remotion: silent masters (Launch 4K, Social 4K, Vertical 1080x1920), each frame-scanned
 #   build.sh audio       take audio + generated beds + sound design -> mastered work/final*.wav
 #   build.sh encode      every deliverable, each mapped explicitly to the mastered audio
@@ -18,15 +19,13 @@ mkdir -p raw/footage work out
 LUFS_TARGET="${LUFS_TARGET:--14}"
 PORT="${FOOTAGE_PORT:-8765}"
 SCAN_LUMA="${SCAN_LUMA:-3}"
-LRA_RANGE="${LRA_RANGE:-0,12}"  # at most 12 LU: the entrance steps (>= +3 dB each) take priority over a narrow range
+# The build is the arrangement coming in: a bed at least 6 LU under the first part and four more steps of at least 3 LU each
+# are 18 LU of range before any gain ride, so the range ceiling is 24 LU. The entrance steps take priority over a narrow range.
+LRA_RANGE="${LRA_RANGE:-0,24}"
 CLIENT_MODEL="${CLIENT_MODEL:-Sonnet 5.5}"
 KEEP_PROMPTS="${KEEP_PROMPTS:-0}"  # end the film after N requests (0 = all); the rest are listed in session.json
 
-stage_process() {
-  ffmpeg -y -hide_banner -loglevel error -i raw/take.mov -vn -ac 2 -ar 48000 -c:a pcm_s16le raw/take.audio.wav
-  rm -rf raw/footage/take raw/footage/client && mkdir -p raw/footage/take raw/footage/client
-  ffmpeg -y -hide_banner -loglevel error -i raw/take.mov -vf fps=60 -q:v 3 raw/footage/take/%05d.jpg
-  ffmpeg -y -hide_banner -loglevel error -i raw/client.mov -vf fps=30 -q:v 2 raw/footage/client/%05d.jpg
+stage_data() { # session.json from the logs and captures; the JPEG sequences must already exist (build.sh process makes them)
   python3 align_claude.py --tap out/claude-take.mcp.jsonl --prompts out/prompts.jsonl --meta raw/take.meta.json \
     --take raw/take.mov --client raw/client.mov --audio raw/take.audio.wav --client-model "$CLIENT_MODEL" --keep-prompts "$KEEP_PROMPTS" \
     --out motion/public/data/session.json "$@"
@@ -39,6 +38,14 @@ s["film"]["client"]["frames"] = len([f for f in os.listdir("raw/footage/client")
 json.dump(s, open(p, "w"), indent=1, ensure_ascii=False)
 print("frames:", s["film"]["take"]["frames"], s["film"]["client"]["frames"])
 PY
+}
+
+stage_process() {
+  ffmpeg -y -hide_banner -loglevel error -i raw/take.mov -vn -ac 2 -ar 48000 -c:a pcm_s16le raw/take.audio.wav
+  rm -rf raw/footage/take raw/footage/client && mkdir -p raw/footage/take raw/footage/client
+  ffmpeg -y -hide_banner -loglevel error -i raw/take.mov -vf fps=60 -q:v 3 raw/footage/take/%05d.jpg
+  ffmpeg -y -hide_banner -loglevel error -i raw/client.mov -vf fps=30 -q:v 2 raw/footage/client/%05d.jpg
+  stage_data "$@"
 }
 
 serve_footage() {
@@ -92,8 +99,9 @@ stage_render() {
 
 # Mastering keeps the build the film is about: a gentle EQ, light compression (1.6:1 above -20 dBFS), then a plain gain
 # to -14 LUFS and an oversampled peak limiter. No dynamic loudness normalisation (it flattened v2 to 2.5 LU).
-# +2 dB around 90 Hz lifts the bass (A1-G2 roots) under the pad, which is voiced from E3 up
-MASTER_EQ="highpass=f=30,equalizer=f=90:t=q:w=1:g=2,equalizer=f=3200:t=q:w=1:g=1.5,treble=g=2:f=8000"
+# a +5 dB low shelf at 150 Hz lifts the bass (A1-G2 roots) under the pad, which is voiced from E3 up; it is also what lets the
+# Bass entrance (fader 0.41, below the Keys) step up by 3 LU or more, K-weighted
+MASTER_EQ="highpass=f=30,bass=g=5:f=150,equalizer=f=3200:t=q:w=1:g=1.5,treble=g=2:f=8000"
 MASTER_COMP="${MASTER_COMP:-acompressor=threshold=-20dB:ratio=1.6:attack=25:release=300:makeup=1}"
 LIMIT="aresample=192000,alimiter=limit=0.76:attack=2:release=60:level=0,aresample=48000"
 
@@ -118,8 +126,8 @@ entrances() { python3 -c 'import json;print(",".join("%.3f:%.3f" % (e["tau"], e[
 
 stage_audio() {
   node --experimental-strip-types motion/scripts/export-cues.mjs > work/cues.json 2>/dev/null
-  python3 sound_design.py --cues work/cues.json --take raw/take.audio.wav --out work/mix.wav
-  python3 sound_design.py --cues work/cues.json --take raw/take.audio.wav --out work/mix.social.wav --social
+  python3 sound_design.py --cues work/cues.json --take raw/take.audio.wav --out work/mix.wav --eq "$MASTER_EQ"
+  python3 sound_design.py --cues work/cues.json --take raw/take.audio.wav --out work/mix.social.wav --eq "$MASTER_EQ" --social
   master work/mix.wav work/final.wav
   master work/mix.social.wav work/final.social.wav
   python3 qa_audio.py work/final.wav --entrances "$(entrances)" --lra "$LRA_RANGE" | tee out/audio-qa.json || true
@@ -197,6 +205,7 @@ PY
 
 case "${1:-all}" in
   process) shift; stage_process "$@" ;;
+  data) shift; stage_data "$@" ;;
   render) stage_render ;;
   audio) stage_audio ;;
   encode) stage_encode ;;

@@ -351,7 +351,7 @@
     "call": "read",
     "target": "mixer",
     "ok": true,
-    "summary": "{\"cache_age_sec\":null,\"data_source\":\"mixer_not_visible\",\"fetched_at\":null,\"ax_oc…"
+    "summary": "0 strips returned · mixer not visible"
    },
    {
     "t": 111.047,
@@ -446,6 +446,9 @@
   "realWrites": 13,
   "noopWrites": 0,
   "verifiedRealWrites": 13,
+  "commands": 14,
+  "commandsVerified": 14,
+  "commandsMedianMs": 437,
   "medianMs": 488,
   "maxMs": 1052,
   "minMs": 134

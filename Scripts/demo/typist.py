@@ -2,6 +2,7 @@
 """Type plain-language requests into a live Claude Code session running in a tmux pane, one at a time.
 
   typist.py --target lpmdemo --log out/prompts.jsonl "request one" "@4.0 request two" ...
+  typist.py --target lpmdemo --log out/prompts.jsonl --file requests.txt     (the re-record's musician-phrased list)
 
 A request written "@N text" waits N seconds (instead of --gap) after the previous turn before it is typed, so a
 part can be heard for a while before the next request.
@@ -66,8 +67,13 @@ def main():
     ap.add_argument("--gap", type=float, default=0.6, help="pause between a turn going idle and the next request")
     ap.add_argument("--timeout", type=float, default=90.0)
     ap.add_argument("--key-ms", type=float, default=42.0)
-    ap.add_argument("prompts", nargs="+")
+    ap.add_argument("--file", help="read the requests from this file, one per line (# comments and blank lines are skipped)")
+    ap.add_argument("prompts", nargs="*")
     a = ap.parse_args()
+    if a.file:
+        a.prompts = [l.strip() for l in open(a.file) if l.strip() and not l.lstrip().startswith("#")] + a.prompts
+    if not a.prompts:
+        ap.error("no requests: pass them as arguments or with --file")
     rng = random.Random(11)
     with open(a.log, "a", buffering=1) as log:
         for i, text in enumerate(a.prompts):

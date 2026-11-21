@@ -3,7 +3,7 @@ import { AbsoluteFill, Img, useCurrentFrame, useVideoConfig } from "remotion";
 import { CameraMotionBlur } from "@remotion/motion-blur";
 import { C, MONO, SANS } from "./theme";
 import { inOutCubic, linear, outExpo, prog } from "./ease";
-import { HEAD, modeAt, plan, type Plan } from "./timeline";
+import { HEAD, PROMPT_HOLD, modeAt, plan, type Plan } from "./timeline";
 import { LOGIC, rowTarget, type Target } from "./layout";
 import type { Session } from "./types";
 
@@ -15,13 +15,15 @@ const FOOTAGE_BASE = process.env.REMOTION_FOOTAGE_BASE ?? "http://127.0.0.1:8765
 // composition time maps to tau, so every cut shows identical scenes and they can never disagree.
 export type TimeMap = Array<{ s0: number; len: number; tau0: number }>;
 const Tau = createContext<number>(0);
+const Cut = createContext<boolean>(false);
 export const useTau = () => useContext(Tau);
+export const useCutdown = () => useContext(Cut);
 export const WithTau: React.FC<{ map: TimeMap; children: React.ReactNode }> = ({ map, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const s = frame / fps;
   const seg = [...map].reverse().find((m) => s >= m.s0) ?? map[0];
-  return <Tau.Provider value={seg.tau0 + (s - seg.s0)}>{children}</Tau.Provider>;
+  return <Cut.Provider value={map.length > 1}><Tau.Provider value={seg.tau0 + (s - seg.s0)}>{children}</Tau.Provider></Cut.Provider>;
 };
 
 type Film = { session: Session; p: Plan };
@@ -169,47 +171,63 @@ export const Logo: React.FC<{ size: number; t: number }> = ({ size, t }) => (
 const shortCall = (call: string) => call.replace(/^logic_/, "");
 
 /** One chip per write, in order: what changed, before → after, and what the server answered. Sizes for 1920 wide. */
-const StepChip: React.FC<{ s: Plan["steps"][number]; a: number; scale: number }> = ({ s, a, scale }) => {
+const StepChip: React.FC<{ s: Plan["steps"][number]; a: number; scale: number; maxWidth?: number }> = ({ s, a, scale, maxWidth }) => {
   const isRead = s.kind === "read";
-  const READS: Record<string, string> = { tracks: "Reads the tracks back", "transport/state": "Reads the transport", session: "Reads the session" };
+  const READS: Record<string, string> = { tracks: "Reads the tracks back", "transport/state": "Reads the transport", session: "Reads the session", mixer: "Reads the mixer" };
+  // a read-back lists every track (name, fader, pan): one item per cell, wrapped to the chip's width, never clipped
+  const items = isRead && s.target === "tracks" && s.summary ? s.summary.split(" · ") : null;
   const title = isRead ? READS[s.target ?? ""] ?? "Reads Logic" : s.noop ? `${s.what} (no change)` : s.what;
   return (
     <div style={{ opacity: a, transform: `translateY(${(1 - a) * 24}px)`, background: "rgba(16,21,18,0.95)", borderLeft: `${8 * scale}px solid ${C.acid}`,
-      borderRadius: 16 * scale, padding: `${14 * scale}px ${26 * scale}px ${16 * scale}px`, marginTop: 12 * scale, boxShadow: "0 18px 40px rgba(0,0,0,0.45)" }}>
+      borderRadius: 16 * scale, padding: `${14 * scale}px ${26 * scale}px ${16 * scale}px`, marginTop: 12 * scale, boxShadow: "0 18px 40px rgba(0,0,0,0.45)", maxWidth, boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 18 * scale, whiteSpace: "nowrap" }}>
         <Mono size={30 * scale} color={C.acid}>{String(s.n).padStart(2, "0")}</Mono>
         <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 54 * scale, letterSpacing: "-0.04em", color: C.paper, lineHeight: 1.05 }}>{title}</div>
         {!isRead && s.before_after && <Mono size={50 * scale} color={C.acid} style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{s.before_after}</Mono>}
       </div>
-      <Mono size={28 * scale} color={C.sage} style={{ marginTop: 4 * scale, whiteSpace: "nowrap" }}>
-        {isRead ? `${s.summary ?? s.target} · ${Math.round(s.ms)} ms` : `${shortCall(s.call)} · ${s.result ?? ""} · ${Math.round(s.ms)} ms`}
-      </Mono>
+      {items ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: `${4 * scale}px ${22 * scale}px`, marginTop: 6 * scale }}>
+          {items.map((it) => <Mono key={it} size={30 * scale} color={C.paper} style={{ whiteSpace: "nowrap" }}>{it}</Mono>)}
+          <Mono size={28 * scale} color={C.sage} style={{ whiteSpace: "nowrap" }}>{Math.round(s.ms)} ms</Mono>
+        </div>
+      ) : (
+        <Mono size={28 * scale} color={C.sage} style={{ marginTop: 4 * scale, whiteSpace: "nowrap" }}>
+          {isRead ? `${s.summary ?? s.target} · ${Math.round(s.ms)} ms` : `${shortCall(s.call)} · ${s.result ?? ""} · ${Math.round(s.ms)} ms`}
+        </Mono>
+      )}
     </div>
   );
 };
 
-const Steps: React.FC<{ scale: number }> = ({ scale }) => {
+// A result card appears when the server's reply came back (t_end), the moment Logic itself shows the new value, never at
+// call start. The last card (the read-back) stays up until the proof card takes over, so Claude's answer can be read.
+const Steps: React.FC<{ scale: number; maxWidth?: number }> = ({ scale, maxWidth }) => {
   const tau = useTau();
   const { p } = useFilm();
   const live = p.steps
     .map((s) => {
-      const hold = Math.max(s.tauEnd + 1.3, s.tau + 1.8);
-      return { s, a: prog(tau, s.tau, s.tau + 0.25) * (1 - prog(tau, hold, hold + 0.3)) };
+      const hold = s.n === p.steps.length && p.proof ? p.proof.from - 0.3 : s.tauEnd + 1.7;
+      return { s, a: prog(tau, s.tauEnd, s.tauEnd + 0.25) * (1 - prog(tau, hold, hold + 0.3)) };
     })
     .filter((x) => x.a > 0.01)
     .slice(-2);
-  return <>{live.map(({ s, a }) => <StepChip key={s.n} s={s} a={a} scale={scale} />)}</>;
+  // the read-back lists five tracks: it gets the room to itself rather than sharing it with the card before it
+  if (live.length === 2 && live[1].s.kind === "read" && live[1].s.target === "tracks") live.shift();
+  return <>{live.map(({ s, a }) => <StepChip key={s.n} s={s} a={a} scale={scale} maxWidth={maxWidth} />)}</>;
 };
 
 /** The request being typed, large, in step with the real keystrokes in the client window beside it. */
-const PromptLine: React.FC<{ size: number; maxWidth: number }> = ({ size, maxWidth }) => {
+const PromptLine: React.FC<{ size: number; maxWidth: number; maxLines: number }> = ({ size: base, maxWidth, maxLines }) => {
   const tau = useTau();
   const { session, p } = useFilm();
   const pr = [...session.film.prompts].reverse().find((x) => x.t_start - p.F0 - 0.2 <= tau);
   if (!pr) return null;
   const a0 = pr.t_start - p.F0, a1 = pr.t_enter - p.F0 - 0.25, z = pr.t_idle - p.F0;
-  const a = prog(tau, a0 - 0.2, a0 + 0.1) * (1 - prog(tau, z + 0.2, z + 0.6));
+  const a = prog(tau, a0 - 0.2, a0 + 0.1) * (1 - prog(tau, z + PROMPT_HOLD, z + PROMPT_HOLD + 0.4));
   if (a <= 0.01) return null;
+  // the longest request is set smaller (never wider than maxLines lines) so it stays clear of the panel labels below it
+  let size = base;
+  while (size > 36 && Math.ceil((pr.text.length + 2) * 0.52 * size / maxWidth) > maxLines) size -= 2;
   const n = Math.round(pr.text.length * Math.min(1, Math.max(0, (tau - a0) / Math.max(0.1, a1 - a0))));
   const sent = tau >= pr.t_enter - p.F0;
   return (
@@ -232,6 +250,14 @@ const modeBlend = (p: Plan, tau: number) => {
   const k = inOutCubic(Math.min(1, Math.max(0, (tau - m.from) / 0.45)));
   return prev + (target - prev) * k;
 };
+
+// The install lines are README.md's, character for character. The URL stays on one line: the tap command's two parts are
+// laid out as two lines on the narrow vertical canvas, never wrapped by the browser (the lines are nowrap).
+const INSTALL: Array<{ parts: string[]; note?: string }> = [
+  { parts: ["brew tap MongLong0214/logic-pro-mcp", "https://github.com/MongLong0214/logic-pro-mcp"] },
+  { parts: ["brew trust monglong0214/logic-pro-mcp"], note: "Homebrew 6.0+ only" },
+  { parts: ["brew install logic-pro-mcp"] },
+];
 
 // ------------------------------------------------------------------ the film
 export const LaunchFilm: React.FC = () => {
@@ -260,12 +286,12 @@ export const LaunchFilm: React.FC = () => {
   let client: { x: number; y: number; w: number; h: number }, logic: { x: number; y: number; w: number; h: number };
   if (!vertical) {
     const top = 210, bottom = 92;
-    const cw = 880 - 140 * m; // the client panel narrows from 880 px (typing) to 740 px (Claude acting in Logic)
+    const cw = 1060 - 160 * m; // the client panel narrows from 1060 px (typing) to 900 px (Claude acting in Logic): its text is large enough to read
     client = { x: pad, y: top, w: cw, h: H - top - bottom };
     logic = { x: pad + cw + 28, y: top, w: W - (pad + cw + 28) - pad, h: H - top - bottom };
   } else {
     const top = 300;
-    const ch = 700 - 230 * m;
+    const ch = 700 - 140 * m;
     client = { x: pad, y: top, w: W - 2 * pad, h: ch };
     logic = { x: pad, y: top + ch + 24, w: W - 2 * pad, h: H - (top + ch + 24) - 420 };
   }
@@ -275,6 +301,7 @@ export const LaunchFilm: React.FC = () => {
   const proofA = p.proof ? prog(tau, p.proof.from, p.proof.from + 0.35) * (1 - prog(tau, p.proof.to - 0.3, p.proof.to)) : 0;
   const endA = prog(tau, p.end.from, p.end.from + 0.5, outExpo);
   const st = session.stats;
+  const cutdown = useCutdown(); // the social, vertical and GIF cuts jump from the headline to a later request
 
   return (
     <AbsoluteFill style={{ background: C.deep, fontFamily: SANS }}>
@@ -292,16 +319,16 @@ export const LaunchFilm: React.FC = () => {
 
       {/* the request, large */}
       <div style={{ position: "absolute", left: pad, top: vertical ? 56 : 40, right: pad }}>
-        <PromptLine size={vertical ? 62 : 58} maxWidth={vertical ? W - 2 * pad : 1800} />
+        <PromptLine size={vertical ? 62 : 58} maxWidth={vertical ? W - 2 * pad : 1800} maxLines={vertical ? 2 : 1} />
       </div>
 
       {/* write chips */}
       <div style={{ position: "absolute", left: vertical ? pad : logic.x + 24, right: vertical ? pad : undefined, bottom: vertical ? 120 : 92 + 24, maxWidth: vertical ? undefined : logic.w - 48 }}>
-        <Steps scale={vertical ? 0.92 : 0.86} />
+        <Steps scale={vertical ? 0.92 : 0.86} maxWidth={vertical ? W - 2 * pad : logic.w - 48} />
       </div>
 
       <div style={{ position: "absolute", left: pad, bottom: vertical ? 40 : 30, fontFamily: MONO, fontSize: 28, color: C.paper, opacity: 0.85 }}>
-        Real {session.meta.client} session{session.meta.model ? ` (${session.meta.model})` : ""} · live Logic Pro · 1.0x, one continuous take
+        Real {session.meta.client} session{session.meta.model ? ` (${session.meta.model})` : ""} · live Logic Pro · {cutdown ? "excerpt of the take, 1.0x, no speed-up" : "1.0x, one continuous take"}
       </div>
 
       {/* headline: frame 0 is this finished frame (it is the poster and the thumbnail) */}
@@ -319,18 +346,18 @@ export const LaunchFilm: React.FC = () => {
 
       {/* proof: over the live take while the full mix plays */}
       {proofA > 0.001 && (
-        <AbsoluteFill style={{ background: `rgba(16,21,18,${0.86 * proofA})`, opacity: Math.min(1, proofA * 1.4) }}>
+        <AbsoluteFill style={{ background: `rgba(16,21,18,${0.94 * proofA})`, opacity: Math.min(1, proofA * 1.4) }}>
           <div style={{ position: "absolute", left: vertical ? 64 : 110, top: vertical ? 420 : 170, right: vertical ? 64 : 110, transform: `scale(${0.96 + 0.04 * proofA})`, transformOrigin: "left top" }}>
             <Mono size={36} color={C.acid}>WHAT LOGIC ANSWERED</Mono>
             <div style={{ marginTop: 26 }}><Words text={vertical ? "Every write\nwas read back." : "Every write was read back."} at={(p.proof?.from ?? 0) + 0.05} size={vertical ? 110 : 120} accent={["back."]} /></div>
             <div style={{ display: "flex", flexDirection: vertical ? "column" : "row", gap: vertical ? 30 : 80, marginTop: 70, alignItems: vertical ? "flex-start" : "flex-end" }}>
               <div>
-                <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 200, color: C.acid, letterSpacing: "-0.06em", lineHeight: 0.9, whiteSpace: "nowrap" }}>{st.medianMs}<span style={{ fontSize: 80, color: C.paper, letterSpacing: "-0.02em", marginLeft: 18 }}>ms</span></div>
-                <Mono size={38} color={C.paper} style={{ marginTop: 12, whiteSpace: "nowrap" }}>median round trip, {st.realWrites} real writes</Mono>
+                <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 200, color: C.acid, letterSpacing: "-0.06em", lineHeight: 0.9, whiteSpace: "nowrap" }}>{st.commandsMedianMs}<span style={{ fontSize: 80, color: C.paper, letterSpacing: "-0.02em", marginLeft: 18 }}>ms</span></div>
+                <Mono size={38} color={C.paper} style={{ marginTop: 12, whiteSpace: "nowrap" }}>median round trip, {st.commands} writes</Mono>
               </div>
               <div style={{ paddingBottom: 8, whiteSpace: "nowrap" }}>
-                <Mono size={38} color={C.paper}>{st.verifiedRealWrites} of {st.realWrites} verified by read-back (State A)</Mono>
-                <Mono size={38} color={C.sage} style={{ marginTop: 8 }}>{st.calls} MCP calls shown, every one logged</Mono>
+                <Mono size={32} color={C.paper}>{st.commandsVerified} of {st.commands} writes verified by read-back (State A)</Mono>
+                <Mono size={32} color={C.sage} style={{ marginTop: 8 }}>{st.calls} MCP calls: {st.commands} writes, {st.calls - st.commands} reads{p.steps.length === st.calls ? ", all captioned" : ""}</Mono>
               </div>
             </div>
           </div>
@@ -346,19 +373,22 @@ export const LaunchFilm: React.FC = () => {
             <div style={{ position: "absolute", top: vertical ? 470 : 250, width: vertical ? 960 : 1720 }}>
               <Words text={vertical ? "Drive Logic Pro\nfrom Claude or\nany MCP client." : "Drive Logic Pro from Claude\nor any MCP client."} at={p.end.from + 0.15} size={vertical ? 92 : 96} align="center" accent={["Claude", "MCP"]} />
             </div>
-            <div style={{ position: "absolute", top: vertical ? 900 : 520, display: "grid", gap: 16, justifyItems: "center", opacity: prog(lt, 0.5, 0.9), padding: "0 40px" }}>
-              {["brew tap MongLong0214/logic-pro-mcp https://github.com/MongLong0214/logic-pro-mcp", "brew install logic-pro-mcp"].map((c) => (
-                <div key={c} style={{ fontFamily: MONO, fontSize: vertical ? 30 : 36, background: C.ink, color: C.paper, border: `2px solid ${C.line}`, padding: "14px 30px", borderRadius: 16, maxWidth: vertical ? 1000 : 1760, textAlign: "center", wordBreak: "break-word" }}>
-                  <span style={{ color: C.sage }}>$ </span>{c}
+            <div style={{ position: "absolute", top: vertical ? 880 : 490, display: "grid", gap: 14, justifyItems: "center", opacity: prog(lt, 0.5, 0.9), padding: "0 20px" }}>
+              {INSTALL.map((c) => (
+                <div key={c.parts[0]} style={{ fontFamily: MONO, fontSize: vertical ? 28 : 32, background: C.ink, color: C.paper, border: `2px solid ${C.line}`, padding: "12px 28px", borderRadius: 16, whiteSpace: "nowrap", justifySelf: "center" }}>
+                  {(vertical ? c.parts : [c.parts.join(" ")]).map((line, i) => (
+                    <div key={i}>{i === 0 && <span style={{ color: C.sage }}>$ </span>}{line}{!vertical && c.note && <span style={{ color: C.sage }}>{`   # ${c.note}`}</span>}</div>
+                  ))}
+                  {vertical && c.note && <div style={{ color: C.sage }}># {c.note}</div>}
                 </div>
               ))}
             </div>
-            <div style={{ position: "absolute", top: vertical ? 1260 : 790, display: "flex", flexDirection: vertical ? "column" : "row", gap: 28, alignItems: "center", opacity: prog(lt, 1.0, 1.4) }}>
+            <div style={{ position: "absolute", top: vertical ? 1400 : 770, display: "flex", flexDirection: vertical ? "column" : "row", gap: 28, alignItems: "center", opacity: prog(lt, 1.2, 1.6) }}>
               <div style={{ background: C.acid, color: C.ink, fontFamily: SANS, fontWeight: 600, fontSize: 52, padding: "18px 50px", borderRadius: 999 }}>★  Star on GitHub</div>
               <Mono size={vertical ? 34 : 40} color={C.paper}>github.com/MongLong0214/logic-pro-mcp</Mono>
             </div>
-            <div style={{ position: "absolute", bottom: vertical ? 300 : 120, opacity: prog(lt, 1.3, 1.7) }}><Mono size={46} color={C.acid}>logicpromcp.com</Mono></div>
-            <div style={{ position: "absolute", bottom: vertical ? 80 : 40, left: 60, right: 60, textAlign: "center", opacity: prog(lt, 1.5, 1.9) }}>
+            <div style={{ position: "absolute", bottom: vertical ? 300 : 130, opacity: prog(lt, 1.6, 2.0) }}><Mono size={46} color={C.acid}>logicpromcp.com</Mono></div>
+            <div style={{ position: "absolute", bottom: vertical ? 80 : 40, left: 60, right: 60, textAlign: "center", opacity: prog(lt, 2.0, 2.4) }}>
               <Mono size={vertical ? 26 : 28} color={C.sage}>v{session.meta.version} · Logic Pro {session.meta.logic} · macOS {session.meta.macos} · {session.meta.locale} · song and tracks prepared in advance; every change shown is a live MCP call Claude made</Mono>
             </div>
           </AbsoluteFill>

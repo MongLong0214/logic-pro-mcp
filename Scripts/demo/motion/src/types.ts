@@ -28,6 +28,6 @@ export type Session = {
     events: Ev[]; prompts: Prompt[]; musicStart: number | null; playAt: number | null; stopAt: number | null;
     omitted?: Array<{ prompt: string; calls: string[] }>;
   };
-  stats: { calls: number; writes: number; realWrites: number; noopWrites: number; verifiedRealWrites: number; medianMs: number | null; maxMs: number | null; minMs: number | null };
+  stats: { calls: number; writes: number; realWrites: number; noopWrites: number; verifiedRealWrites: number; commands: number; commandsVerified: number; commandsMedianMs: number | null; medianMs: number | null; maxMs: number | null; minMs: number | null };
   meta: { version: string; logic: string; macos: string; date: string; locale: string; bpm: number; client: string; model: string };
 };

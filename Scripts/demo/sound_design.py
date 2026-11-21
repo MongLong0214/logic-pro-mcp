@@ -9,11 +9,20 @@ Logic plays nothing until Claude starts playback, and nothing after Claude stops
 film from ever going silent, both in the song's key (A minor):
   * an ambient bed (A2/E3/C4/E4) under the opening, fading out as Logic's own pad comes up;
   * an outro swell (Am7) from the stop into the end card, fading to silence at the very end.
-Hits: ticks when Logic answers a call (very low), a riser into the drop, whooshes into the cards, a boom on the end
-card. The sound-design bus sits 14-26 dB under the music.
+Hits: ticks when Logic answers a call (very low), a short panned note for each pan and a falling or rising note for each
+fader adjustment (so a move can be heard on a plateau where Logic itself barely changes), a riser into the drop, whooshes
+into the cards, a boom on the end card. The sound-design bus sits 14-26 dB under the music.
+
+Level of the opening bed: it is set from a K-weighted measurement of Logic's own first sound (the Pad, the 2 s after the
+server confirmed its fader), BED_UNDER_PAD_LU under it, flat up to the request that brings the Pad in and faded out
+over that request. There is no dip before the entrance, so the Pad's step is measured against the bed's real level.
 """
 import argparse
 import json
+import os
+import re
+import subprocess
+import tempfile
 import wave
 
 import numpy as np
@@ -88,6 +97,51 @@ def chord(rng, dur, notes, attack, release_at, release):
     return np.stack([x, np.roll(x, int(0.011 * SR))], axis=1)
 
 
+def kw_lufs(x, eq):
+    """K-weighted loudness (EBU R128 integrated, so gated) of a stereo float array, after the master EQ."""
+    fd, path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        with wave.open(path, "wb") as w:
+            w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
+            w.writeframes((np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes())
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", (eq + "," if eq else "") + "ebur128", "-f", "null", "-"], capture_output=True, text=True)
+        m = re.search(r"I:\s+(-?[0-9.]+) LUFS", r.stderr[r.stderr.rfind("Summary:"):])
+        return float(m.group(1)) if m else -70.0
+    finally:
+        os.unlink(path)
+
+
+def note(freqs, dur=0.42, glide=None):
+    """A soft bell-like note (fundamental + fifth), short decay; glide=(f0, f1) bends the pitch."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    if glide:
+        f = glide[0] * (glide[1] / glide[0]) ** (t / dur)
+        ph = 2 * np.pi * np.cumsum(f) / SR
+        x = np.sin(ph) + 0.35 * np.sin(1.5 * ph)
+    else:
+        x = sum(np.sin(2 * np.pi * f * t) + 0.35 * np.sin(2 * np.pi * 1.5 * f * t) for f in freqs)
+    env = np.minimum(1, t / 0.004) * np.exp(-t / 0.11)
+    return x * env
+
+
+def ping(rng, pan=0.0):
+    """A pan write: one note, placed in the stereo field where the pan now is (exaggerated so a small pan is still heard)."""
+    x = note([880.0])
+    p = float(np.clip(pan * 3.0, -1, 1))
+    gl, gr = np.cos((p + 1) * np.pi / 4), np.sin((p + 1) * np.pi / 4)
+    return np.stack([x * gl, x * gr], axis=1) * 1.2
+
+
+def down(rng, arg=0.0):
+    return stereo(note(None, 0.5, glide=(988.0, 659.0)))
+
+
+def up(rng, arg=0.0):
+    return stereo(note(None, 0.5, glide=(659.0, 988.0)))
+
+
 def place(fx, s, t, total):
     i = int(max(0, t) * SR)
     end = min(total, i + len(s))
@@ -101,7 +155,7 @@ def read_wav(path):
         return np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).reshape(-1, 2).astype(np.float64) / 32768
 
 
-def film_mix(cues, take, rng):
+def film_mix(cues, take, rng, eq=""):
     """The full film on its own clock (tau)."""
     total = int(cues["total"] * SR)
     off = int(cues["F0"] * SR)
@@ -121,11 +175,23 @@ def film_mix(cues, take, rng):
     gen = np.zeros_like(bed)
     # ambient bed: from frame 0 while Logic is silent (the requests before playback). It sits AMB_DB under the music's
     # average level and thins out over the last seconds before the first part comes in, so that entrance is a step up.
-    pad_in = next((e["tau"] for e in cues["entrances"]), cues.get("musicTau") or 4.0)
-    amb = chord(rng, pad_in + 1.0, [45, 52, 60, 64], 0.05, max(0.0, pad_in - AMB_DIP), AMB_DIP + 0.4)
-    sustain = amb[int(0.5 * SR): int(max(0.6, pad_in - AMB_DIP) * SR)]
-    amb_rms = np.sqrt(np.mean(sustain ** 2)) if len(sustain) else 1.0
-    place(gen, amb / (amb_rms + 1e-9) * rms * 10 ** (AMB_DB / 20), 0.0, total)
+    ent = cues["entrances"][0] if cues["entrances"] else None
+    pad_in = ent["tau"] if ent else (cues.get("musicTau") or 4.0)
+    pad_done = ent["tauEnd"] if ent else pad_in + 0.5
+    # flat until the request that brings the Pad in, then faded out across that request (it ends as the server confirms)
+    amb = chord(rng, pad_done + 0.5, [45, 52, 60, 64], 0.05, pad_in, (pad_done - pad_in) + 0.3)
+    amb = amb / (np.max(np.abs(amb)) + 1e-9) * 0.5  # raw saws are far above full scale: bring them into range before anything is measured
+    sustain = amb[int(0.5 * SR): int(max(0.6, pad_in) * SR)]
+    if ent and len(sustain):
+        # Logic's first sound: the 2 s after the Pad's fader was confirmed (the bed is silent there), K-weighted
+        a0 = int(pad_done * SR)  # `bed` is already on the film clock (tau)
+        pad_lufs = kw_lufs(bed[a0: a0 + 2 * SR], eq)
+        gain = 10 ** ((pad_lufs - BED_UNDER_PAD_LU - kw_lufs(sustain, eq)) / 20)
+        print(f"opening bed: Pad entry {pad_lufs:.1f} LUFS, bed {pad_lufs - BED_UNDER_PAD_LU:.1f} LUFS (K-weighted, after the master EQ)")
+        place(gen, amb * gain, 0.0, total)
+    else:
+        amb_rms = np.sqrt(np.mean(sustain ** 2)) if len(sustain) else 1.0
+        place(gen, amb / (amb_rms + 1e-9) * rms * 10 ** (AMB_DB / 20), 0.0, total)
     st = cues.get("stopTau")
     if st is not None:
         # Logic was stopped on camera: an outro swell (Am7) carries the end card, fading to silence at the very end
@@ -140,19 +206,30 @@ def film_mix(cues, take, rng):
             bed[f0:] *= (np.cos(np.linspace(0, np.pi / 2, n_f)) ** 2)[:, None]
     mix = bed + gen
     fx = np.zeros_like(mix)
-    for t, kind in cues["sfx"]:
+    ref = bed + gen  # what is playing, without the effects: the level the adjustment notes are set against
+    for t, kind, *arg in cues["sfx"]:
         fn, db = KINDS[kind]
-        s = fn(rng)
-        place(fx, s / (np.max(np.abs(s)) + 1e-9) * rms * 10 ** (db / 20) * 4.0, t, total)
+        s = fn(rng, *arg) if arg else fn(rng)
+        if kind in ADJUST:
+            # peak of the note = the local programme's RMS (1 dB under once music plays; 3 dB over on the bare opening bed,
+            # where it is still no louder than the Pad that follows)
+            seg = ref[max(0, int((t - 1.5) * SR)): max(1, int((t - 0.05) * SR))]
+            local = np.sqrt(np.mean(seg ** 2)) if len(seg) else rms
+            music = cues.get("musicTau") is not None and t > cues["musicTau"]
+            place(fx, s / (np.max(np.abs(s)) + 1e-9) * local * 10 ** ((-1.0 if music else 3.0) / 20), t, total)
+        else:
+            place(fx, s / (np.max(np.abs(s)) + 1e-9) * rms * 10 ** (db / 20) * 4.0, t, total)
     mix = mix + fx
     fade = int(0.04 * SR)
     mix[:fade] *= np.linspace(0, 1, fade)[:, None]
     return mix
 
 
-AMB_DB = -5.0  # opening bed level against the music's average RMS
-AMB_DIP = 3.0  # seconds before the first entrance over which the bed thins out
-KINDS = {"whoosh": (whoosh, -18.0), "tick": (tick, -32.0), "riser": (riser, -20.0), "boom": (boom, -16.0)}
+AMB_DB = -5.0  # fallback only (no entrance in the cues): opening bed level against the music's average RMS
+BED_UNDER_PAD_LU = 4.0  # set against the Pad in the pre-master mix; after the master's compression the bed measures about 7 LU under the Pad's entry (the requirement is 6)
+KINDS = {"whoosh": (whoosh, -18.0), "tick": (tick, -32.0), "riser": (riser, -20.0), "boom": (boom, -16.0),
+         "ping": (ping, 0.0), "down": (down, 0.0), "up": (up, 0.0)}
+ADJUST = ("ping", "down", "up")
 
 
 def main():
@@ -160,11 +237,12 @@ def main():
     ap.add_argument("--cues", required=True)
     ap.add_argument("--take", required=True, help="wav of Logic's output for the whole take (48 kHz stereo)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--eq", default="", help="the master EQ chain (ffmpeg filters), so the bed is levelled the way it will be heard")
     ap.add_argument("--social", action="store_true", help="assemble the social/vertical cut from the film's own mix")
     a = ap.parse_args()
     cues = json.load(open(a.cues))
     take = read_wav(a.take)
-    mix = film_mix(cues, take, np.random.default_rng(7))
+    mix = film_mix(cues, take, np.random.default_rng(7), a.eq)
     if a.social:
         segs = cues["social"]["segments"]
         total = int(round(cues["social"]["total"] * SR))
