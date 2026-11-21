@@ -18,8 +18,9 @@ mkdir -p raw/footage work out
 LUFS_TARGET="${LUFS_TARGET:--14}"
 PORT="${FOOTAGE_PORT:-8765}"
 SCAN_LUMA="${SCAN_LUMA:-3}"
-LRA_RANGE="${LRA_RANGE:-6,8}"
-CLIENT_MODEL="${CLIENT_MODEL:-Sonnet}"
+LRA_RANGE="${LRA_RANGE:-0,12}"  # at most 12 LU: the entrance steps (>= +3 dB each) take priority over a narrow range
+CLIENT_MODEL="${CLIENT_MODEL:-Sonnet 5.5}"
+KEEP_PROMPTS="${KEEP_PROMPTS:-0}"  # end the film after N requests (0 = all); the rest are listed in session.json
 
 stage_process() {
   ffmpeg -y -hide_banner -loglevel error -i raw/take.mov -vn -ac 2 -ar 48000 -c:a pcm_s16le raw/take.audio.wav
@@ -27,7 +28,7 @@ stage_process() {
   ffmpeg -y -hide_banner -loglevel error -i raw/take.mov -vf fps=60 -q:v 3 raw/footage/take/%05d.jpg
   ffmpeg -y -hide_banner -loglevel error -i raw/client.mov -vf fps=30 -q:v 2 raw/footage/client/%05d.jpg
   python3 align_claude.py --tap out/claude-take.mcp.jsonl --prompts out/prompts.jsonl --meta raw/take.meta.json \
-    --take raw/take.mov --client raw/client.mov --audio raw/take.audio.wav --client-model "$CLIENT_MODEL" \
+    --take raw/take.mov --client raw/client.mov --audio raw/take.audio.wav --client-model "$CLIENT_MODEL" --keep-prompts "$KEEP_PROMPTS" \
     --out motion/public/data/session.json "$@"
   python3 - <<'PY'
 import json, os
@@ -48,24 +49,46 @@ serve_footage() {
   export REMOTION_FOOTAGE_BASE="http://127.0.0.1:$PORT"
 }
 
+# Masters are rendered as a JPEG sequence, encoded, then frame-scanned at SCAN_LUMA. Remotion now and then captures a
+# frame before the page has painted (a frame of bare background: v2 shipped one at 45.6 s, this take produced two).
+# Any frame the scan flags is rendered again on its own as a still and put back, then the master is re-encoded and
+# re-scanned; a dropout that survives the re-render (one that is really in the footage) still fails the build.
+render_comp() { # comp scale name
+  local comp=$1 s=$2 name=$3 dir="${FRAMES_ROOT:-/private/tmp/lpm-demo-frames}/$3" out="work/$3.silent.mp4" conc="${CONCURRENCY:-6}"
+  rm -rf "$dir" && mkdir -p "$(dirname "$dir")"  # outside the worktree: Remotion rejects a sequence path with a dot in it
+  (cd motion && npx remotion render src/index.ts "$comp" "$dir" --sequence --scale="$s" --concurrency="$conc" --image-format=jpeg --jpeg-quality=95)
+  local first pad; first=$(ls "$dir" | head -1); pad=$(echo "$first" | sed -E 's/element-([0-9]+)\.jpeg/\1/' | tr -d '\n' | wc -c | tr -d ' ')
+  for pass in 1 2 3 4; do
+    ffmpeg -y -hide_banner -loglevel error -framerate 60 -pattern_type glob -i "$dir/element-*.jpeg" \
+      -vf "scale=in_range=full:out_range=tv:out_color_matrix=bt709,format=yuv420p" -c:v libx264 -preset slow -crf 14 \
+      -profile:v high -g 120 -keyint_min 120 "${COLOR[@]}" -movflags +faststart "$out"
+    local rep; rep=$(python3 scan_frames.py "$out" --max-dip "$SCAN_LUMA") && { echo "$rep"; return 0; }
+    echo "$rep"
+    [ "$pass" = 4 ] && return 1
+    local bad; bad=$(echo "$rep" | python3 -c 'import json,sys; r=json.load(sys.stdin); print(" ".join(str(i) for i in sorted(set(r["isolated_dropouts"] + r["mid_film_black_frames"]))))')
+    for f in $bad; do
+      echo "re-rendering $name frame $f (pass $pass)"
+      (cd motion && npx remotion still src/index.ts "$comp" "$dir/element-$(printf "%0${pad}d" "$f").jpeg" --frame="$f" --scale="$s" --image-format=jpeg --jpeg-quality=95 >/dev/null)
+    done
+  done
+}
+
 stage_render() {
   [ -d motion/node_modules ] || (cd motion && npm ci --no-audit --no-fund)
   serve_footage
   export REMOTION_MOTION_BLUR="${MOTION_BLUR:-1}"
-  local scale=2 conc="${CONCURRENCY:-6}"
+  local scale=2
   [ "${PREVIEW:-0}" = 1 ] && { scale=0.5; export REMOTION_MOTION_BLUR=0; }
-  # --muted: the masters carry no audio track; the mastered audio is mapped in at encode time
   for comp in ${COMPS:-Launch Social Vertical}; do
     local s=$scale; [ "$comp" = Vertical ] && s=$(python3 -c "print(min(1, $scale))")
-    local out="../work/$(echo $comp | tr 'A-Z' 'a-z').silent.mp4"
-    (cd motion && npx remotion render src/index.ts "$comp" "$out" --scale="$s" --concurrency="$conc" --crf=14 --codec=h264 --image-format=jpeg --jpeg-quality=95 --muted)
-    python3 scan_frames.py "work/$(echo $comp | tr 'A-Z' 'a-z').silent.mp4" --max-dip "$SCAN_LUMA"
+    render_comp "$comp" "$s" "$(echo $comp | tr 'A-Z' 'a-z')"
   done
 }
 
 # Mastering keeps the build the film is about: a gentle EQ, light compression (1.6:1 above -20 dBFS), then a plain gain
 # to -14 LUFS and an oversampled peak limiter. No dynamic loudness normalisation (it flattened v2 to 2.5 LU).
-MASTER_EQ="highpass=f=30,equalizer=f=250:t=q:w=1:g=-1.5,equalizer=f=3200:t=q:w=1:g=1.5,treble=g=2:f=8000"
+# +2 dB around 90 Hz lifts the bass (A1-G2 roots) under the pad, which is voiced from E3 up
+MASTER_EQ="highpass=f=30,equalizer=f=90:t=q:w=1:g=2,equalizer=f=3200:t=q:w=1:g=1.5,treble=g=2:f=8000"
 MASTER_COMP="${MASTER_COMP:-acompressor=threshold=-20dB:ratio=1.6:attack=25:release=300:makeup=1}"
 LIMIT="aresample=192000,alimiter=limit=0.76:attack=2:release=60:level=0,aresample=48000"
 
@@ -74,20 +97,19 @@ integrated() { ffmpeg -hide_banner -nostats -i "$1" -af ebur128 -f null - 2>&1 |
 master() { # $1 in.wav  $2 out.wav
   ffmpeg -y -hide_banner -loglevel error -i "$1" -af "$MASTER_EQ,$MASTER_COMP" -c:a pcm_s24le work/m.pre.wav
   local i g
-  for _ in 1 2 3; do
-    i=$(integrated work/m.pre.wav)
-    g=$(python3 -c "print(round($LUFS_TARGET - ($i), 2))")
+  i=$(integrated work/m.pre.wav)
+  g=$(python3 -c "print(round($LUFS_TARGET - ($i), 2))")
+  for _ in 1 2 3 4; do
     ffmpeg -y -hide_banner -loglevel error -i work/m.pre.wav -af "volume=${g}dB,$LIMIT" -c:a pcm_s24le "$2"
     i=$(integrated "$2")
     python3 -c "import sys; sys.exit(0 if abs($i - ($LUFS_TARGET)) <= 0.2 else 1)" && break
-    # the limiter took some level: raise the pre-limiter signal by the shortfall and try again
-    ffmpeg -y -hide_banner -loglevel error -i work/m.pre.wav -af "volume=$(python3 -c "print(round($LUFS_TARGET - ($i), 2))")dB" -c:a pcm_s24le work/m.pre2.wav
-    mv work/m.pre2.wav work/m.pre.wav
+    # the limiter took some level: add the shortfall to the gain and try again
+    g=$(python3 -c "print(round($g + $LUFS_TARGET - ($i), 2))")
   done
   echo "mastered $2: $(integrated "$2") LUFS"
 }
 
-entrances() { python3 -c 'import json;print(",".join(str(round(e["tau"],3)) for e in json.load(open("work/cues.json"))["entrances"]))'; }
+entrances() { python3 -c 'import json;print(",".join("%.3f:%.3f" % (e["tau"], e["tauEnd"]) for e in json.load(open("work/cues.json"))["entrances"]))'; }
 
 stage_audio() {
   node --experimental-strip-types motion/scripts/export-cues.mjs > work/cues.json 2>/dev/null

@@ -36,7 +36,7 @@ buttons (display only; no track is armed), and the start state set by `driver.py
 | `motion/` | Remotion project: split client/Logic layout, close-ups per write, captions, cards (brand tokens from the landing site) |
 | `sound_design.py` | the take's audio plus generated beds where Logic is silent (opening, after stop) and sound design |
 | `scan_frames.py` | per-frame luma scan at 3 luma: fails on any isolated dropout; run on every master and deliverable |
-| `qa_audio.py` | LUFS, true peak, clipping, silence gaps from the first sample, LRA range, entrance steps, clicks |
+| `qa_audio.py` | LUFS, true peak, clipping, silence gaps from the first sample, LRA (at most 12 LU), entrance steps (>= +3 dB, measured from when the server confirmed the fader), clicks |
 | `build.sh` | `process`, `render`, `audio`, `encode`, `check`, `all`; `check` is the hard gate |
 
 ## Re-record and re-render

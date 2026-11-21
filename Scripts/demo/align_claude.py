@@ -84,6 +84,15 @@ def tempo_of(d):
     return num(st.get("tempo")) if isinstance(st, dict) else None
 
 
+def track_values(rows):
+    """Compact read-back of every track: name, fader, pan (Logic's own pan notation)."""
+    out = []
+    for t in rows:
+        v, p = num(t.get("volume")), num(t.get("pan"))
+        out.append(f"{t.get('name', '?')} {v:.2f} {pan_label(p)}" if v is not None and p is not None else str(t.get("name", "?")))
+    return " · ".join(out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tap", required=True)
@@ -104,6 +113,8 @@ def main():
     ap.add_argument("--client-name", default="Claude Code")
     ap.add_argument("--client-model", default="")
     ap.add_argument("--bpm", type=int, default=120)
+    ap.add_argument("--keep-prompts", type=int, default=0,
+                    help="end the film after this many requests: later requests and their calls are left out (and listed in session.json)")
     a = ap.parse_args()
     meta = json.load(open(a.meta))
     e0 = meta["take"]
@@ -130,7 +141,7 @@ def main():
             ev.update(kind="read", call="read", target=uri.replace("logic://", ""), ok="error" not in rm)
             if uri == "logic://tracks" and isinstance(d, dict) and isinstance(d.get("data"), list) and d["data"]:
                 names = [t.get("name", "?") for t in d["data"]]
-                ev["summary"] = f"{len(d['data'])} tracks: " + ", ".join(names)
+                ev["summary"] = track_values(d["data"])
                 ev["cache_age_s"] = d.get("cache_age_sec")
             elif uri == "logic://transport/state":
                 t_ = tempo_of(d)
@@ -146,6 +157,14 @@ def main():
         args = m["params"].get("arguments", {})
         tool, cmd, params = m["params"]["name"], args.get("command", ""), args.get("params", {}) or {}
         d = d if isinstance(d, dict) else {}
+        if d.get("read_only") is True:  # a read-only tool (e.g. logic_project.inspect_session): shown as a read, not a write
+            rows_ = ((d.get("tracks") or {}).get("rows")) or []
+            if rows_:
+                names = [r_.get("name", "?") for r_ in sorted(rows_, key=lambda r_: r_.get("track_index", 0))]
+            ev.update(kind="read", call=f"{tool}.{cmd}", target="session", ok="error" not in rm,
+                      summary=(f"{len(rows_)} tracks: " + ", ".join(names)) if rows_ else cmd)
+            evs.append(ev)
+            continue
         state = d.get("state", "-")
         ok = not rm.get("result", {}).get("isError", False) and "error" not in rm and d.get("success") is not False
         ev.update(kind="tool", call=f"{tool}.{cmd}", params=params, state=state, ok=ok, verified=d.get("verified"))
@@ -171,7 +190,8 @@ def main():
             if isinstance(now_, bool):
                 playing = now_
             ev["what"] = "Transport"
-            ev["before_after"] = f"{'playing' if was else 'stopped'} → {'playing' if now_ else 'stopped'}"
+            after_txt = "not confirmed" if now_ is None else ("playing" if now_ else "stopped")
+            ev["before_after"] = f"{'playing' if was else 'stopped'} → {after_txt}"
         ev["before"], ev["after"] = before, after
         ev["noop"] = before is not None and after is not None and abs(before - after) < 1e-3
         ev["result"] = f"State {state}" + (" · verified" if d.get("verified") else "") + (f" · {d.get('error')}" if d.get("error") else "")
@@ -181,6 +201,13 @@ def main():
         if l.strip():
             p = json.loads(l)
             prompts.append({"text": p["prompt"], "t_start": round(p["t_start"] - e0, 3), "t_enter": round(p["t_enter"] - e0, 3), "t_idle": round(p["t_idle"] - e0, 3)})
+    omitted = []
+    if a.keep_prompts and a.keep_prompts < len(prompts):
+        cut = prompts[a.keep_prompts - 1]["t_idle"]
+        omitted = [{"prompt": p["text"], "calls": [e["call"] + (f" ({e.get('state')})" if e.get("state") else "") for e in evs if e["t"] >= p["t_start"]]}
+                   for p in prompts[a.keep_prompts:]]
+        prompts = prompts[: a.keep_prompts]
+        evs = [e for e in evs if e["t"] <= cut]
     tw, th, tdur = probe(a.take)
     cw, ch, cdur = probe(a.client)
     play = next((e for e in evs if e["kind"] == "tool" and e["call"].endswith(".play")), None)
@@ -198,7 +225,7 @@ def main():
                     "take": {"seq": a.take_seq, "width": tw, "height": th, "duration": tdur},
                     "client": {"seq": a.client_seq, "width": cw, "height": ch, "duration": cdur, "offset": round(meta["client"] - e0, 3)},
                     "events": evs, "prompts": prompts, "musicStart": music,
-                    "playAt": play["t"] if play else None, "stopAt": stop["t_end"] if stop else None},
+                    "playAt": play["t"] if play else None, "stopAt": stop["t_end"] if stop else None, "omitted": omitted},
            "stats": {"calls": len(evs), "writes": len(writes), "realWrites": len(real), "noopWrites": sum(1 for e in writes if e["noop"]),
                      "verifiedRealWrites": sum(1 for e in real if e.get("verified") is True and e.get("state") == "A"),
                      "medianMs": round(statistics.median(lat)) if lat else None, "maxMs": round(lat[-1]) if lat else None,

@@ -119,15 +119,25 @@ def film_mix(cues, take, rng):
     loud = bed[np.sqrt((bed ** 2).mean(axis=1)) > 1e-4]
     rms = np.sqrt(np.mean(loud ** 2)) if len(loud) else 0.05
     gen = np.zeros_like(bed)
-    # ambient bed: from frame 0 until Logic's pad has come up
-    pad_in = next((e["tau"] for e in cues["entrances"] if e["track"] == "Pad"), cues.get("musicTau") or 4.0)
-    amb = chord(rng, pad_in + 3.0, [45, 52, 60, 64], 0.05, pad_in + 0.2, 2.6)
-    place(gen, amb / (np.max(np.abs(amb)) + 1e-9) * rms * 0.5, 0.0, total)
-    # outro: from the stop through the end card, fading to silence at the end
-    st = cues.get("stopTau") or cues["sessionEnd"]
-    out_len = cues["total"] - st
-    outro = chord(rng, out_len, [45, 57, 60, 64, 67], 0.25, out_len - 2.2, 2.2)
-    place(gen, outro / (np.max(np.abs(outro)) + 1e-9) * rms * 0.55, st, total)
+    # ambient bed: from frame 0 while Logic is silent (the requests before playback). It sits AMB_DB under the music's
+    # average level and thins out over the last seconds before the first part comes in, so that entrance is a step up.
+    pad_in = next((e["tau"] for e in cues["entrances"]), cues.get("musicTau") or 4.0)
+    amb = chord(rng, pad_in + 1.0, [45, 52, 60, 64], 0.05, max(0.0, pad_in - AMB_DIP), AMB_DIP + 0.4)
+    sustain = amb[int(0.5 * SR): int(max(0.6, pad_in - AMB_DIP) * SR)]
+    amb_rms = np.sqrt(np.mean(sustain ** 2)) if len(sustain) else 1.0
+    place(gen, amb / (amb_rms + 1e-9) * rms * 10 ** (AMB_DB / 20), 0.0, total)
+    st = cues.get("stopTau")
+    if st is not None:
+        # Logic was stopped on camera: an outro swell (Am7) carries the end card, fading to silence at the very end
+        out_len = cues["total"] - st
+        outro = chord(rng, out_len, [45, 57, 60, 64, 67], 0.25, out_len - 2.2, 2.2)
+        place(gen, outro / (np.max(np.abs(outro)) + 1e-9) * rms * 0.55, st, total)
+    else:
+        # the film ends before any stop: Logic's own music plays on under the end card and fades out with it
+        f0 = int(cues["end"]["from"] * SR)
+        n_f = total - f0
+        if n_f > 0:
+            bed[f0:] *= (np.cos(np.linspace(0, np.pi / 2, n_f)) ** 2)[:, None]
     mix = bed + gen
     fx = np.zeros_like(mix)
     for t, kind in cues["sfx"]:
@@ -140,6 +150,8 @@ def film_mix(cues, take, rng):
     return mix
 
 
+AMB_DB = -5.0  # opening bed level against the music's average RMS
+AMB_DIP = 3.0  # seconds before the first entrance over which the bed thins out
 KINDS = {"whoosh": (whoosh, -18.0), "tick": (tick, -32.0), "riser": (riser, -20.0), "boom": (boom, -16.0)}
 
 

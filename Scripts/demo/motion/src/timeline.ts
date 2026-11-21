@@ -45,16 +45,16 @@ export function plan(session: Session): Plan {
   modes.push({ from: cursor, to: end.to, kind: "act" });
   let n = 0;
   const steps = f.events
-    .filter((e) => e.kind === "tool" || e.target === "tracks")
+    .filter((e) => e.kind === "tool" || ["tracks", "transport/state", "session"].includes(e.target ?? ""))
     .map((e) => ({ ...e, tau: tau(e.t), tauEnd: tau(e.t_end), n: ++n }));
-  // social / vertical cut: the headline and first request, then from the "play" request through the drop, then the end card
+  // social / vertical cut: the headline, then from the "play" request through the drums entrance (to a bar line), then the end card
   const play = ps.findIndex((p) => /play/i.test(p.text));
-  const drop = ps.findIndex((p) => /drum/i.test(p.text));
+  const drop = ps.findIndex((p, i) => i > play && /drum/i.test(p.text)); // the drums entrance, after playback started
   const social: Plan["social"] = [];
   let s = 0;
   const seg = (a: number, b: number) => { social.push({ s0: s, len: b - a, tau0: a }); s += b - a; };
   if (play > 0 && drop >= play) {
-    seg(0, tau(ps[play].t_start) - 0.35);
+    seg(0, HEAD + 0.3); // the headline, then a cut straight to the request that starts playback
     // second segment ends one bar after the drop request went idle, on a bar line of the song
     const mt = f.musicStart != null ? tau(f.musicStart) : tau(ps[play].t_enter);
     const want = tau(ps[drop].t_idle) + 2.0;

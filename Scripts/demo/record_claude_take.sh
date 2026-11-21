@@ -51,12 +51,11 @@ launch)
   ;;
 start)
   rm -f raw/take.mov.stop raw/client.mov.stop
-  .cache/LogicCapture --bundle com.apple.logic10 --out raw/take.mov --fps 60 --max-seconds 240 > raw/take.capture.log 2>&1 &
-  .cache/LogicCapture --bundle com.apple.Terminal --title "$TITLE" --no-audio --out raw/client.mov --fps 60 --max-seconds 240 > raw/client.capture.log 2>&1 &
-  for _ in $(seq 1 100); do
-    grep -q first_frame_epoch raw/take.capture.log 2>/dev/null && grep -q first_frame_epoch raw/client.capture.log 2>/dev/null && break
-    sleep 0.1
-  done
+  # one after the other: two ScreenCaptureKit sessions starting at the same moment hang or fail with -3805
+  .cache/LogicCapture --bundle com.apple.logic10 --out raw/take.mov --fps 60 --max-seconds "${MAX_SECONDS:-420}" > raw/take.capture.log 2>&1 &
+  for _ in $(seq 1 150); do grep -q first_frame_epoch raw/take.capture.log 2>/dev/null && break; sleep 0.1; done
+  .cache/LogicCapture --bundle com.apple.Terminal --title "${CLIENT_TITLE:-attach -t $SESSION}" --no-audio --out raw/client.mov --fps 60 --max-seconds "${MAX_SECONDS:-420}" > raw/client.capture.log 2>&1 &
+  for _ in $(seq 1 150); do grep -q first_frame_epoch raw/client.capture.log 2>/dev/null && break; sleep 0.1; done
   python3 - <<'PY'
 import json, re, sys
 meta = {}

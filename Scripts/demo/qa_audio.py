@@ -9,7 +9,8 @@ Checks (all measured, none assumed):
   * loudness range (EBU R128 LRA); with --lra LO,HI it must fall inside that range
   * silence gaps: any run below -60 dBFS longer than 0.35 s anywhere from the first sample (no opening exemption);
     only the last --end-guard seconds (the intentional closing fade) are exempt
-  * entrance steps: with --entrances, the RMS level of the 2 s after each time minus the 2 s before (must be >= 3 dB)
+  * entrance steps: with --entrances t[:t_done],..., the RMS level of the 2 s from t_done (the server confirmed the fader at its
+    value; t_done = t if omitted) minus the 2 s before t, when the request was sent (must be >= 3 dB)
   * clicks: sample-to-sample jumps far outside the signal's own distribution (reported, must be 0 over 6 sigma-of-diff x 40)
 """
 import json
@@ -28,7 +29,7 @@ def opt(name, default=None):
 def main():
     path = sys.argv[1]
     end_guard = float(opt("--end-guard", "1.5"))
-    entrances = [float(v) for v in opt("--entrances", "").split(",") if v.strip()]
+    entrances = [tuple(float(u) for u in v.split(":")) if ":" in v else (float(v), float(v)) for v in opt("--entrances", "").split(",") if v.strip()]
     lra_range = [float(v) for v in opt("--lra").split(",")] if opt("--lra") else None
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128=peak=true", "-f", "null", "-"], capture_output=True, text=True)
     tail = r.stderr[r.stderr.rfind("Summary:"):]
@@ -63,8 +64,8 @@ def main():
     def rms(a, b):
         seg = x[max(0, int(a * sr)): max(0, int(b * sr))]
         return 20 * np.log10(np.sqrt(np.mean(seg ** 2)) + 1e-9) if len(seg) else -120.0
-    steps = [{"t": t, "before_db": round(rms(t - 2, t), 1), "after_db": round(rms(t, t + 2), 1), "step_db": round(rms(t, t + 2) - rms(t - 2, t), 1)}
-             for t in entrances]
+    steps = [{"t": t, "t_done": td, "before_db": round(rms(t - 2, t), 1), "after_db": round(rms(td, td + 2), 1),
+              "step_db": round(rms(td, td + 2) - rms(t - 2, t), 1)} for t, td in entrances]
     rep = {"integrated_lufs": lufs, "loudness_range_lu": lra, "true_peak_dbtp": tp, "clipped_samples": clipped,
            "silence_gaps_start_s": gaps, "end_guard_s": end_guard, "click_candidates": clicks, "duration_s": round(len(x) / sr, 2),
            "entrance_steps": steps}

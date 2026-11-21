@@ -62,7 +62,8 @@ const targetOf = (call: string, track: number | null | undefined, readTarget?: s
   if (call.endsWith("set_tempo")) return LOGIC.lcd;
   if (call.endsWith(".play") || call.endsWith(".stop")) return LOGIC.transport;
   if ((call.endsWith("set_volume") || call.endsWith("set_pan")) && typeof track === "number") return rowTarget(track);
-  if (readTarget === "tracks") return LOGIC.tracks;
+  if (readTarget === "tracks" || readTarget === "session") return LOGIC.tracks;
+  if (readTarget === "transport/state") return LOGIC.lcd;
   return MEDIUM;
 };
 
@@ -170,7 +171,8 @@ const shortCall = (call: string) => call.replace(/^logic_/, "");
 /** One chip per write, in order: what changed, before → after, and what the server answered. Sizes for 1920 wide. */
 const StepChip: React.FC<{ s: Plan["steps"][number]; a: number; scale: number }> = ({ s, a, scale }) => {
   const isRead = s.kind === "read";
-  const title = isRead ? "Reads the tracks" : s.noop ? `${s.what} (no change)` : s.what;
+  const READS: Record<string, string> = { tracks: "Reads the tracks back", "transport/state": "Reads the transport", session: "Reads the session" };
+  const title = isRead ? READS[s.target ?? ""] ?? "Reads Logic" : s.noop ? `${s.what} (no change)` : s.what;
   return (
     <div style={{ opacity: a, transform: `translateY(${(1 - a) * 24}px)`, background: "rgba(16,21,18,0.95)", borderLeft: `${8 * scale}px solid ${C.acid}`,
       borderRadius: 16 * scale, padding: `${14 * scale}px ${26 * scale}px ${16 * scale}px`, marginTop: 12 * scale, boxShadow: "0 18px 40px rgba(0,0,0,0.45)" }}>
@@ -180,7 +182,7 @@ const StepChip: React.FC<{ s: Plan["steps"][number]; a: number; scale: number }>
         {!isRead && s.before_after && <Mono size={50 * scale} color={C.acid} style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{s.before_after}</Mono>}
       </div>
       <Mono size={28 * scale} color={C.sage} style={{ marginTop: 4 * scale, whiteSpace: "nowrap" }}>
-        {isRead ? `${s.summary ?? "logic://tracks"} · ${Math.round(s.ms)} ms` : `${shortCall(s.call)} · ${s.result ?? ""} · ${Math.round(s.ms)} ms`}
+        {isRead ? `${s.summary ?? s.target} · ${Math.round(s.ms)} ms` : `${shortCall(s.call)} · ${s.result ?? ""} · ${Math.round(s.ms)} ms`}
       </Mono>
     </div>
   );
@@ -258,7 +260,7 @@ export const LaunchFilm: React.FC = () => {
   let client: { x: number; y: number; w: number; h: number }, logic: { x: number; y: number; w: number; h: number };
   if (!vertical) {
     const top = 210, bottom = 92;
-    const cw = 880 - 270 * m; // the client panel narrows from 880 px (typing) to 610 px (Claude acting in Logic)
+    const cw = 880 - 140 * m; // the client panel narrows from 880 px (typing) to 740 px (Claude acting in Logic)
     client = { x: pad, y: top, w: cw, h: H - top - bottom };
     logic = { x: pad + cw + 28, y: top, w: W - (pad + cw + 28) - pad, h: H - top - bottom };
   } else {
@@ -299,7 +301,7 @@ export const LaunchFilm: React.FC = () => {
       </div>
 
       <div style={{ position: "absolute", left: pad, bottom: vertical ? 40 : 30, fontFamily: MONO, fontSize: 28, color: C.paper, opacity: 0.85 }}>
-        Real {session.meta.client} session{session.meta.model ? ` (${session.meta.model})` : ""} · live Logic Pro · real time, nothing cut
+        Real {session.meta.client} session{session.meta.model ? ` (${session.meta.model})` : ""} · live Logic Pro · 1.0x, one continuous take
       </div>
 
       {/* headline: frame 0 is this finished frame (it is the poster and the thumbnail) */}

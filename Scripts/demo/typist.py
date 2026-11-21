@@ -15,6 +15,7 @@ started, when Return was pressed and when the turn went idle, on the same wall c
 import argparse
 import json
 import random
+import re
 import subprocess
 import time
 
@@ -29,9 +30,12 @@ def pane(target):
     return tmux("capture-pane", "-p", "-t", target).stdout
 
 
+SPINNER = re.compile(r"\w…\s*\(\d+s")  # Claude Code's status line while a turn runs, e.g. "Pondering… (3s · ↓ 120 tokens)"
+
+
 def busy(text):
     low = text.lower()
-    return any(m in low for m in BUSY_MARKS)
+    return any(m in low for m in BUSY_MARKS) or bool(SPINNER.search(text))
 
 
 def wait_idle(target, settle, timeout):
