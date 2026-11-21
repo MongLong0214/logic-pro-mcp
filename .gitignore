@@ -5,6 +5,9 @@ xcuserdata/
 DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
+.env
+.env.*
+!.env.example
 *.xcodeproj
 .agents/
 .codex/
