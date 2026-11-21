@@ -16,6 +16,8 @@ DerivedData/
 AGENTS.md
 *.profraw
 /coverage-report.txt
+/.tmp-doctor-wait.json
+/mcp-connection-proof.json
 .review-logs/
 .mcpregistry_github_token
 .mcpregistry_registry_token
