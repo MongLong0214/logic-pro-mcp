@@ -254,6 +254,8 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     expected = "docs-only" if case == "roadmap" else "full"
                     self.assertIn(f"mode={expected}\n", output.read_text())
+                    native = "true" if case in ("source_to_docs", "symlink", "empty") else "false"
+                    self.assertIn(f"native-required={native}\n", output.read_text())
 
     def test_real_locale_refusals_reach_the_required_gate_even_for_docs_only(self):
         workflow = read(".github/workflows/ci.yml")
