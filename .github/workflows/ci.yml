@@ -41,6 +41,7 @@ jobs:
     outputs:
       mode: ${{ steps.scope.outputs.mode }}
       full-validation: ${{ steps.scope.outputs.full-validation }}
+      native-required: ${{ steps.scope.outputs.native-required }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -62,7 +63,17 @@ jobs:
             mode=docs-only
           fi
           if [ "$mode" = full ]; then full_validation=true; else full_validation=false; fi
+          # Native Logic qualification covers the release binary built from Sources, so it is
+          # required only when a change touches Sources/, Tests/, Package.swift or Package.resolved.
+          # An empty diff or a symlink/submodule entry still requires it.
+          native_required=true
+          if [ -s "$changes" ] &&
+             ! LC_ALL=C grep -Ev '^:(100644|100755|000000) (100644|100755|000000) [0-9a-f]{40} [0-9a-f]{40} [A-Z][[:space:]][^[:space:]]+$' "$changes" > /dev/null &&
+             ! LC_ALL=C grep -Eq '^:[^[:space:]]+ [^[:space:]]+ [0-9a-f]{40} [0-9a-f]{40} [A-Z][[:space:]](Sources/|Tests/|Package[.]swift$|Package[.]resolved$)' "$changes"; then
+            native_required=false
+          fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "native-required=$native_required" >> "$GITHUB_OUTPUT"
           echo "full-validation=$full_validation" >> "$GITHUB_OUTPUT"
 
   # Canon and locale validation is intentionally independent of change-scope. A documentation
@@ -498,7 +509,7 @@ jobs:
   # hosted-runner skip or source-only substitute can produce success.
   native-logic-e2e:
     name: native-logic-e2e
-    needs: [release-build, product-validation]
+    needs: [change-scope, release-build, product-validation]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -508,6 +519,7 @@ jobs:
       statuses: read
     steps:
       - name: Require successful exact-artifact native Logic qualification
+        if: ${{ needs.change-scope.outputs.native-required != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_ATTEMPT: ${{ github.run_attempt }}
