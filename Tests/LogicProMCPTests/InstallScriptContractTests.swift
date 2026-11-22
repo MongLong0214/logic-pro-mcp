@@ -284,7 +284,12 @@ import Testing
     #expect(gate.contains("LPM_COVERAGE_TARGET:-90"))
 
     let forbidden = "set " + "+e"
-    #expect(!workflow.contains(forbidden))
+    // The one sanctioned use is the native-status wait loop, which must read the consumer's exit
+    // code 3 ("no status yet") instead of dying on it. Everything else stays fail-closed.
+    let nativeWaitReadsExitCode = "            \(forbidden)\n            python3 - "
+    #expect(workflow.components(separatedBy: forbidden).count - 1 == 1)
+    #expect(workflow.contains(nativeWaitReadsExitCode))
+    #expect(!workflow.replacingOccurrences(of: nativeWaitReadsExitCode, with: "").contains(forbidden))
     #expect(!gate.contains(forbidden))
     #expect(!workflow.contains("lets transient instrumentation flakes"))
 }
