@@ -63,12 +63,13 @@ jobs:
             mode=docs-only
           fi
           if [ "$mode" = full ]; then full_validation=true; else full_validation=false; fi
-          # Native Logic qualification is skipped only when every changed path is a document,
-          # the demo pipeline or media: docs/**, top-level *.md, Scripts/demo/**. Anything else,
-          # an empty diff, or a symlink/submodule entry still requires it.
+          # Native Logic qualification covers the release binary built from Sources, so it is
+          # required only when a change touches Sources/, Tests/, Package.swift or Package.resolved.
+          # An empty diff or a symlink/submodule entry still requires it.
           native_required=true
           if [ -s "$changes" ] &&
-             ! LC_ALL=C grep -Ev '^:(100644|100755|000000) (100644|100755|000000) [0-9a-f]{40} [0-9a-f]{40} [A-Z][[:space:]](docs/[^[:space:]]+|[^/[:space:]]+[.]md|Scripts/demo/[^[:space:]]+)$' "$changes" > /dev/null; then
+             ! LC_ALL=C grep -Ev '^:(100644|100755|000000) (100644|100755|000000) [0-9a-f]{40} [0-9a-f]{40} [A-Z][[:space:]][^[:space:]]+$' "$changes" > /dev/null &&
+             ! LC_ALL=C grep -Eq '^:[^[:space:]]+ [^[:space:]]+ [0-9a-f]{40} [0-9a-f]{40} [A-Z][[:space:]](Sources/|Tests/|Package[.]swift$|Package[.]resolved$)' "$changes"; then
             native_required=false
           fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
