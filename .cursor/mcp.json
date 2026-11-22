@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "logic-pro": {
-      "command": "LogicProMCP"
+      "command": "/Users/roland/.local/bin/LogicProMCP"
     }
   }
 }
