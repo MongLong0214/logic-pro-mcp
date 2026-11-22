@@ -209,7 +209,7 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             "consumed_readme": lambda root: (root / "README.md").write_text("updated\n"),
             "canon": lambda root: (root / "docs/canon/MANIFEST.json").write_text("{}\n"),
             "locale": lambda root: (root / "docs/locale/ui-labels.json").write_text("{}\n"),
-            "source_to_docs": lambda root: (root / "source.swift").rename(root / "docs/source.md"),
+            "source_to_docs": lambda root: (root / "Sources/source.swift").rename(root / "docs/source.md"),
             "deleted": lambda root: (root / "docs/roadmap/README.md").unlink(),
             "added_roadmap": lambda root: (root / "docs/roadmap/README.md").write_text("new\n"),
             "executable": lambda root: (root / "docs/roadmap/README.md").chmod(0o755),
@@ -230,7 +230,7 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                 def git(*args):
                     return subprocess.check_output(["git", *args], cwd=root, env=env, text=True)
                 git("init", "-q")
-                for path in ("docs/roadmap/README.md", "README.md", "source.swift",
+                for path in ("docs/roadmap/README.md", "README.md", "Sources/source.swift",
                              "docs/canon/MANIFEST.json", "docs/locale/ui-labels.json"):
                     file = root / path
                     file.parent.mkdir(parents=True, exist_ok=True)
@@ -254,6 +254,8 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     expected = "docs-only" if case == "roadmap" else "full"
                     self.assertIn(f"mode={expected}\n", output.read_text())
+                    native = "true" if case in ("source_to_docs", "symlink", "empty") else "false"
+                    self.assertIn(f"native-required={native}\n", output.read_text())
 
     def test_real_locale_refusals_reach_the_required_gate_even_for_docs_only(self):
         workflow = read(".github/workflows/ci.yml")
