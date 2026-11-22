@@ -235,13 +235,24 @@ struct PluginInsertLeafConfigurationTests {
         // built from, so this asserts the SHAPE (a path ends in a configuration) rather than
         // re-stating a vocabulary that has somewhere else to live.
         let configurations = Set(AXLocalePolicy.pluginFormatStereo.labels)
-        for name in ["Gain", "Compressor", "Channel EQ"] {
+        for name in ["Gain", "Compressor", "Channel EQ", "Pitch Shifter"] {
             let spec = try #require(AccessibilityChannel.pluginInsertSpec(named: name))
             #expect(!spec.menuPaths.isEmpty, "\(name)")
             for path in spec.menuPaths {
                 let last = try #require(path.last)
                 #expect(configurations.contains(last), "\(name): path ends in \(last)")
             }
+        }
+    }
+
+    @Test("Pitch Shifter resolves by name and alias to the English Pitch path with every measured leaf")
+    func pitchShifterSpec() throws {
+        for name in ["Pitch Shifter", "pitch shifter", "PitchShifter", " pitchshifter "] {
+            let spec = try #require(AccessibilityChannel.pluginInsertSpec(named: name), Comment(rawValue: name))
+            #expect(spec.canonicalName == "Pitch Shifter")
+            #expect(spec.aliases == ["Pitch Shifter", "PShft"])
+            #expect(spec.menuPaths.allSatisfy { $0.prefix(2) == ["Pitch", "Pitch Shifter"] && $0.count == 3 })
+            #expect(Set(spec.menuPaths.map { $0[2] }) == Set(AXLocalePolicy.pluginFormatStereo.labels))
         }
     }
 }

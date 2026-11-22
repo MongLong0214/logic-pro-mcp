@@ -677,7 +677,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             let pluginName = stringParam(params, "plugin_name", "plugin", "name")
             guard let spec = AccessibilityChannel.pluginInsertSpec(named: pluginName) else {
                 return toolInvalidParamsResult(
-                    "insert_plugin unsupported plugin '\(pluginName)'. Supported stock plugins: Gain, Compressor, Channel EQ",
+                    "insert_plugin unsupported plugin '\(pluginName)'. Supported stock plugins: Gain, Compressor, Channel EQ, Pitch Shifter",
                     extras: ["operation": "mixer.insert_plugin"]
                 )
             }

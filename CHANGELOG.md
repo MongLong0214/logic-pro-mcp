@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-- No caller-facing changes have landed after the v3.19.0 source candidate.
+- `insert_plugin` accepts Pitch Shifter (idea from RolandGasparyan, #1615). Its Pitch category is English in every measured locale and the stereo/mono leaf comes from the existing label set; the Pitch Shifter item and its format submenu inside the Pitch menu have not been measured, so a Logic that words them differently refuses rather than guesses.
 
 ---
 

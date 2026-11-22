@@ -43,6 +43,15 @@ extension AccessibilityChannel {
                 aliases: ["Channel EQ"],
                 menuPaths: insertPaths([["Channel EQ"], ["EQ", "Channel EQ"]])
             )
+        case "pitch shifter", "pitchshifter":
+            // Idea from RolandGasparyan (#1615). The "Pitch" category is English in all ten
+            // measured locales (docs/observations plugin menu evidence); the format leaf comes
+            // from the LabelSet like the other three, never a hand-typed translation.
+            return PluginInsertSpec(
+                canonicalName: "Pitch Shifter",
+                aliases: ["Pitch Shifter", "PShft"],
+                menuPaths: insertPaths([["Pitch", "Pitch Shifter"]])
+            )
         default:
             return nil
         }
@@ -85,7 +94,7 @@ extension AccessibilityChannel {
             }
             return .error(HonestContract.encodeStateC(
                 error: .invalidParams,
-                hint: "unsupported plugin for insert_plugin. Supported stock plugins: Gain, Compressor, Channel EQ",
+                hint: "unsupported plugin for insert_plugin. Supported stock plugins: Gain, Compressor, Channel EQ, Pitch Shifter",
                 extras: ["requested_plugin_name": requestedPluginName]
             ))
         }
