@@ -1,0 +1,14 @@
+# The requests for the re-record, one per line, typed by typist.py --file requests.txt. Written as a musician would say
+# them: no tool names, no parameter values. Claude picks the values; the film shows what it chose, from the tap log.
+# "@N request" waits N seconds after the previous turn instead of the default gap.
+# Order matters for the cut-downs (timeline.ts looks for /play/, then /drum/, then /lead/): playback and the first part
+# come early, so Logic is heard within about 30 s, and the pans come after the music is playing, where they can be heard.
+What's in this session, and how fast is it?
+Bring the tempo up to 120.
+Every fader is all the way down. Start playback and bring the pad up.
+Now bring the keys up.
+Bring the bass up.
+Bring the drums up.
+And the lead up, right up front.
+Pan the keys a little left and ease the drums back a touch.
+How does the mix look now? Read it back to me.
