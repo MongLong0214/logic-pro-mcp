@@ -96,7 +96,7 @@ struct OperationRegistryCoverageTests {
 
         // Exact target membership below covers additions without a redundant global count.
         #expect(targetBearingIDs == expectedTargetBearingIDs)
-        #expect(targetless.count == 79)   // #971 internally binds a retained project approval
+        #expect(targetless.count == 80)   // #971 internally binds a retained project approval
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
         #expect(readOnly.count + mutating.count == OperationRegistry.specs.count)
         #expect(readOnly.contains { $0.id == .pluginsGetParamVerified })

@@ -128,10 +128,11 @@ enum AXLogicProElements {
     ///   1. Read every window via `kAXWindowsAttribute`.
     ///   2. Skip windows whose `AXSubrole` is `AXDialog` / `AXSystemDialog`
     ///      (modal sheets/panels).
-    ///   3. Prefer a non-dialog window that contains the track-header rail
-    ///      (the real arrange window).
-    ///   4. Fall back to the first non-dialog window.
-    ///   5. Only fall back to `kAXMainWindowAttribute` if no windows are
+    ///   3. Prefer a non-dialog window whose title ends in Logic's localized
+    ///      arrange-view suffix (`<project> - Tracks`, `<project> - 트랙`, …).
+    ///   4. Otherwise prefer one that contains the track-header rail.
+    ///   5. Fall back to the first non-dialog window.
+    ///   6. Only fall back to `kAXMainWindowAttribute` if no windows are
     ///      enumerable — preserves test-double behavior that builds a minimal
     ///      AX tree without a windows array.
     static func mainWindow(runtime: Runtime = .production) -> AXUIElement? {
@@ -156,12 +157,21 @@ enum AXLogicProElements {
             return AXHelpers.getAttribute(app, kAXMainWindowAttribute, runtime: runtime.ax)
         }
 
-        // Step 3 — prefer the arrange window (has Track Headers group).
+        // Step 3 — prefer Logic's exact localized arrange-window title. Auxiliary
+        // list windows can also contain selected AXLayoutItem rows, so their
+        // structure alone is not a safe ownership witness.
+        if let arrange = nonDialogs.first(where: {
+            hasLocalizedArrangeWindowTitle($0, runtime: runtime.ax)
+        }) {
+            return arrange
+        }
+
+        // Step 4 — compatibility fallback for untitled/test-double windows.
         if let arrange = nonDialogs.first(where: { hasTrackHeadersGroup($0, runtime: runtime.ax) }) {
             return arrange
         }
 
-        // Step 4 — fallback: first non-dialog window.
+        // Step 5 — fallback: first non-dialog window.
         return nonDialogs.first
     }
 
@@ -186,6 +196,11 @@ enum AXLogicProElements {
             // With one candidate both the rail preference and the fallback
             // choose this exact window; no descendant search can change it.
             if nonDialogs.count == 1 { return .found(nonDialogs[0]) }
+            if let arrange = nonDialogs.first(where: {
+                hasLocalizedArrangeWindowTitle($0, runtime: runtime.ax)
+            }) {
+                return .found(arrange)
+            }
             if let arrange = nonDialogs.first(where: {
                 hasTrackHeadersGroup($0, runtime: runtime.ax)
             }) {
@@ -220,6 +235,11 @@ enum AXLogicProElements {
             let nonDialogs = windows.filter { !isDialogWindow($0, runtime: runtime.ax) }
             guard !nonDialogs.isEmpty else { return .absent }
             if nonDialogs.count == 1 { return .found(nonDialogs[0]) }
+            if let arrange = nonDialogs.first(where: {
+                hasLocalizedArrangeWindowTitle($0, runtime: runtime.ax)
+            }) {
+                return .found(arrange)
+            }
             if let arrange = nonDialogs.first(where: {
                 hasTrackHeadersGroup($0, runtime: runtime.ax)
             }) {
@@ -975,6 +995,24 @@ enum AXLogicProElements {
         guard AXHelpers.getRole(child, runtime: runtime) == (kAXButtonRole as String) else { return false }
         let description: String = AXHelpers.getAttribute(child, kAXDescriptionAttribute, runtime: runtime) ?? ""
         return description.hasPrefix("com.apple.keylayout.")
+    }
+
+    /// True only for Logic's localized arrange-window title shape. Requiring
+    /// a non-empty project name prevents a bare view label from becoming an
+    /// ownership witness, while using the shared locale policy keeps this
+    /// independent of the machine's current UI language.
+    private static func hasLocalizedArrangeWindowTitle(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let title: String = AXHelpers.getAttribute(
+            window, kAXTitleAttribute, runtime: runtime
+        ) ?? ""
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return AXLocalePolicy.arrangeWindowTitleSuffix.labels.contains { label in
+            let suffix = " - \(label)"
+            return normalized.hasSuffix(suffix) && normalized.count > suffix.count
+        }
     }
 
     /// True when `window` contains Logic's track-header rail. Used by

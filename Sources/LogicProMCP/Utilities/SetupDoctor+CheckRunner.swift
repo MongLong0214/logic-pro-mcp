@@ -72,12 +72,6 @@ extension SetupDoctor {
             )
         case .installShareDir:
             return installShareDirCheck(runtime: context.runtime, installSource: context.installSource)
-        case .releaseSignature:
-            return releaseSignatureCheck(
-                executablePath: context.executablePath,
-                runtime: context.runtime,
-                checks: checks
-            )
         case .releaseQuarantine:
             return releaseQuarantineCheck(
                 executablePath: context.executablePath,
@@ -132,6 +126,8 @@ extension SetupDoctor {
             return keycmdReferenceCheck(runtime: context.runtime, profile: context.doctorProfile)
         case .channelsMCUWiringHint:
             return mcuWiringHintCheck(runtime: context.runtime, profile: context.doctorProfile)
+        case .channelsRuntimeEndpointOwnership:
+            return runtimeEndpointOwnershipCheck()
         case .dependenciesClickFallback:
             return clickFallbackCheck(
                 runtime: context.runtime,

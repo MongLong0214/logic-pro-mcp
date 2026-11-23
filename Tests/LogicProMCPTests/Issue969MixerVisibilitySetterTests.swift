@@ -239,6 +239,27 @@ struct Issue969MixerVisibilitySetterTests {
         }
     }
 
+    @Test("a focused element whose role does not read cannot authorize a view change",
+          arguments: ["show", "hide"])
+    func aFocusWhoseRoleDoesNotReadCannotAuthorizeAViewChange(profile: String) async throws {
+        let initial = profile == "hide"
+        let fixture = Fixture(showing: initial)
+        let background = fixture.builder.element(969_086)
+        fixture.builder.setChildren(background, [])
+        fixture.extraWindowChildren = [background]
+        fixture.updateVisibility()
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, background)
+        fixture.builder.setAttributeSettable(background, kAXFocusedAttribute as String, true)
+        fixture.additionalRestorableFocus = background
+        fixture.permitsCapturedFocusRestore = true
+        let body = try await set(fixture, visible: !initial)
+        #expect(body["state"] as? String == "C")
+        let attempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(fixture.events.isEmpty)
+        if initial { #expect(fixture.showing) } else { #expect(!fixture.showing) }
+    }
+
     @Test(arguments: [false, true])
     func focusQualificationIsRenewedBeforeTheVisibilityLeaf(initial: Bool) async throws {
         let fixture = Fixture(showing: initial)

@@ -36,12 +36,38 @@ extension AccessibilityChannel {
     static func defaultGetMixerStates(
         runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
     ) -> (states: [ChannelStripState]?, yielded: Bool) {
+        enum PollYield: Error { case requested }
         if stop() { return (nil, true) }
-        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
-              case .found(let mixer) = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime),
+        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+        else { return (nil, false) }
+        let lookup: AXLogicProElements.MixerAreaLookup
+        do {
+            let shallow = try AXLogicProElements.shallowOwnedMixerPopulationAreaBinding(
+                in: window, runtime: runtime, checking: {
+                    if stop() { throw PollYield.requested }
+                }
+            )
+            if let shallow {
+                lookup = .found(shallow.mixer)
+            } else {
+                lookup = try AXLogicProElements.mixerPopulationAreaLookup(
+                    in: window, runtime: runtime, checking: {
+                        if stop() { throw PollYield.requested }
+                    }
+                ).lookup
+            }
+        } catch PollYield.requested {
+            return (nil, true)
+        } catch {
+            return (nil, false)
+        }
+        guard case .found(let mixer) = lookup,
               let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime.ax)
         else { return (nil, false) }
-        let states = readChannelStrips(from: enumeration.strips, runtime: runtime, window: window, mixer: mixer, stoppingWhen: stop)
+        let states = readChannelStrips(
+            from: enumeration.strips, runtime: runtime, window: window, mixer: mixer,
+            sharingHelpWithinBoundStripRead: true, stoppingWhen: stop
+        )
         return (states, stop())
     }
 
@@ -50,7 +76,8 @@ extension AccessibilityChannel {
         from strips: [AXUIElement], runtime: AXLogicProElements.Runtime,
         window: AXUIElement? = nil, mixer: AXUIElement? = nil,
         readingPlugins: Bool = true, readingRouting: Bool = true,
-        readingScalarHelp: Bool = true, stoppingWhen stop: () -> Bool
+        readingScalarHelp: Bool = true, sharingHelpWithinBoundStripRead: Bool = false,
+        stoppingWhen stop: () -> Bool
     ) -> [ChannelStripState]? {
         var channelStrips: [ChannelStripState] = []
         let document: String?
@@ -62,8 +89,15 @@ extension AccessibilityChannel {
 
         for (index, strip) in strips.enumerated() {
             if stop() { return nil }
-            let samples = (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
-                ? AXHelpers.StripHelpSamples() : nil
+            let ownsAcquisition = (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+            // A poller's strip came from this exact window/Mixer population, and is read-only.
+            // Freeze only its raw Help statuses for this one strip extraction so independent
+            // classifiers do not repeat the same focus-moving native read. The next strip and
+            // next poll get new samples; callers without the bound-poll signal retain the owned
+            // acquisition requirement.
+            let readOnlyBound = sharingHelpWithinBoundStripRead && window != nil && mixer != nil
+            let samples = ownsAcquisition || readOnlyBound
+                ? AXHelpers.StripHelpSamples(permitsReadOnlyBoundExtraction: readOnlyBound) : nil
             let state = AXHelpers.StripHelpSamples.$current.withValue(samples) {
                 func readScalars() -> (volume: Double?, pan: Double?, observedVolume: ChannelStripState.ScalarReadback?, observedPan: ChannelStripState.ScalarReadback?) {
                     func observed(_ control: AXUIElement?, failures: AXPluginInstanceIdentity.FailedReads) -> ChannelStripState.ScalarReadback? {
@@ -302,6 +336,7 @@ extension AccessibilityChannel {
         // the nearest detent and read back every step. #973: an AXValue write does
         // not jump to the written value (`set 0.5` on a 0.76 fader looked unmoved),
         // but on Logic 12.3.1 it moved one raw unit toward it, which the fine phase uses.
+        var headerReadForDiagnostics: AXLogicProElements.TrackHeaderRead = .unavailable
         let slider: AXUIElement?
         if let physical {
             switch target {
@@ -309,10 +344,44 @@ extension AccessibilityChannel {
             case .pan: slider = AXLogicProElements.findPanControl(in: physical.strip, runtime: runtime.ax, requireUnique: true)
             }
         } else {
-            switch target {
-            case .volume: slider = AXLogicProElements.findTrackHeaderVolumeFader(at: index, runtime: runtime)
-            case .pan: slider = AXLogicProElements.findTrackHeaderPanControl(at: index, runtime: runtime)
+            func control(in header: AXUIElement) -> AXUIElement? {
+                switch target {
+                case .volume:
+                    return AXLogicProElements.findVolumeFader(in: header, runtime: runtime.ax)
+                case .pan:
+                    return AXLogicProElements.findPanControlInHeader(header, runtime: runtime.ax)
+                }
             }
+
+            var resolved: AXUIElement?
+            if let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime) {
+                headerReadForDiagnostics = AXLogicProElements.allTrackHeadersRead(
+                    in: arrangeWindow, runtime: runtime
+                )
+                if case .read(let headers) = headerReadForDiagnostics,
+                   index >= 0, index < headers.count {
+                    resolved = control(in: headers[index])
+                    if resolved == nil,
+                       AXHelpers.performAction(
+                        arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax
+                       ) {
+                        // Logic 13 can keep a complete background header population while omitting
+                        // its pan/volume descendants until the Arrange window is foreground. Raise
+                        // only the exact window already resolved above, settle once, then bind the
+                        // control from one fresh read of that same window. No global key command or
+                        // arbitrary front-window action is used.
+                        usleep(100_000)
+                        headerReadForDiagnostics = AXLogicProElements.allTrackHeadersRead(
+                            in: arrangeWindow, runtime: runtime
+                        )
+                        if case .read(let refreshedHeaders) = headerReadForDiagnostics,
+                           index < refreshedHeaders.count {
+                            resolved = control(in: refreshedHeaders[index])
+                        }
+                    }
+                }
+            }
+            slider = resolved
         }
         guard let slider else {
             if physical != nil {
@@ -333,10 +402,7 @@ extension AccessibilityChannel {
             // name which of them happened — reporting "list not found, header_count 0" for
             // a rail that WAS found but could not be traversed sends the reader hunting for
             // a missing Tracks area that is on screen. Zero is evidence only in `.read([])`.
-            let headersRead: AXLogicProElements.TrackHeaderRead = AXLogicProElements
-                .mainWindow(runtime: runtime)
-                .map { AXLogicProElements.allTrackHeadersRead(in: $0, runtime: runtime) }
-                ?? .unavailable
+            let headersRead = headerReadForDiagnostics
 
             // nil = the header at `index` WAS resolved; the slider search decides the step.
             var stepBeforeHeader: String?

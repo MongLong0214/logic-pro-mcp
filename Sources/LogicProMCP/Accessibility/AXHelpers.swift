@@ -224,10 +224,16 @@ enum AXHelpers {
     final class StripHelpSamples: @unchecked Sendable {
         @TaskLocal static var current: StripHelpSamples?
         private let lock = NSLock()
+        private let permitsReadOnlyBoundExtraction: Bool
         private var values: [(AXUIElement, Result<AnyObject?, AXStatusError>)] = []
 
+        init(permitsReadOnlyBoundExtraction: Bool = false) {
+            self.permitsReadOnlyBoundExtraction = permitsReadOnlyBoundExtraction
+        }
+
         func read(_ element: AXUIElement, runtime: Runtime) -> Result<AnyObject?, AXStatusError> {
-            guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+            guard (permitsReadOnlyBoundExtraction
+                    || (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil),
                   HelpReadGuard.current?.stopped != true else {
                 return .failure(.init(raw: AXError.cannotComplete.rawValue))
             }

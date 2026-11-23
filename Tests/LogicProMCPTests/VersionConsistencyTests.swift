@@ -40,6 +40,142 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
     return nil
 }
 
+private func forbiddenPublishedClaims(forUnpublishedCandidate version: String) -> [String] {
+    [
+        "stable-v\(version)-",
+        "The current stable line is `v\(version)`",
+        "**Current stable**: `v\(version)`",
+        "[v\(version)](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v\(version))",
+    ]
+}
+
+@Test func unpublished_candidate_wording_guard_rejects_stable_claims() {
+    let counterexamples = [
+        "<img src=\"https://img.shields.io/badge/stable-v9.8.7-blue.svg\" />",
+        "The current stable line is `v9.8.7` (cut today).",
+        "| Release state | **Current stable**: `v9.8.7` |",
+        "Download [v9.8.7](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v9.8.7) now.",
+    ]
+    let forbiddenClaims = forbiddenPublishedClaims(forUnpublishedCandidate: "9.8.7")
+    #expect(forbiddenClaims.count == 4)
+
+    let caughtCounterexamples = counterexamples.filter { counterexample in
+        forbiddenClaims.contains { counterexample.contains($0) }
+    }
+    #expect(
+        caughtCounterexamples.count == counterexamples.count,
+        "the prepublication wording guard must catch every independent stable-claim counterexample"
+    )
+}
+
+private struct SemanticVersion: Comparable {
+    let parts: [Int]
+
+    init?(_ text: String) {
+        let parts = text.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
+        guard parts.count == 3, parts.allSatisfy({ $0 != nil }) else { return nil }
+        self.parts = parts.compactMap { $0 }
+    }
+
+    static func < (lhs: SemanticVersion, rhs: SemanticVersion) -> Bool {
+        lhs.parts.lexicographicallyPrecedes(rhs.parts)
+    }
+}
+
+/// Every way the Homebrew Formula's version can disagree with the source and the registry record,
+/// decided from repository files alone. Empty means consistent.
+///
+/// Whether the version the Formula names is published, and whether its sha256 is that release's,
+/// cannot be decided offline. That half needs GitHub and a token, and it runs as its own CI step
+/// (`ci-verify-formula-sha.sh`, pinned by `formulaPublicationIsCheckedByACredentialedCIStep`).
+/// Native qualification runs the unit suite with no GitHub credentials on purpose, so a unit test
+/// that asked GitHub failed there with `HTTP none` whatever the files said.
+private func formulaVersionViolations(
+    formulaVersion: String,
+    sourceVersion: String,
+    registryVersion: String,
+    registryReleaseURL: String
+) -> [String] {
+    guard let formula = SemanticVersion(formulaVersion) else {
+        return ["Formula version '\(formulaVersion)' is not MAJOR.MINOR.PATCH"]
+    }
+    guard let source = SemanticVersion(sourceVersion) else {
+        return ["source version '\(sourceVersion)' is not MAJOR.MINOR.PATCH"]
+    }
+    var violations: [String] = []
+    if source < formula {
+        violations.append("Formula v\(formulaVersion) is newer than source v\(sourceVersion)")
+    }
+    // The registry record names the release the Formula names (check-registry-metadata-matches-
+    // the-release.py), so a Formula that lags the source must lag it to that one release.
+    if registryVersion != formulaVersion {
+        violations.append("Formula v\(formulaVersion) does not name the registry release v\(registryVersion)")
+    }
+    let expectedRelease = "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v\(formulaVersion)"
+    if registryReleaseURL != expectedRelease {
+        violations.append("server.json release '\(registryReleaseURL)' is not \(expectedRelease)")
+    }
+    return violations
+}
+
+@Test func formulaVersionGuardRejectsEveryMismatch() {
+    let release = { (version: String) in
+        "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v\(version)"
+    }
+    // The two states the release process passes through are accepted.
+    #expect(formulaVersionViolations(
+        formulaVersion: "3.18.0", sourceVersion: "3.19.0",
+        registryVersion: "3.18.0", registryReleaseURL: release("3.18.0")).isEmpty)
+    #expect(formulaVersionViolations(
+        formulaVersion: "3.19.0", sourceVersion: "3.19.0",
+        registryVersion: "3.19.0", registryReleaseURL: release("3.19.0")).isEmpty)
+    // Each mismatch is refused on its own.
+    let counterexamples: [(formula: String, source: String, registry: String, url: String)] = [
+        ("3.20.0", "3.19.0", "3.20.0", release("3.20.0")),
+        ("3.19.1", "3.19.0", "3.19.1", release("3.19.1")),
+        ("4.0.0", "3.19.0", "4.0.0", release("4.0.0")),
+        ("3.17.0", "3.19.0", "3.18.0", release("3.18.0")),
+        ("3.18.0", "3.19.0", "3.19.0", release("3.19.0")),
+        ("3.18.0", "3.19.0", "3.18.0", release("3.17.0")),
+        ("3.18", "3.19.0", "3.18", release("3.18")),
+        ("3.18.0", "3.19", "3.18.0", release("3.18.0")),
+    ]
+    for example in counterexamples {
+        let violations = formulaVersionViolations(
+            formulaVersion: example.formula, sourceVersion: example.source,
+            registryVersion: example.registry, registryReleaseURL: example.url)
+        #expect(!violations.isEmpty, "accepted \(example)")
+    }
+}
+
+/// One step of a workflow, by its exact name, with comment lines removed: a setting that only a
+/// comment mentions is not a setting.
+private func workflowStep(_ workflow: String, named name: String) -> String? {
+    guard let start = workflow.range(of: "      - name: \(name)\n") else { return nil }
+    let rest = workflow[start.upperBound...]
+    let end = rest.range(of: "\n      - ")?.lowerBound ?? rest.endIndex
+    return rest[..<end].split(separator: "\n")
+        .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
+        .joined(separator: "\n")
+}
+
+/// The publication and hash half of the Formula check runs where a GitHub token is present.
+@Test func formulaPublicationIsCheckedByACredentialedCIStep() throws {
+    let workflow = try readRepoFile(".github/workflows/ci.yml")
+    let step = try #require(workflowStep(
+        workflow, named: "Formula names the newest published release and its hash"))
+    #expect(step.contains("GH_TOKEN: ${{ github.token }}"))
+    #expect(step.contains("bash Scripts/ci-verify-formula-sha.sh"))
+    #expect(!step.contains("continue-on-error"))
+    #expect(!step.contains("        if:"))
+
+    // The unit suite runs without that token, as native qualification runs it, so a unit test
+    // that needs GitHub fails in CI as well rather than only on the Logic host.
+    let shardStep = try #require(workflowStep(workflow, named: "Run this exact serial shard"))
+    #expect(shardStep.contains("swift test --skip-build"))
+    #expect(!shardStep.contains("GH_TOKEN"))
+}
+
 /// Source packaging follows the candidate version. Homebrew keeps the newest
 /// published archive until that candidate is published and its checksum is available.
 @Test func testServerVersionMatchesPackagingArtefacts() throws {
@@ -61,24 +197,22 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
     let versionMatch = try #require(versionPattern.firstMatch(in: formula, range: formulaRange))
     let versionRange = try #require(Range(versionMatch.range(at: 1), in: formula))
     let formulaVersion = String(formula[versionRange])
-    if formulaVersion != sourceVersion {
-        // Use the same publication evidence as the existing Formula CI job. Offline
-        // version arithmetic cannot establish whether a candidate has been published.
-        let check = Process()
-        check.executableURL = URL(fileURLWithPath: "/bin/bash")
-        check.arguments = [repositoryRootURL().appendingPathComponent("Scripts/ci-verify-formula-sha.sh").path]
-        check.currentDirectoryURL = repositoryRootURL()
-        let output = Pipe()
-        check.standardOutput = output
-        check.standardError = output
-        try check.run()
-        let evidence = output.fileHandleForReading.readDataToEndOfFile()
-        check.waitUntilExit()
-        #expect(
-            check.terminationStatus == 0,
-            "Formula may lag only on the newest published archive while source is unpublished: \(String(decoding: evidence, as: UTF8.self))"
-        )
-    }
+    let registryData = Data(try readRepoFile("server.json").utf8)
+    let registry = try #require(try JSONSerialization.jsonObject(with: registryData) as? [String: Any])
+    let registryVersion = try #require(registry["version"] as? String)
+    let meta = try #require(registry["_meta"] as? [String: Any])
+    let publisher = try #require(meta["io.modelcontextprotocol.registry/publisher-provided"] as? [String: Any])
+    let distribution = try #require(publisher["distribution"] as? [String: Any])
+    let registryRelease = try #require(distribution["release"] as? String)
+    // Offline by design: whether the Formula's version is published, and its hash, is checked by
+    // the credentialed CI step pinned in `formulaPublicationIsCheckedByACredentialedCIStep`.
+    let violations = formulaVersionViolations(
+        formulaVersion: formulaVersion, sourceVersion: sourceVersion,
+        registryVersion: registryVersion, registryReleaseURL: registryRelease)
+    #expect(
+        violations.isEmpty,
+        "Formula may lag the source only at the registry's published release: \(violations)"
+    )
 
     let installScript = try readRepoFile("Scripts/install.sh")
     #expect(
@@ -110,33 +244,67 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
 
 @Test func readme_version_references_match_server_version() throws {
     let readme = try readRepoFile("README.md")
-    let version = ServerConfig.serverVersion
-    let requiredCurrentVersionReferences = [
-        "stable-v\(version)-",
-        "[v\(version)](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v\(version))",
-        // The version, not an availability claim: the cut lands on main before its tag exists, and
-        // Homebrew follows only once a later commit copies the published tarball's sha256.
-        "The current stable line is `v\(version)`",
-        "**Current stable**: `v\(version)`",
-        "/v\(version)/Scripts/install.sh",
-    ]
-
-    for reference in requiredCurrentVersionReferences {
-        #expect(
-            readme.contains(reference),
-            "README.md must keep current-version reference in sync: \(reference)"
-        )
-    }
+    let sourceCandidateVersion = ServerConfig.serverVersion
 
     let registryData = Data(try readRepoFile("server.json").utf8)
     let registry = try #require(
         try JSONSerialization.jsonObject(with: registryData) as? [String: Any]
     )
     let publishedVersion = try #require(registry["version"] as? String)
-    #expect(readme.contains("source candidate is `v\(version)`"))
-    #expect(
-        readme.contains("published registry release (`v\(publishedVersion)`)")
+
+    let formula = try readRepoFile("Formula/logic-pro-mcp.rb")
+    let formulaVersionPattern = try NSRegularExpression(
+        pattern: #"(?m)^\s*version\s+"([0-9]+\.[0-9]+\.[0-9]+)"$"#
     )
+    let formulaRange = NSRange(formula.startIndex..<formula.endIndex, in: formula)
+    let formulaVersionMatch = try #require(
+        formulaVersionPattern.firstMatch(in: formula, range: formulaRange)
+    )
+    let formulaVersionRange = try #require(Range(formulaVersionMatch.range(at: 1), in: formula))
+    let formulaVersion = String(formula[formulaVersionRange])
+
+    #expect(sourceCandidateVersion == "3.19.0")
+    #expect(publishedVersion == "3.19.0")
+    #expect(formulaVersion == publishedVersion)
+
+    let requiredPublishedReferences = [
+        "published_stable-v\(publishedVersion)-",
+        "**Current published stable**: [`v\(publishedVersion)`](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v\(publishedVersion))",
+        "`v\(publishedVersion)` is the current published stable",
+        "/v\(publishedVersion)/Scripts/install.sh",
+        "names the published registry release (`v\(publishedVersion)`)",
+    ]
+    for reference in requiredPublishedReferences {
+        #expect(
+            readme.contains(reference),
+            "README.md must identify the Formula/server.json release as the published stable: \(reference)"
+        )
+    }
+
+    let publishedInstallerURL = "https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v\(publishedVersion)/Scripts/install.sh"
+    #expect(
+        readme.components(separatedBy: publishedInstallerURL).count - 1 == 2,
+        "both runnable shell-installer examples must pin the published stable version"
+    )
+    if sourceCandidateVersion != publishedVersion {
+        for forbiddenClaim in forbiddenPublishedClaims(
+            forUnpublishedCandidate: sourceCandidateVersion
+        ) {
+            #expect(
+                !readme.contains(forbiddenClaim),
+                "README.md must not describe an unpublished source candidate as stable: \(forbiddenClaim)"
+            )
+        }
+        #expect(
+            !readme.contains("https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v\(sourceCandidateVersion)/Scripts/install.sh"),
+            "README.md must not offer a source-candidate installer URL before that tag is published"
+        )
+    } else {
+        #expect(
+            !readme.contains("source_candidate-v"),
+            "README.md must not carry a source-candidate badge once the source version is published"
+        )
+    }
 }
 
 @Test func testManifestResourceSurfaceMatchesPublishedStableRelease() throws {

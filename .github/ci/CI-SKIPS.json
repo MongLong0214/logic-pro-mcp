@@ -1,9 +1,0 @@
-{
-  "note": "How many cases each guard may SKIP under CI, and why. A skip exits 0, so run-repo-guards.py reports ok for a check that ran nothing -- measured twice on this branch. Read from a file rather than held in the runner so the merge-base ratchet can see it: an allowance added in the same commit as the skip it excuses is the hole rule 7 exists to close. This is a WAIVER list and may only shrink.",
-  "allowed": {
-    "Scripts/test_logic_canon.py": {
-      "skips": 4,
-      "why": "AgainstTheRealCorpus reads QuickHelp.plist out of the installed application. CI has no Logic -- docs/observations/LOGIC-BUILD.json records that, and it is the reason the whole canon axis resolves against a committed index instead. Measured with HAVE_LOGIC forced false: OK (skipped=4)."
-    }
-  }
-}

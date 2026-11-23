@@ -1009,7 +1009,7 @@ private func verifiedReadbackMismatchEnvelope() -> String {
     await router.register(MockChannel(id: .coreMIDI))
     await router.register(FailingStartChannel(id: .appleScript))
 
-    let report = await router.startAll()
+    let report = await router.startAll(deferMIDIGroup: false)
 
     #expect(report.started.contains(.coreMIDI))
     #expect(report.failures[.appleScript] != nil)
@@ -1024,7 +1024,7 @@ private func verifiedReadbackMismatchEnvelope() -> String {
     for id in registeredOrder {
         await router.register(OrderedStartChannel(id: id, recorder: recorder))
     }
-    _ = await router.startAll(deferMCU: false)
+    _ = await router.startAll(deferMCU: false, deferMIDIGroup: false)
 
     let observedOrder = await recorder.snapshot()
     let preservesRegistrationOrder = observedOrder == registeredOrder

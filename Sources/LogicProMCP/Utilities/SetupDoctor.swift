@@ -29,6 +29,7 @@ enum SetupDoctor {
         case pathDependentUnresolved = "path_dependent_unresolved"
         case principalNotFound = "principal_not_found"
         case profileNotRequired = "profile_not_required"
+        case runtimeServerNotStarted = "runtime_server_not_started"
         case shareDirInvalid = "share_dir_invalid"
         case sourceBuildNoShareDir = "source_build_no_share_dir"
         case sourceUnavailable = "source_unavailable"

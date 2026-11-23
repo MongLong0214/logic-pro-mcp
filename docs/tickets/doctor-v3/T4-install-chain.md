@@ -20,7 +20,7 @@ Diagnose stale/shadowing installs and incomplete keg contents without ever execu
 - [ ] AC-4 (never execute, C4/NG7/D10): `lipo`/`strings` run via `BoundedProcessRunner` (≤1.5s) and are metadata-only (`file` tool은 D10 allowlist 밖 — 아치 판별은 `lipo -archs` 전담, PRD v0.2 micro-fix). **No candidate is ever handed to `runCommand` as an executable** — enforced by T1's `DoctorTool` allowlist (LogicProMCP is not a tool ⇒ fail-closed nil).
 - [ ] AC-5 (N8 ship-list + drift, V2): a `sharedShipList` constant = the 9 Formula basenames (`SETUP.md`, `install-keycmds.sh`, `uninstall-keycmds.sh`, `keycmd-preset.plist`, `LogicProMCP-Scripter.js`, `logic_bounce.py`, `logic_bounce_ui.py`, `logic_ui_jxa.py`, `logic_input_source.py`) colocated with the V1 constants. A drift test greps `Formula/logic-pro-mcp.rb` text so the constant can't diverge (reuses the release-verify grep idiom).
 - [ ] AC-6 (N8 status, R4): resolution order registered-env `LOGIC_PRO_MCP_SHARE_DIR` → brew `pkgshare` (both prefixes). `warn` listing missing basenames (live: 4 python helpers); `pass` if complete; `skipped reason=share_dir_unresolved` if neither resolves (source build); `skipped reason=share_dir_invalid` if a resolved path exists but is **not a directory** (`isDirectory` forced). evidence `{resolved_dir?, source?, missing_files?, reason?}`; remediation `command` (`brew reinstall`). N8 must **not** imply the server won't start (it's a bounce-feature precondition).
-- [ ] AC-7 (positions + array +2): `install.binary_inventory` + `install.share_dir` inserted **after** `install.source` and **before** `release.signature`. Array grows by 2; counts bumped.
+- [ ] AC-7 (positions + array +2): `install.binary_inventory` + `install.share_dir` inserted **after** `install.source` and **before** `release.quarantine`. Array grows by 2; counts bumped.
 
 ## 3. TDD Spec (Red Phase)
 
@@ -46,7 +46,7 @@ Diagnose stale/shadowing installs and incomplete keg contents without ever execu
 | 13 | `test_t4_n8_skipped_unresolved` | Unit | E5 | neither env nor pkgshare resolves ⇒ `.skipped reason=share_dir_unresolved` |
 | 14 | `test_t4_n8_skipped_invalid_when_file_not_dir` | Unit | E16 | resolved path is a file, not a dir ⇒ `.skipped reason=share_dir_invalid` (no "everything missing" warn) |
 | 15 | `test_t4_shiplist_matches_formula` | Contract | AC-5 drift | every `sharedShipList` basename appears in `Formula/logic-pro-mcp.rb` `pkgshare.install` lines (readRepoFile grep) |
-| 16 | `test_t4_array_grows_by_two_install_chain` | Contract | AC-7 order | exact-id array places `install.binary_inventory`,`install.share_dir` between `install.source` and `release.signature` |
+| 16 | `test_t4_array_grows_by_two_install_chain` | Contract | AC-7 order | exact-id array places `install.binary_inventory`,`install.share_dir` between `install.source` and `release.quarantine` |
 
 ### 3.2 Test File Location
 - `Tests/LogicProMCPTests/SetupDoctorEnterpriseTests.swift` — cases 1–9, 11–14, 16.

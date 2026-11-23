@@ -1251,6 +1251,7 @@
     "Configurazione…",
     "Configuração…",
     "设置…",
+    "设定…",
     "設定⋯"
    ],
    "rationale": "Opens the Control Surface Setup window. MEASURED in all four locales at AXMenuItem[Control Surfaces]/AXMenu: en-US `Setup…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Setup …` (U+0020 before the ellipsis, unlike en-US). Collides with `Settings…` on ko-KR AND ja-JP -- see the doc comment. German does not collide.",
@@ -1323,6 +1324,7 @@
     "Configurazione superfici di controllo",
     "Configuração de Superfície de Controle",
     "控制表面设置",
+    "控制表面设定",
     "控制表面設定"
    ],
    "rationale": "Identifies the Setup window by AXWindow title; this is the reading that disambiguates the two ko-KR `설정…` items. ko-KR `컨트롤 서피스 설정` read live 2026-09-15 on Logic 12.3 (6674). The English canonical is Apple's documented title and is NOT measured on this host. ja-JP and de-DE unmeasured.",
@@ -2358,6 +2360,7 @@
     "Pitchbend",
     "Inflexión de tono",
     "弯音",
+    "彎音",
     "滑音"
    ],
    "rationale": "Event List pitch-bend filter; ten-locale titles derived from the cited Apple row.",
@@ -2894,6 +2897,7 @@
     "パン",
     "Panning",
     "声像",
+    "聲像",
     "相位"
    ],
    "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
@@ -7147,6 +7151,7 @@
     "밸런스",
     "パン",
     "声像",
+    "聲像",
     "相位"
    ],
    "rationale": "Classifies a slider as a pan control; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
@@ -7177,7 +7182,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    },
    "coverage_records": {
     "de-DE": "2026-09-12-de-DE-arrange-menus-census"
@@ -8653,7 +8658,8 @@
     "Punch automatico",
     "Punch automático",
     "自动插入",
-    "自動錄音"
+    "自動錄音",
+    "自動插錄"
    ],
    "rationale": "Locates Logic's Control Bar Autopunch checkbox for AXPress; State A is still gated by readback.",
    "match": "exact",
@@ -8667,7 +8673,7 @@
     "it-IT": "derived",
     "pt-BR": "derived",
     "zh-CN": "derived",
-    "zh-TW": "derived"
+    "zh-TW": "unmeasured"
    }
   },
   "transportContainerMetadata": {

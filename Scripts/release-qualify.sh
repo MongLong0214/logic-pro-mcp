@@ -3,8 +3,9 @@
 # Scripts/release-qualify.sh — standalone live qualification test runner (#985).
 #
 # Ordinary tests must not drive Logic merely because a release executable exists.
-# This runner builds the current tree, requires running Logic and its permissions,
-# then runs every real-server test in a fresh test process before the ordinary full
+# This runner prepares the debug tests, stages an already-built release candidate,
+# requires running Logic and its permissions, then runs every real-server test in a
+# fresh test process before the ordinary full
 # suite. The process boundary matters: production CoreMIDI endpoint ownership is
 # intentionally held for a process lifetime, so an earlier unit test in the same
 # test process must not contaminate the release binary's live ownership check.
@@ -12,28 +13,48 @@
 # inferred, and the final suite remains unfiltered.
 #
 # Release entrypoints consume staged final artifacts; this runner does not publish.
-# Scripts/test_release_builds_before_live_qualification.py runs it with a stubbed `swift`, `pgrep` and release binary.
+# The release contract tests cover the build-before-live ordering without replacing the runtime.
 #
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+export DEVELOPER_DIR=/Library/Developer/CommandLineTools
+test -d "$DEVELOPER_DIR"
 
-swift build -c release
-if ! pgrep -xq "Logic Pro"; then
-    echo "Error: Logic Pro is not running. The live qualification tests in the suite need it (#985)." >&2
+TRUSTED_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+QUALIFICATION_ROOT="${2:-$TRUSTED_ROOT}"
+
+CANDIDATE="${1:-}"
+if { [ "$#" -ne 1 ] && [ "$#" -ne 2 ]; } || [ ! -d "$QUALIFICATION_ROOT" ] \
+    || [ ! -f "$CANDIDATE" ] || [ ! -x "$CANDIDATE" ]; then
+    echo "Usage: $0 /path/to/executable/LogicProMCP [/path/to/candidate-worktree]" >&2
     exit 1
 fi
-if ! .build/release/LogicProMCP --check-permissions; then
-    echo "Error: the release binary lacks a macOS permission the live qualification needs; the lines above name it (#985)." >&2
-    exit 1
-fi
-live_tests=(
+QUALIFICATION_ROOT="$(cd "$QUALIFICATION_ROOT" && pwd -P)"
+cd "$QUALIFICATION_ROOT"
+CANDIDATE="$(cd "$(dirname "$CANDIDATE")" && pwd -P)/$(basename "$CANDIDATE")"
+candidate_hash="$(shasum -a 256 "$CANDIDATE" | awk '{print $1}')"
+test -n "$candidate_hash"
+
+# The live gate and the Apple corpus must describe the same installed Logic. These are not
+# headless substitutes for the runtime below: they stop stale/tampered extraction, broken
+# citations and incomplete locale maps before any UI write is attempted, while `status` compares
+# the committed pin with this host's actual Logic build.
+python3 Scripts/logic_canon.py status
+python3 Scripts/check-canon-drift.py
+python3 Scripts/check-canon-citations.py
+python3 Scripts/check-policy-literals-against-canon.py
+python3 Scripts/check-labelsets-are-derived.py
+python3 Scripts/locale_labels.py --check
+
+release_live_tests=(
     "realReleaseBinaryExecutesEveryOperationWithIndependentReadback"
     "runnerIgnoresPartialStateFaultEnvOnRealServer"
+)
+debug_live_tests=(
     "runnerRejectsPartialStateObservedFromRealServer"
 )
 test_inventory="$(swift test list)"
-for live_test in "${live_tests[@]}"; do
+for live_test in ${release_live_tests[@]+"${release_live_tests[@]}"} ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
     match_count="$(
         printf '%s\n' "$test_inventory" | awk -v suffix="/${live_test}()" '
             length($0) >= length(suffix) &&
@@ -46,7 +67,46 @@ for live_test in "${live_tests[@]}"; do
         exit 1
     fi
 done
-for live_test in "${live_tests[@]}"; do
+
+mkdir -p .build/release
+rm -f .build/release/LogicProMCP
+cp "$CANDIDATE" .build/release/LogicProMCP
+chmod 0755 .build/release/LogicProMCP
+
+verify_candidate_bytes() {
+    local candidate_now staged_now
+    candidate_now="$(shasum -a 256 "$CANDIDATE" | awk '{print $1}')"
+    staged_now="$(shasum -a 256 .build/release/LogicProMCP | awk '{print $1}')"
+    if [ "$candidate_now" != "$candidate_hash" ] || [ "$staged_now" != "$candidate_hash" ]; then
+        echo "Error: release candidate bytes changed during qualification." >&2
+        return 1
+    fi
+}
+verify_candidate_bytes
+trap verify_candidate_bytes EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if ! pgrep -xq "Logic Pro"; then
+    echo "Error: Logic Pro is not running. The live qualification tests in the suite need it (#985)." >&2
+    exit 1
+fi
+if ! .build/release/LogicProMCP --check-permissions; then
+    echo "Error: the release binary lacks a macOS permission the live qualification needs; the lines above name it (#985)." >&2
+    exit 1
+fi
+for live_test in ${release_live_tests[@]+"${release_live_tests[@]}"}; do
     LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
+    verify_candidate_bytes
+done
+if [ ! -x .build/debug/LogicProMCP ]; then
+    echo "Error: the debug LogicProMCP executable required by the fault-negative live test is missing." >&2
+    exit 1
+fi
+for live_test in ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
+    LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
+    verify_candidate_bytes
 done
 swift test --no-parallel
+verify_candidate_bytes
+trap - EXIT INT TERM

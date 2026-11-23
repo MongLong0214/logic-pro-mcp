@@ -351,11 +351,17 @@ extension OperationTraceTests {
         // A mutating op that refuses BEFORE dispatch starts its trace starts no trace with the
         // coverage params (which carry no consent), so it is asserted to claim NO trace coverage
         // rather than to have a trace. Two ops are consent-first in that way: setup_arm_key (#413)
-        // and setup_control_surface (#884). Both refuse ahead of `startTraceIfEnabled` on purpose —
+        // setup_control_surface (#884), and setup_midi_key_commands (#1516). All three refuse
+        // ahead of `startTraceIfEnabled` on purpose —
         // a refusal must not have touched the user's configuration, and starting a trace is the
         // first thing that would.
         // Missing native approval refuses before entering the Saga trace.
-        let notOracledDeferrals: Set<OperationID> = [.systemSetupArmKey, .systemSetupControlSurface, .projectApplySessionRepair]
+        let notOracledDeferrals: Set<OperationID> = [
+            .systemSetupArmKey,
+            .systemSetupControlSurface,
+            .systemSetupMIDIKeyCommands,
+            .projectApplySessionRepair,
+        ]
 
         for spec in mutatingSpecs {
             await OperationTraceStore.shared.clear()

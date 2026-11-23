@@ -59,6 +59,197 @@ extension AccessibilityChannel {
         return false
     }
 
+    /// Positively identify Logic's project-chooser shell without granting any
+    /// mutation authority. `false` means only "not positively observed"; an
+    /// unreadable or malformed AX/CG value is never evidence that the chooser
+    /// is absent.
+    ///
+    /// This is intentionally separate from `isPositivelyTheProjectChooser`
+    /// and `exactEmptyProjectChooserIsVisible`. Those helpers protect the
+    /// existing document-count and mutation protocols and retain their exact
+    /// semantics. Readiness needs a narrower shell observation: one exact
+    /// localized title, no AXDocument, and no competing document window.
+    static func projectChooserShellIsPositivelyObserved(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> Bool {
+        guard let logicPID = runtime.logicProPID() else { return false }
+        let app = AXHelpers.axApp(pid: logicPID, runtime: runtime.ax)
+        guard let windows = projectChooserAXWindowsRead(app, runtime: runtime.ax) else {
+            return false
+        }
+        guard windows.count <= 1,
+              let mainWindow = projectChooserMainWindowRead(app, runtime: runtime.ax) else {
+            return false
+        }
+
+        switch windows.count {
+        case 1:
+            let window = windows[0]
+            guard projectChooserMainWindow(mainWindow, permits: window),
+                  exactChooserTitleRead(window, runtime: runtime.ax),
+                  case .success(nil) = AXLogicProElements.projectPickerDocumentRead(
+                    window,
+                    runtime: runtime
+                  ) else {
+                return false
+            }
+            return true
+
+        case 0:
+            guard case .absent = mainWindow else { return false }
+            return cgProjectChooserShellIsPositivelyObserved(
+                logicPID: logicPID,
+                windows: runtime.onScreenWindowList()
+            )
+
+        default:
+            return false
+        }
+    }
+
+    /// Status-preserving AXWindows read with element-shape validation. The
+    /// generic array helper preserves the outer CFArray shape but assumes each
+    /// member is an AXUIElement while decoding; this positive-only classifier
+    /// must reject a malformed member before attempting that cast.
+    private static func projectChooserAXWindowsRead(
+        _ app: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> [AXUIElement]? {
+        guard let attributeValueResult = runtime.attributeValueResult else { return nil }
+        let read: Result<AnyObject?, AXHelpers.AXStatusError> =
+            attributeValueResult(app, kAXWindowsAttribute as String)
+        guard case let .success(value?) = read,
+              CFGetTypeID(value) == CFArrayGetTypeID() else {
+            return nil
+        }
+        let array = unsafeDowncast(value, to: CFArray.self)
+        var windows: [AXUIElement] = []
+        windows.reserveCapacity(CFArrayGetCount(array))
+        for index in 0..<CFArrayGetCount(array) {
+            let item = unsafeBitCast(
+                CFArrayGetValueAtIndex(array, index),
+                to: CFTypeRef.self
+            )
+            guard CFGetTypeID(item) == AXUIElementGetTypeID() else { return nil }
+            windows.append(unsafeBitCast(item, to: AXUIElement.self))
+        }
+        return windows
+    }
+
+    private enum ProjectChooserMainWindowRead {
+        case absent
+        case window(AXUIElement)
+    }
+
+    private static func projectChooserMainWindowRead(
+        _ app: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> ProjectChooserMainWindowRead? {
+        guard let attributeValueResult = runtime.attributeValueResult else { return nil }
+        switch attributeValueResult(app, kAXMainWindowAttribute as String) {
+        case .success(nil):
+            return .absent
+        case .success(let value?):
+            guard CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            return .window(unsafeBitCast(value, to: AXUIElement.self))
+        case .failure:
+            return nil
+        }
+    }
+
+    private static func projectChooserMainWindow(
+        _ observed: ProjectChooserMainWindowRead,
+        permits chooser: AXUIElement
+    ) -> Bool {
+        switch observed {
+        case .absent:
+            return true
+        case .window(let mainWindow):
+            return CFEqual(mainWindow, chooser)
+        }
+    }
+
+    private static func exactChooserTitleRead(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let titleRead: Result<AnyObject?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(
+                window,
+                kAXTitleAttribute as String,
+                runtime: runtime
+            )
+        guard case let .success(value?) = titleRead,
+              CFGetTypeID(value) == CFStringGetTypeID(),
+              let title = value as? String else {
+            return false
+        }
+        return isExactProjectChooserWindowTitle(title)
+    }
+
+    private static func cgProjectChooserShellIsPositivelyObserved(
+        logicPID: pid_t,
+        windows: [[String: Any]]?
+    ) -> Bool {
+        guard let windows else { return false }
+        var normalWindows: [(title: String, bounds: CGRect)] = []
+
+        for row in windows {
+            guard let ownerValue = projectChooserExactIntegral(
+                    row[kCGWindowOwnerPID as String]
+                  ),
+                  ownerValue > 0,
+                  let owner = pid_t(exactly: ownerValue) else {
+                return false
+            }
+            guard owner == logicPID else { continue }
+            guard let layerValue = projectChooserExactIntegral(row[kCGWindowLayer as String]),
+                  let layer = Int32(exactly: layerValue) else { return false }
+            if Int(layer) == LogicOnScreenWindows.popupMenuLevel {
+                continue
+            }
+            guard layer == 0 else { continue }
+
+            guard let numberValue = projectChooserExactIntegral(row[kCGWindowNumber as String]),
+                  let windowNumber = UInt32(exactly: numberValue),
+                  windowNumber > kCGNullWindowID,
+                  let boundsDictionary = row[kCGWindowBounds as String] as? [String: Any],
+                  let bounds = CGRect(
+                    dictionaryRepresentation: boundsDictionary as CFDictionary
+                  ),
+                  bounds.origin.x.isFinite,
+                  bounds.origin.y.isFinite,
+                  bounds.width.isFinite,
+                  bounds.height.isFinite,
+                  bounds.width > 0,
+                  bounds.height > 0,
+                  let title = row[kCGWindowName as String] as? String,
+                  !title.isEmpty else {
+                return false
+            }
+            normalWindows.append((title, bounds))
+        }
+
+        guard normalWindows.count == 1 else { return false }
+        return isExactProjectChooserWindowTitle(normalWindows[0].title)
+    }
+
+    private static func projectChooserExactIntegral(_ value: Any?) -> Int64? {
+        guard let numberObject = value as? NSNumber,
+              CFGetTypeID(numberObject) == CFNumberGetTypeID(),
+              CFGetTypeID(numberObject) != CFBooleanGetTypeID() else {
+            return nil
+        }
+        let number = unsafeBitCast(numberObject, to: CFNumber.self)
+        guard !CFNumberIsFloatType(number) else { return nil }
+        var integral: Int64 = 0
+        guard CFNumberGetValue(number, .sInt64Type, &integral),
+              NSNumber(value: integral).compare(numberObject) == .orderedSame else {
+            return nil
+        }
+        return integral
+    }
+
     static func createEmptyProjectFromQualifiedState(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {

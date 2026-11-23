@@ -203,7 +203,9 @@ extension AccessibilityChannel {
         // strip cannot be located — there is nothing to enumerate, so this is
         // State B `readback_unavailable` rather than a fabricated empty chain.
         let ensuredMixer: (mixer: AXUIElement?, result: MixerRevealResult)
-        if let observed = mixerWithoutReveal(runtime:runtime) {
+        if let observed = mixerWithoutRevealForInventory(
+            runtime: runtime, revealRequested: revealRequested
+        ) {
             ensuredMixer = observed
         } else if revealRequested, inventoryRevealWindow(runtime:runtime) != nil {
             ensuredMixer = await revealMixer(runtime)
@@ -390,7 +392,12 @@ extension AccessibilityChannel {
     static func mixerWithoutReveal(
         runtime: AXLogicProElements.Runtime
     ) -> (mixer: AXUIElement?, result: MixerRevealResult)? {
-        let lookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        mixerWithoutReveal(lookup: AXLogicProElements.mixerAreaLookup(runtime: runtime))
+    }
+
+    private static func mixerWithoutReveal(
+        lookup: AXLogicProElements.MixerAreaLookup
+    ) -> (mixer: AXUIElement?, result: MixerRevealResult)? {
         if let mixer = lookup.mixer {
             return (mixer, .alreadyVisible)
         }
@@ -398,6 +405,26 @@ extension AccessibilityChannel {
             return (nil, .childrenUnreadBeforeReveal)
         }
         return nil
+    }
+
+    /// Logic 13 exposes the visible Mixer inside a measured depth-three owner/population envelope.
+    /// A default read that does not authorize reveal can therefore return the existing hidden-
+    /// Mixer State B without walking the unrelated track tree. Unknown and older versions, and
+    /// every explicit reveal, retain the complete legacy lookup.
+    static func mixerWithoutRevealForInventory(
+        runtime: AXLogicProElements.Runtime,
+        revealRequested: Bool
+    ) -> (mixer: AXUIElement?, result: MixerRevealResult)? {
+        guard !revealRequested,
+              let pid = runtime.logicProPID(),
+              let version = runtime.observeHost(pid)?.logicVersion,
+              let major = Int(version.prefix(while: { $0.isNumber })),
+              major == 13,
+              let window = AXLogicProElements.mainWindow(runtime: runtime)
+        else { return mixerWithoutReveal(runtime: runtime) }
+        return mixerWithoutReveal(
+            lookup: AXLogicProElements.shallowMixerAreaLookup(in: window, runtime: runtime)
+        )
     }
 
     /// A missing Mixer is hidden only when its owning Logic window is positively observable.
@@ -3217,6 +3244,17 @@ extension AccessibilityChannel {
             }
             return true
         }
+        func currentAppWindows() -> [AXUIElement]? {
+            guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
+            switch AXHelpers.getAttributeResult(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax
+            ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+            case let .success(.some(observed)):
+                return observed
+            case .success(nil), .failure:
+                return nil
+            }
+        }
         defer {
             if !constructedWindowsNeedingCleanup.isEmpty {
                 _ = closePluginEditorsOpenedByThisOperation(
@@ -3264,19 +3302,15 @@ extension AccessibilityChannel {
             }
             guard !constructedWindowsNeedingCleanup.isEmpty else { return }
             let windows = constructedWindowsNeedingCleanup
-            var closeAttempted = false
             let closeOutcomes = closePluginEditorsOpenedByThisOperation(
                 windows,
                 trackName: trackName,
                 pluginID: pluginID,
                 runtime: runtime,
                 validatingObservedAbsence: { _ in acquisitionAllowed() },
-                allowingChanges: { window in
-                    guard editorCloseAllowed(window) else { return false }
-                    closeAttempted = true
-                    return true
-                }
+                allowingChanges: editorCloseAllowed
             )
+            let closeAttempted = closeOutcomes.contains { $0.attemptCount > 0 }
             let closeObserved = closeOutcomes.allSatisfy(\.observed)
             // This explicit attempt owns cleanup on success and refusal alike.
             constructedWindowsNeedingCleanup.removeAll()
@@ -3823,7 +3857,73 @@ extension AccessibilityChannel {
         case let .ready(session):
             viewSession = session
         }
-        restorePluginViewOnExit = { viewSession.restore(allowingChanges: viewChangesAllowed) }
+        restorePluginViewOnExit = {
+            // Only the exact AXPick issued by this ViewSession can transfer
+            // cleanup custody to a replacement editor. A later observed-view
+            // refresh is not an ownership event.
+            var originalAtPick: AXUIElement?
+            var firstReplacementObservedDuringConfirmation: AXUIElement?
+            var confirmationWindowIdentityChanged = false
+            var replacementObservedAtPick: AXUIElement?
+            let restoration = viewSession.restore(
+                allowingChanges: viewChangesAllowed,
+                observingPickBoundary: { boundary in
+                    switch boundary {
+                    case .willPick:
+                        originalAtPick = nil
+                        firstReplacementObservedDuringConfirmation = nil
+                        confirmationWindowIdentityChanged = false
+                        replacementObservedAtPick = nil
+                        guard access.isRead,
+                              constructedWindowsNeedingCleanup.count == 1,
+                              let original = constructedWindowsNeedingCleanup.first,
+                              currentAppWindows()?.contains(where: { CFEqual($0, original) }) == true else {
+                            return
+                        }
+                        originalAtPick = original
+                    case .didPick:
+                        break
+                    case let .didObserveDuringConfirmation(observedWindow):
+                        guard let original = originalAtPick else { return }
+                        if let firstReplacementObservedDuringConfirmation {
+                            if !CFEqual(firstReplacementObservedDuringConfirmation, observedWindow.element) {
+                                confirmationWindowIdentityChanged = true
+                            }
+                        } else if !CFEqual(original, observedWindow.element) {
+                            firstReplacementObservedDuringConfirmation = observedWindow.element
+                        }
+                    case let .didConfirm(confirmedWindow):
+                        guard let original = originalAtPick,
+                              !confirmationWindowIdentityChanged,
+                              let firstReplacementObservedDuringConfirmation,
+                              CFEqual(firstReplacementObservedDuringConfirmation, confirmedWindow.element),
+                              let after = currentAppWindows(),
+                              !after.contains(where: { CFEqual($0, original) }),
+                              after.contains(where: { CFEqual($0, confirmedWindow.element) }),
+                              acquisitionAllowed(),
+                              case .success(let editors) = AXLogicProElements.matchingPluginEditorWindows(
+                                  forTrackName: trackName,
+                                  matchingPluginID: pluginID,
+                                  matchingObservedPluginName:
+                                      matchesTargetBoundObservedPluginName ? pluginID : nil,
+                                  runtime: runtime
+                              ),
+                              editors.count == 1,
+                              let replacement = editors.first,
+                              CFEqual(replacement, confirmedWindow.element),
+                              !CFEqual(replacement, original),
+                              after.contains(where: { CFEqual($0, replacement) }) else {
+                            return
+                        }
+                        replacementObservedAtPick = replacement
+                    }
+                }
+            )
+            if let replacementObservedAtPick {
+                constructedWindowsNeedingCleanup = [replacementObservedAtPick]
+            }
+            return restoration
+        }
         let resultAfterViewPreparation: ChannelResult = {
         if case let .readManifest(buildFingerprint, contextIsCurrent, _) = access {
             func currentInstance() -> Bool {
@@ -5286,7 +5386,11 @@ extension AccessibilityChannel {
         }
 
         let rankedControls = rankedPluginSlotOpenControls(in: targetSlot, runtime: runtime.ax)
-        let attempts = rankedControls.filter { $0.rank == 0 }.map(\.element)
+        let openControls = rankedControls.filter { $0.rank == 0 }.map(\.element)
+        // Live measurement (Logic 13.0, fresh project): the first AXPress on a slot's `열기`
+        // returns success at once and opens nothing; a second press opens the editor in
+        // ~0.4 s. Press the open control again only after the poll saw no editor.
+        let attempts = openControls.flatMap { [$0, $0] }
             + [targetSlot]
             + rankedControls.filter { $0.rank != 0 }.map(\.element)
         for element in attempts {
@@ -5600,7 +5704,9 @@ extension AccessibilityChannel {
             }
             guard contextIsCurrent(), Date() < deadline else { break }
             try? await Task.sleep(for: .milliseconds(100))
-        } while Date() < deadline
+            // Sample once more after the last sleep even when it crossed the deadline, so an
+            // editor that opened during that sleep is seen before a caller presses again.
+        } while true
         if let lastUniqueWindow {
             return .unique(lastUniqueWindow)
         }
@@ -5673,6 +5779,8 @@ extension AccessibilityChannel {
         var subroleReadError: String?
         var closeButtonReadStatus = "not_read"
         var closeButtonReadError: String?
+        var closeButtonWindowStatus = "not_read"
+        var closeButtonWindowReadError: String?
         var windowMembership = "unreadable"
         var windowMembershipReadError: String?
 
@@ -5681,11 +5789,15 @@ extension AccessibilityChannel {
                 "subrole": subrole ?? NSNull(),
                 "subrole_read_status": subroleReadStatus,
                 "close_button_read_status": closeButtonReadStatus,
+                "close_button_window_status": closeButtonWindowStatus,
                 "attempt_count": attemptCount,
                 "window_membership": windowMembership,
             ]
             if let subroleReadError { result["subrole_read_error"] = subroleReadError }
             if let closeButtonReadError { result["close_button_read_error"] = closeButtonReadError }
+            if let closeButtonWindowReadError {
+                result["close_button_window_read_error"] = closeButtonWindowReadError
+            }
             if let windowMembershipReadError {
                 result["window_membership_read_error"] = windowMembershipReadError
             }
@@ -5775,7 +5887,34 @@ extension AccessibilityChannel {
                 retainWindowMembership()
                 return outcome
             }
-            guard allowingChanges(window) else {
+            switch AXHelpers.getAttributeResult(
+                closeButton, kAXWindowAttribute as String, runtime: runtime.ax
+            ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+            case let .success(.some(owner)):
+                guard CFEqual(owner, window) else {
+                    outcome.closeButtonWindowStatus = "mismatch"
+                    retainWindowMembership()
+                    return outcome
+                }
+                outcome.closeButtonWindowStatus = "matches"
+                outcome.closeButtonWindowReadError = nil
+            case .success(nil):
+                outcome.closeButtonWindowStatus = "absent"
+                outcome.closeButtonWindowReadError = nil
+                retainWindowMembership()
+                return outcome
+            case let .failure(error) where error.isDefinitiveAbsence:
+                outcome.closeButtonWindowStatus = "absent"
+                outcome.closeButtonWindowReadError = error.diagnosticLabel
+                retainWindowMembership()
+                return outcome
+            case let .failure(error):
+                outcome.closeButtonWindowStatus = "unreadable"
+                outcome.closeButtonWindowReadError = error.diagnosticLabel
+                retainWindowMembership()
+                return outcome
+            }
+            guard allowingChanges(window), pluginRollbackOperationIsCurrent() else {
                 retainWindowMembership()
                 return outcome
             }
@@ -5798,6 +5937,130 @@ extension AccessibilityChannel {
     /// one element; the count-mismatch path can have the target plus a hidden
     /// sibling restored by the same press. Each result preserves whether its
     /// exact element was observed to leave AXWindows.
+    /// The application's windows and main window read immediately before an insert actuates its slot.
+    struct InsertEditorWindowBaseline {
+        let windows: [AXUIElement]
+        let main: AXUIElement
+        /// The keyboard-focused element before the slot actuation; nil when it did not read.
+        let focus: AXUIElement?
+    }
+
+    static func insertEditorWindowBaseline(runtime: AXLogicProElements.Runtime) -> InsertEditorWindowBaseline? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime),
+              case .success(.some(let windows)) = AXHelpers.getAttributeResult(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax) as Result<[AXUIElement]?, AXHelpers.AXStatusError>,
+              let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: runtime.ax)
+        else { return nil }
+        let focus: AXUIElement? = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax)
+        return InsertEditorWindowBaseline(windows: windows, main: main, focus: focus)
+    }
+
+    /// Logic 13 opens the new plug-in's editor and gives it the key window when an insert lands
+    /// (measured 2026-11-16: AXFocusedWindow = the "오디오 2" editor, AXFocusedUIElement -25212).
+    /// Every later keyboard op then refuses on unreadable focus. Close the editor this insert opened,
+    /// then read back both its absence and that the focused window is the original main window
+    /// again. Nothing here is reported as restored unless read.
+    ///
+    /// Being new since the baseline is not ownership: any window can appear while
+    /// the mount is polled. A new window is closed only when it is an open plug-in editor titled with
+    /// the target track whose direct static-text header names the inserted plug-in (the rule
+    /// `matchingPluginEditorWindows` applies for `editorCloseAllowed`), and that proof plus
+    /// `targetIsCurrent` are re-checked before every press. A new window whose ownership is not
+    /// proven is left open and reported; focus is then not touched either.
+    static func closeEditorsOpenedByInsert(
+        since baseline: InsertEditorWindowBaseline?, pluginID: String,
+        trackName: String?, observedPluginName: String?,
+        targetIsCurrent: () -> Bool,
+        runtime: AXLogicProElements.Runtime
+    ) -> [String: Any] {
+        guard let baseline else {
+            return ["post_insert_editor_cleanup_observed": false, "post_insert_editor_cleanup_reason": "baseline_unreadable"]
+        }
+        guard let app = AXLogicProElements.appRoot(runtime: runtime),
+              case .success(.some(let windows)) = AXHelpers.getAttributeResult(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax) as Result<[AXUIElement]?, AXHelpers.AXStatusError>
+        else {
+            return ["post_insert_editor_cleanup_observed": false, "post_insert_editor_cleanup_reason": "windows_unreadable"]
+        }
+        let opened = windows.filter { window in
+            !CFEqual(window, baseline.main) && !baseline.windows.contains { CFEqual($0, window) }
+        }
+        /// The editors that identify this insert now: target-track title and a header naming the plug-in.
+        func ownedEditors() -> Result<[AXUIElement], AXHelpers.AXStatusError>? {
+            guard let trackName else { return nil }
+            return AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName, matchingPluginID: pluginID,
+                matchingObservedPluginName: observedPluginName, runtime: runtime)
+        }
+        var ownershipReason: String?
+        var owned: [AXUIElement] = []
+        if !opened.isEmpty {
+            switch ownedEditors() {
+            case .none: ownershipReason = "target_track_unbound"
+            case .some(.failure): ownershipReason = "editor_ownership_unreadable"
+            case .some(.success(let editors)):
+                owned = opened.filter { window in editors.contains { CFEqual($0, window) } }
+            }
+        }
+        let unowned = opened.filter { window in !owned.contains { CFEqual($0, window) } }
+        if ownershipReason == nil, !unowned.isEmpty { ownershipReason = "unowned_window_left_open" }
+        let outcomes = closePluginEditorsOpenedByThisOperation(
+            owned, trackName: trackName ?? "", pluginID: pluginID, runtime: runtime,
+            allowingChanges: { window in
+                guard targetIsCurrent(), case .success(let editors)? = ownedEditors() else { return false }
+                return editors.contains { CFEqual($0, window) }
+            })
+        // Read the absence back from a fresh AXWindows list, not from the close outcomes.
+        let closed: Bool
+        if case .success(.some(let after)) = AXHelpers.getAttributeResult(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+            closed = !owned.contains { window in after.contains { CFEqual($0, window) } }
+        } else { closed = false }
+        var focusRestored = false
+        if closed, unowned.isEmpty {
+            for attempt in 0..<10 {
+                if let focused: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: runtime.ax),
+                   CFEqual(focused, baseline.main) { focusRestored = true; break }
+                if attempt < 9 { Thread.sleep(forTimeInterval: 0.05) }
+            }
+        }
+        // Closing the editor hands Logic's key view back to whatever it chooses (measured: a Mixer
+        // channel-strip group, which reads as a text surface and stops every later keyboard op).
+        // Put the pre-insert focus back and read it back; report it restored only when read.
+        func focusIsBaseline() -> Bool {
+            guard let original = baseline.focus,
+                  let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax)
+            else { return false }
+            return CFEqual(current, original)
+        }
+        var elementRestoreAttempted = false
+        var elementFocusRestored = focusRestored && focusIsBaseline()
+        if focusRestored, !elementFocusRestored, let original = baseline.focus,
+           AXHelpers.isAttributeSettable(original, kAXFocusedAttribute as String, runtime: runtime.ax) == true {
+            elementRestoreAttempted = true
+            _ = AXHelpers.setAttribute(original, kAXFocusedAttribute as String, kCFBooleanTrue as CFTypeRef, runtime: runtime.ax)
+            for attempt in 0..<10 {
+                if focusIsBaseline() { elementFocusRestored = true; break }
+                if attempt < 9 { Thread.sleep(forTimeInterval: 0.05) }
+            }
+        }
+        var result: [String: Any] = [
+            "post_insert_focus_baseline_read": baseline.focus != nil,
+            "post_insert_focus_restore_attempted": elementRestoreAttempted,
+            "post_insert_focus_restored": elementFocusRestored,
+            "post_insert_editor_windows_opened": opened.count,
+            "post_insert_editor_windows_owned": owned.count,
+            "post_insert_unowned_windows_left_open": unowned.count,
+            "post_insert_editor_close_attempts": outcomes.reduce(0) { $0 + $1.attemptCount },
+            "post_insert_editor_windows_closed": closed,
+            "post_insert_main_window_focused": focusRestored,
+            "post_insert_editor_cleanup_observed": closed && unowned.isEmpty && focusRestored && elementFocusRestored,
+        ]
+        if let ownershipReason { result["post_insert_editor_cleanup_reason"] = ownershipReason }
+        if !closed { result["post_insert_editor_cleanup_diagnostics"] = outcomes.map(\.diagnostics) }
+        return result
+    }
+
     private static func closePluginEditorsOpenedByThisOperation(
         _ windows: [AXUIElement],
         trackName: String,
@@ -6457,6 +6720,7 @@ extension AccessibilityChannel {
         guard let targetSlot = liveInsertSlot(track: track, insert: insert, runtime: runtime) else {
             return (.transientSetupFailure(stage: "target_slot_not_found"), trace)
         }
+        let preInsertWindows = insertEditorWindowBaseline(runtime: runtime)
         // The initial write gate and the just-read snapshot may already be stale.
         // Re-resolve and require the physical target is still the empty slot the
         // attempt was authorized to use before any popup-opening actuation.
@@ -6648,6 +6912,12 @@ extension AccessibilityChannel {
         if let detected = newlyMountedSlot(pluginID: pluginID, pre: preInventory, post: postInventory) {
             trace["observed_slot"] = detected.slot
             trace["observed_name"] = detected.name ?? NSNull()
+            let cleanupTarget = authorizedPluginTrack
+            trace.merge(closeEditorsOpenedByInsert(
+                since: preInsertWindows, pluginID: pluginID,
+                trackName: cleanupTarget?.trackName, observedPluginName: detected.name,
+                targetIsCurrent: { cleanupTarget.map { AXPluginTrackBinding.isStable($0, runtime: runtime) } ?? false },
+                runtime: runtime)) { $1 }
             return (.mounted(slot: detected.slot, pluginID: pluginID, observedName: detected.name), trace)
         }
 

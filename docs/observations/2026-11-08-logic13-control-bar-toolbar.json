@@ -1,0 +1,84 @@
+{
+  "schema": 3,
+  "id": "2026-11-08-logic13-control-bar-toolbar",
+  "date": "2026-11-08",
+  "subject": "Logic 13 control-bar role and complete read-only transport census",
+  "question": "Does the upgraded host expose the transport-bearing control bar through the same AX role and topology as Logic 12, and can the product select it without accepting the same-named view-toggle container or hiding unread branches?",
+  "verdict": "works",
+  "issues": [
+    290,
+    965
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "version": "13.0",
+    "build": "7801",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "With Logic 13 running an owned disposable project and no menu open, build the debug product candidate, capture the main-window Control Bar scope read-only, run the atlas comparison against the prior qualified Control Bar snapshot, and run the read-only selection census. Do not press a control, type, save, close the project, or change locale.",
+    "expected": "The scoped snapshot resolves one transport-bearing Control Bar root, contains one Play control, drops no atlas pair and reports reuseFull. The independent selection census resolves that same Control Bar while the same-named view-toggle-only container is not selected. An unrelated leaf button whose AXChildren read returns AXError.failure does not hide the candidate; an unread container, missing role, depth truncation or a second capable candidate still refuses authority.",
+    "cost": "Read-only Accessibility snapshots and product probes against the already-open disposable project; no Logic input, project write, save, close or locale change."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Transport.swift:getControlBar",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Transport.swift:observedTransportActivity",
+    "Sources/LogicProMCP/SelectorAtlas/SemanticSelector.swift:SemanticSelector",
+    "Sources/LogicProMCP/SelectorAtlas/SelectorResolver.swift:confidence"
+  ],
+  "evidence": [],
+  "method": "Built a debug product candidate from base dcd104036fd2ce86e2ffe1f65dda5ef296463bcb plus the bounded Control Bar correction (six-file patch SHA-256 e156af054c737d6f21ae11599c5877384f9b252e7de1d67ea6c97de361a485b4; binary SHA-256 a604e3a1b92e16d1932e774e52f5fefa39de9b3b58ae01f2737bf3425d73606f). The product performed a read-only scoped snapshot, an atlas comparison and a selection census against the already-open disposable project. No keyboard, pointer, AX action, setter, save, project close or locale change was sent. Synthetic tests separately injected the observed unrelated leaf failure and the fail-closed container, metadata, depth and ambiguity cases.",
+  "observations": [
+    {
+      "what": "scoped Control Bar snapshot",
+      "logic_major_version": 13,
+      "logic_version": "13.0",
+      "logic_build": "7801",
+      "root_role": "AXToolbar",
+      "direct_child_count": 22,
+      "play_control_count": 1,
+      "raw_sha256": "d0c06dd6c2a23b2087bc44088c65aeb1e27cfc2dd66720f258f430ce8af3f937"
+    },
+    {
+      "what": "atlas comparison",
+      "paired_snapshots": 2,
+      "dropped_pairs": 0,
+      "moved_selectors": 0,
+      "unmeasured_selectors": 0,
+      "verdict": "reuseFull",
+      "raw_sha256": "2994cb70a11268a46c7ecb55be02863bf2ca528fe506550fe7678bff86a12b16"
+    },
+    {
+      "what": "selection census",
+      "control_bar_resolved": true,
+      "resolved_role": "AXToolbar",
+      "same_named_view_group_selected": false,
+      "playhead_group_reachable_inside_resolved_control_bar": true,
+      "raw_sha256": "db7f3970b8a5a25557f876273b1afac46ef389ee11eee3d9bc42897cf514e1b6"
+    },
+    {
+      "what": "synthetic regression matrix",
+      "affected_tests_passed": 126,
+      "unrelated_leaf_children_failure_is_terminal": true,
+      "container_children_failure_refuses": true,
+      "missing_role_refuses": true,
+      "depth_truncation_refuses": true,
+      "multiple_capable_candidates_refuse": true,
+      "write_attempted": false
+    }
+  ],
+  "conclusion": "On this Logic 13 host the transport-bearing Control Bar is the top-level AXToolbar, while a same-named AXGroup carries view toggles and must not win by name or tree order. The corrected locator and approval transport observation resolve the capable toolbar through a complete role census, tolerate only an AXChildren failure on a freshly verified terminal button role, and preserve fail-closed handling for unread containers, malformed metadata, depth truncation and ambiguity.",
+  "limits": [
+    "One Logic 13.0 build 7801 host and ko-KR only; this does not establish the topology of another Logic build or locale.",
+    "The live run is read-only and qualifies discovery plus transport observation. It does not press Play or Record, change project state, or qualify every operation that later consumes the Control Bar.",
+    "The terminal exception is restricted to a freshly read AXButton role. No absence, malformed-role, container-read, permission, depth or ambiguity guard is relaxed.",
+    "The evidence files are retained qualification artefacts identified by SHA-256; they are not canonical Apple string evidence."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime Accessibility roles, topology, read failures and selection behavior. It does not add or change Apple label vocabulary or claim a string-corpus value."
+  }
+}

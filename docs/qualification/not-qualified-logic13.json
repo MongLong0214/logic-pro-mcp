@@ -1,0 +1,623 @@
+{
+  "schema": 1,
+  "platform": "Logic Pro 13.0 (7801)",
+  "entries": [
+    {
+      "operation": "audio.analyze_file",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "audio.analyze_spectrum",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "audio.compare_spectra",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "audio.recommend_eq",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "edit.bounce_in_place",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a fixture region + recipe; writes an audio file and opens a Bounce-in-Place dialog (modal)"
+    },
+    {
+      "operation": "edit.copy",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a selected fixture region and a later paste as the only observable of the clipboard (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.cut",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a selected fixture region and a region census before/after (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.delete",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a selected fixture region; with focus on a track header it deletes the TRACK (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.duplicate",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a selected fixture region and an installed key binding (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.join",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs two selected regions on one track (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.move_to_playhead",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs exactly one selected region and a playhead elsewhere (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.normalize",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a selected audio region and an installed key binding (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.paste",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs clipboard content and a playhead position (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.quantize",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a selected MIDI region with off-grid notes; Event List positions are the readback (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.redo",
+      "reason": "recipe_refused",
+      "detail": "Logic 13 re-mints the track_ref of a track whose rename is undone, and redo is staged by undoing a rename first (measured on the selected track in the live gate: phase_b.stage_undo_readback: track identity changed), so the cycle cannot prove it undid its own edit on the same track and withholds the history step"
+    },
+    {
+      "operation": "edit.select_all",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a known region census and a host count of selected regions (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.split",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs one selected region spanning the playhead (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.toggle_step_input",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; opens the Step Input window, so it needs the leftover-window invariant and a closed-window precondition (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "edit.undo",
+      "reason": "recipe_refused",
+      "detail": "Logic 13 re-mints the track_ref of a track whose rename is undone (measured: row 0 trk_2B6A... before, trk_EF72... after undo, the name reads the original again), so the cycle cannot prove it undid its own edit on the same track and withholds the inverse (phase_b.readback: track identity changed)"
+    },
+    {
+      "operation": "midi.create_virtual_port",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; an independent CoreMIDI census exists in the test process but no recipe uses it (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.export_track_midi",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs the fixture SI track with an N-note region; the .mid must be parsed in the test process (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.import_file",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a server-managed temp .mid, a selected SI track and playhead at bar 1 (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.mmc_locate",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs Logic set to receive MMC and a stopped transport; logic://transport/state is the readback (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.mmc_play",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs Logic set to receive MMC; logic://transport/state is the readback (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.mmc_record",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; records into the project; needs a disposable project and one armed track (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.mmc_stop",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a playing transport first (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.play_sequence",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only MIDI (State B): only a wire-level CoreMIDI listener readback is possible, and a listener recipe does not exist (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.read_selected_region_events",
+      "reason": "needs_fixture_value_check",
+      "detail": "credit needs the fixture-bound value check: raw_rows.count == N and the Event List count text == N (measured M4: empty rows next to '0개의 이벤트'); no fixture is built yet (DESIGN 3/4)"
+    },
+    {
+      "operation": "midi.read_track_notes",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs the fixture SI track with an N-note region; compare with Event List rows or an exported .mid (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.send_aftertouch",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only MIDI (State B): only a wire-level CoreMIDI listener readback is possible (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.send_cc",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only MIDI (State B): only a wire-level CoreMIDI listener readback is possible (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.send_chord",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only MIDI (State B): only a wire-level CoreMIDI listener readback is possible (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.send_note",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only MIDI (State B): only a wire-level CoreMIDI listener readback is possible (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.send_pitch_bend",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only MIDI (State B): only a wire-level CoreMIDI listener readback is possible (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.send_program_change",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only MIDI (State B): only a wire-level CoreMIDI listener readback is possible (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.send_sysex",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only MIDI (State B): only a wire-level CoreMIDI listener readback is possible (DESIGN 6a)"
+    },
+    {
+      "operation": "midi.step_input",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs the Step Input window and a selected MIDI track (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "mixer.bank",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a Mackie Control surface: system.setup_control_surface changes persistent Logic preferences (owner decision, DESIGN 9)"
+    },
+    {
+      "operation": "mixer.get_input_bus_verified",
+      "reason": "semantic_validator_unavailable",
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs a fixture Aux; logic13_strip_parent_unreadable: under strip focus the passive Mixer witness cannot be built because the focused strip's AXParent reads -25212 (R4/L32-strip-pm); no new witness shape in v3.19.0 (CTO decision); with track-group focus it refuses 'no exact held selection scope', whose failing checkpoint is not yet named (D1 not built), although the Mixer route it needs does move the selection (R5/M4-write-S1-1..3)"
+    },
+    {
+      "operation": "mixer.get_output_verified",
+      "reason": "semantic_validator_unavailable",
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); the product's own strip listing does supply a physical mix_ target_ref on Logic 13 (inspect_session strips: six strips, each audio strip with an observed output) and the read answered with it (current_output stereo_output), but the sweep's classifier of the listing's output label does not recognise the Korean label of the Stereo Output slot, so the gate sent no target_ref and the read refused with invalid_params; even with a target_ref the oracle's best status here is protocolSmoke"
+    },
+    {
+      "operation": "mixer.get_send_bypass_verified",
+      "reason": "semantic_validator_unavailable",
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs an occupied send; readback_unavailable 3/3 on Logic 13 (P10); logic13_strip_parent_unreadable: under strip focus the passive Mixer witness cannot be built because the focused strip's AXParent reads -25212 (R4/L32-strip-pm); no new witness shape in v3.19.0 (CTO decision)"
+    },
+    {
+      "operation": "mixer.get_send_destination_verified",
+      "reason": "semantic_validator_unavailable",
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs an occupied send in the fixture; the fresh strip listing reports every send slot observed_empty on this fixture, so there is no target_ref and ordinal to pass"
+    },
+    {
+      "operation": "mixer.insert_plugin",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; legacy insert path has NO editor cleanup (needs product P6) and needs the editor-open variant (P4)"
+    },
+    {
+      "operation": "mixer.set_input_bus_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs the fixture Aux (needs product P1) and a stopped transport; logic13_strip_parent_unreadable: under strip focus the passive Mixer witness cannot be built because the focused strip's AXParent reads -25212 (R4/L32-strip-pm); no new witness shape in v3.19.0 (CTO decision); with track-group focus it refuses 'no exact held selection scope', whose failing checkpoint is not yet named (D1 not built), although the Mixer route it needs does move the selection (R5/M4-write-S1-1..3)"
+    },
+    {
+      "operation": "mixer.set_master_volume",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a Mackie Control surface: system.setup_control_surface changes persistent Logic preferences (owner decision, DESIGN 9)"
+    },
+    {
+      "operation": "mixer.set_output_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a fixture strip with a classified output and the inspect census as readback (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "mixer.set_plugin_param",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; routes to the Scripter channel, which is send-only State B (readback_unavailable) and has no verified envelope to restore; its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select"
+    },
+    {
+      "operation": "mixer.set_send_bypass_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs an occupied fixture send (needs product P1 for the Aux) and the inspect census as readback (DESIGN 6a); logic13_strip_parent_unreadable: under strip focus the passive Mixer witness cannot be built because the focused strip's AXParent reads -25212 (R4/L32-strip-pm); no new witness shape in v3.19.0 (CTO decision)"
+    },
+    {
+      "operation": "mixer.set_send_level_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs an occupied fixture send (needs product P1 for the Aux) and the inspect census as readback (DESIGN 6a)"
+    },
+    {
+      "operation": "mixer.set_send_mode_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs an occupied fixture send (needs product P1 for the Aux) and the inspect census as readback (DESIGN 6a)"
+    },
+    {
+      "operation": "mixer.set_send_output_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a fixture Aux receiver (needs product P1) and a send to restore (DESIGN 6a)"
+    },
+    {
+      "operation": "navigate.capture_markers",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; opens and must close a Marker List window, which disarms later Track-menu operations (needs product P9)"
+    },
+    {
+      "operation": "navigate.create_marker",
+      "reason": "recipe_refused",
+      "detail": "the recipe acts only on a fresh, readable logic://markers read, and with the Marker List closed (the operations close the list they open) that read is marker_list_not_open, so the recipe refuses before it stages anything; nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+    },
+    {
+      "operation": "navigate.delete_marker",
+      "reason": "recipe_refused",
+      "detail": "the recipe acts only on a fresh, readable logic://markers read, and with the Marker List closed (the operations close the list they open) that read is marker_list_not_open, so the recipe refuses before it stages anything; nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+    },
+    {
+      "operation": "navigate.goto_marker",
+      "reason": "recipe_refused",
+      "detail": "the recipe acts only on a fresh, readable logic://markers read, and with the Marker List closed (the operations close the list they open) that read is marker_list_not_open, so the recipe refuses before it stages anything; nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+    },
+    {
+      "operation": "navigate.rename_marker",
+      "reason": "recipe_refused",
+      "detail": "the recipe acts only on a fresh, readable logic://markers read, and with the Marker List closed (the operations close the list they open) that read is marker_list_not_open, so the recipe refuses before it stages anything; nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+    },
+    {
+      "operation": "navigate.set_zoom",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs host AX zoom sliders as the readback (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "navigate.toggle_view",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; blind toggle for every view but the Mixer; needs verified Event List / Library modes (needs product P2, P3)"
+    },
+    {
+      "operation": "navigate.zoom_to_fit",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only (State B): no verified readback of the zoom (recipe, DESIGN 6a)"
+    },
+    {
+      "operation": "plugins.get_channel_eq_state_verified",
+      "reason": "semantic_validator_unavailable",
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs a Channel EQ insert (fixture F5); the 8 bands must equal the stock defaults"
+    },
+    {
+      "operation": "plugins.get_host_parameter_manifest",
+      "reason": "semantic_validator_unavailable",
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); the manifest rows and identity come from one AX acquisition; needs an occupied catalog insert"
+    },
+    {
+      "operation": "plugins.get_inventory",
+      "reason": "needs_fixture_value_check",
+      "detail": "credit needs the fixture-bound value check: the SI track's inventory is State A and complete; the response is otherwise never compared with logic://mixer, and no fixture is built yet (DESIGN 3/4)"
+    },
+    {
+      "operation": "plugins.get_param_verified",
+      "reason": "semantic_validator_unavailable",
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs a readable parameter on a fixture insert; the value must equal the stock default; its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select"
+    },
+    {
+      "operation": "plugins.insert_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; opens a plug-in editor and Logic leaves key focus on a strip (needs product P7); needs editor-open variant (P4); its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select"
+    },
+    {
+      "operation": "plugins.plan_parameter_changes",
+      "reason": "semantic_validator_unavailable",
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs a plannable parameter on a fixture insert"
+    },
+    {
+      "operation": "plugins.set_eq_band_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; opens a plug-in editor and Logic leaves key focus on a strip (needs product P7); needs editor-open variant (P4)"
+    },
+    {
+      "operation": "plugins.set_param_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; opens a plug-in editor and Logic leaves key focus on a strip (needs product P7); needs editor-open variant (P4); its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select"
+    },
+    {
+      "operation": "project.apply_session_repair",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a saved fixture project, a retained inspection and a repair plan to apply (DESIGN 6a)"
+    },
+    {
+      "operation": "project.audit",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "project.bounce",
+      "reason": "unsupported_by_contract",
+      "detail": "registry availability .unsupported: the production contract answers a typed unsupported refusal; probing it with valid params is a later milestone (DESIGN 6a)"
+    },
+    {
+      "operation": "project.cleanup_apply",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a cleanup plan on a fixture project (DESIGN 6a)"
+    },
+    {
+      "operation": "project.cleanup_plan",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "project.close",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; destructive (L3): needs the disposable fixture project and a host window census (DESIGN 3 teardown)"
+    },
+    {
+      "operation": "project.export_plan",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "project.export_resume",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs an export_run in progress; host filesystem readback (DESIGN 6a)"
+    },
+    {
+      "operation": "project.export_run",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a fixture project and a host filesystem readback (DESIGN 6a)"
+    },
+    {
+      "operation": "project.get_regions",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "project.inspect_session",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "project.is_running",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "project.launch",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs Logic quit first (owner decision, DESIGN 9)"
+    },
+    {
+      "operation": "project.new",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; first live call belongs to the fixture builder (DESIGN 3 F1); needs a host window census"
+    },
+    {
+      "operation": "project.open",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a fixture project file and a host window census (DESIGN 6a)"
+    },
+    {
+      "operation": "project.plan_session_repair",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "project.quit",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs Logic quit, which the standing rules forbid during the gate (owner decision, DESIGN 9)"
+    },
+    {
+      "operation": "project.save",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a saved fixture project and a host mtime readback (DESIGN 6a)"
+    },
+    {
+      "operation": "project.save_as",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs the fixture builder (DESIGN 3 F2) and a host filesystem readback"
+    },
+    {
+      "operation": "system.clear_traces",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "system.get_trace",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "system.health",
+      "reason": "readback_not_independent",
+      "detail": "the readback is a second read of the SAME producer (logic://system/health), so equality is an echo, not an independent observation (SemanticOracleTable.bespokeOperationIDs)"
+    },
+    {
+      "operation": "system.help",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "system.list_recent_traces",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "system.permissions",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "system.refresh_cache",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "system.saga_cancel",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a running saga and its journal as the readback (DESIGN 6a)"
+    },
+    {
+      "operation": "system.saga_execute",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; the only 'probe' is the invalid_params refusal for missing params that also seeds the trace store; no saga step ever runs (DESIGN 6a)"
+    },
+    {
+      "operation": "system.saga_preflight",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "system.saga_status",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "system.setup_arm_key",
+      "reason": "consent_probe_only",
+      "detail": "consent-first zero-write probe only (consent_required / invalid_params); the handler changes persistent Logic preferences, so qualifying it needs an owner decision (DESIGN 9)"
+    },
+    {
+      "operation": "system.setup_control_surface",
+      "reason": "consent_probe_only",
+      "detail": "consent-first zero-write probe only (consent_required / invalid_params); the handler changes persistent Logic preferences, so qualifying it needs an owner decision (DESIGN 9)"
+    },
+    {
+      "operation": "system.setup_midi_key_commands",
+      "reason": "consent_probe_only",
+      "detail": "consent-first zero-write probe only (consent_required / invalid_params); the handler changes persistent Logic preferences, so qualifying it needs an owner decision (DESIGN 9)"
+    },
+    {
+      "operation": "tracks.arm_only",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs fixture tracks and logic://tracks plus host headers as the readback (DESIGN 6a)"
+    },
+    {
+      "operation": "tracks.create_audio",
+      "reason": "recipe_disabled",
+      "detail": "recipe exists but the Phase C kill switch (phaseCTrackCyclesEnabled=false) keeps it off until a leaking run is explained AND a clean one is reproducible (CTO decision)"
+    },
+    {
+      "operation": "tracks.create_drummer",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; creates a track; needs the disposable fixture (DESIGN 6a)"
+    },
+    {
+      "operation": "tracks.create_external_midi",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; creates a track; needs the disposable fixture (DESIGN 6a)"
+    },
+    {
+      "operation": "tracks.create_instrument",
+      "reason": "recipe_disabled",
+      "detail": "recipe exists but the Phase C kill switch (phaseCTrackCyclesEnabled=false) keeps it off until a leaking run is explained AND a clean one is reproducible (CTO decision)"
+    },
+    {
+      "operation": "tracks.delete",
+      "reason": "recipe_disabled",
+      "detail": "recipe exists but the Phase C kill switch (phaseCTrackCyclesEnabled=false) keeps it off until a leaking run is explained AND a clean one is reproducible (CTO decision); its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select"
+    },
+    {
+      "operation": "tracks.duplicate",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; send-only (State B); needs logic://tracks plus host headers as the readback (DESIGN 6a); its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select"
+    },
+    {
+      "operation": "tracks.list_library",
+      "reason": "env_precondition",
+      "detail": "requires an exact open Library panel with readable inventory; no fixture opens it (needs product P3)"
+    },
+    {
+      "operation": "tracks.record_sequence",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; the fixture builder's first live call (DESIGN 3 F9); leaves a layer-101 display-mode menu unless closed; its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select"
+    },
+    {
+      "operation": "tracks.resolve_path",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "tracks.scan_library",
+      "reason": "readback_not_compared",
+      "detail": "the oracle's verdict does not depend on the readback (shape/domain checks only); the readback is fetched and never compared"
+    },
+    {
+      "operation": "tracks.scan_plugin_presets",
+      "reason": "env_precondition",
+      "detail": "requires an open plug-in window with a Setting dropdown and has no target identity (needs product P5)"
+    },
+    {
+      "operation": "tracks.select",
+      "reason": "recipe_refused",
+      "detail": "select index 0 answers readback_mismatch with observed 7, 3 of 3 (B9): on Logic 13 the rail AXSelectedChildren write is accepted with no effect (R5/M4-railwrite-S1, Limit r-c02e982e990c); the main Mixer AXSelectedChildren write does move the track selection, exclusively within 0.1 s and restored, 3 of 3 (R5/M4-write-S1-1..3), but no header-to-strip identity witness exists: neither element lists a cross-link attribute (R5/M4-attrs) and names and ordinals are not identity, so a Mixer-route select needs a new accepted witness shape (next milestone)"
+    },
+    {
+      "operation": "tracks.set_automation",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a Mackie Control surface (owner decision, DESIGN 9)"
+    },
+    {
+      "operation": "tracks.set_instrument",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs the Library panel open (needs product P3) and a fixture SI track; its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select"
+    },
+    {
+      "operation": "tracks.sort_verified",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs fixture tracks in a known order and logic://tracks plus host headers as the readback (DESIGN 6a)"
+    },
+    {
+      "operation": "transport.fast_forward",
+      "reason": "recipe_refused",
+      "detail": "the recipe needs a fresh full stopped position; Logic 13 shows only bar and beat in the control bar, so the pre-state read is unavailable (phase_b.pre_state: fresh stopped full position unavailable)"
+    },
+    {
+      "operation": "transport.record",
+      "reason": "unknown_param_probe_only",
+      "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; records into the project; deliberately not run on the operator project (DESIGN 6a)"
+    },
+    {
+      "operation": "transport.rewind",
+      "reason": "recipe_refused",
+      "detail": "the recipe needs a fresh full stopped position; Logic 13 shows only bar and beat in the control bar, so the pre-state read is unavailable (phase_b.pre_state: fresh stopped full position unavailable)"
+    },
+    {
+      "operation": "transport.set_cycle_range",
+      "reason": "unsupported_by_contract",
+      "detail": "registry availability .unsupported: the production contract answers a typed unsupported refusal; probing it with valid params is a later milestone (DESIGN 6a)"
+    },
+    {
+      "operation": "transport.toggle_autopunch",
+      "reason": "recipe_refused",
+      "detail": "logic://transport/state does not report isAutopunchEnabled on Logic 13 (no unique observed direct mode checkbox), so the recipe has no independent pre-state to compare"
+    }
+  ],
+  "promised": [
+    {
+      "operation": "tracks.mute",
+      "commit": "3bd8a23f",
+      "evidence": "impl-logic13/R5/L3-after.driver.stdout (exit 0, binary sha a3913473 = impl-logic13/bin/r5-after): with track-group focus the op answers state A, the track header reads it on, the restore reads it off; with a rename AXTextField focused it refuses unsafe_focus_for_synthetic_key before actuation and the field keeps its text"
+    },
+    {
+      "operation": "tracks.solo",
+      "commit": "3bd8a23f",
+      "evidence": "impl-logic13/R5/L3-after.driver.stdout (exit 0, binary sha a3913473 = impl-logic13/bin/r5-after): with track-group focus the op answers state A, the track header reads it on, the restore reads it off; with a rename AXTextField focused it refuses unsafe_focus_for_synthetic_key before actuation and the field keeps its text"
+    }
+  ]
+}

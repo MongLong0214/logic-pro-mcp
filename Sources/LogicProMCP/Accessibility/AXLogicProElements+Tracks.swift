@@ -619,6 +619,46 @@ extension AXLogicProElements {
         return []
     }
 
+    /// The state poller only needs the exact Arrange rail that Logic exposes near the window root.
+    /// Search breadth-first so an earlier unrelated subtree is not recursively exhausted before a
+    /// later shallow `AXList(identifier: "Track Headers")`. A positive exact match keeps the same
+    /// row-status verdict as the full reader; absence is not decided here and must fall back to the
+    /// depth-32 compatibility search below.
+    static func shallowExactTrackHeadersRead(
+        in window: AXUIElement,
+        maximumDepth: Int = 8,
+        runtime: Runtime = .production
+    ) -> TrackHeaderRead? {
+        guard !projectPickerPreventsTrackRead(window, runtime: runtime) else {
+            return .unavailable
+        }
+        var pending: [(element: AXUIElement, depth: Int)] = [(window, 0)]
+        var next = 0
+        while next < pending.count {
+            let current = pending[next]
+            next += 1
+            let role = try? trackStringAttribute(
+                current.element, kAXRoleAttribute as String, runtime: runtime.ax
+            ).get()
+            let exactLegacyList = role == (kAXListRole as String)
+                && trackStringAttribute(
+                    current.element, kAXIdentifierAttribute as String, runtime: runtime.ax
+                ) == .success("Track Headers")
+            let exactLiveGroup = role == (kAXGroupRole as String)
+                && isTrackHeadersGroup(current.element, runtime: runtime.ax)
+            if exactLegacyList || exactLiveGroup {
+                return enumerateTrackHeaderRows(in: current.element, runtime: runtime.ax)
+            }
+            // A text field's descendants cannot own the Arrange rail. This also keeps an editor's
+            // private accessibility tree outside the poller's read-only fast path.
+            if role == (kAXTextFieldRole as String) || current.depth >= maximumDepth { continue }
+            guard case .success(let children) = AXHelpers.childrenResult(current.element, runtime: runtime.ax)
+            else { continue }
+            pending.append(contentsOf: children.map { ($0, current.depth + 1) })
+        }
+        return nil
+    }
+
     /// Status-preserving counterpart to `allTrackHeaders`, bound to a window
     /// already resolved by the caller. This is deliberately narrower than the
     /// historic best-effort API: a missing header container or any failed

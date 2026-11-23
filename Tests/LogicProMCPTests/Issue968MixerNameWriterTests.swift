@@ -263,6 +263,8 @@ struct Issue968MixerNameWriterTests {
                 f.source.b.setRole(other, change == "foreign_insertion_point" ? "AXLayoutItem" : kAXTextFieldRole as String)
                 if change == "foreign_insertion_point" {
                     f.source.b.setAttribute(other, kAXInsertionPointLineNumberAttribute as String, 0)
+                    // An insertion point counts only on a surface whose value or text range is settable.
+                    f.source.b.setAttributeSettable(other, kAXValueAttribute as String, true)
                 }
                 f.source.b.setAttribute(other, kAXValueAttribute as String, "Unrelated editing")
                 f.source.b.setAttribute(f.source.app, kAXFocusedUIElementAttribute as String, other)

@@ -5,9 +5,9 @@ Minimal install and Logic Pro integration guide for Logic Pro MCP v3.19.0.
 ## Requirements
 
 - macOS 14+
-- Logic Pro — **latest release prioritized (currently 12.3)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variant: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported; the two use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro.
+- Logic Pro — **latest release prioritized (currently 13.0)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variant: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported; the two use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro.
 - Claude Code, Claude Desktop, Cursor, or another MCP client
-- Homebrew, or Xcode/Swift if building from source
+- Homebrew, or Command Line Tools with Swift if building from source
 
 ## Install
 
@@ -31,8 +31,8 @@ Pinned shell installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh -o install.sh
-# inspect install.sh, then copy pins from the v3.19.0 release:
-LOGIC_PRO_MCP_SHA256=<sha256 for LogicProMCP-macOS-universal.tar.gz entry> LOGIC_PRO_MCP_TEAM_ID=<team_id> bash install.sh
+# inspect install.sh, then copy the archive pin from the v3.19.0 release:
+LOGIC_PRO_MCP_SHA256=<sha256 for LogicProMCP-macOS-universal.tar.gz entry> bash install.sh
 ```
 
 The installer trust model is in [SECURITY.md](../SECURITY.md#installer-trust-model).
@@ -113,8 +113,19 @@ Expected health after registration:
 
 ### MIDI Key Commands
 
-Reference only. Logic 12.2+ does not reliably import the legacy `.plist`, and the server cannot
-establish or read back the corresponding Logic bindings programmatically.
+Logic 12.2+ does not reliably import the legacy `.plist`. The public check-only command can inspect
+the first fixed MIDI Key Command catalog row through Logic's Key Commands window:
+
+```
+logic_system { "command": "setup_midi_key_commands", "params": { "consent": "true", "mode": "check" } }
+```
+
+It refuses before validation without the exact string `consent: "true"`, because even checking opens
+and searches Logic's UI. Check mode never presses Learn, sends a controller message, or writes Logic
+configuration. A visible matching assignment remains `source_unverified`: Logic's assignment column
+does not identify which MIDI port supplied it, so the command does not mark the binding or channel
+ready. Missing, conflicting, ambiguous, provisional, and unreadable rows remain separate outcomes.
+Apply/Learn and source-aware functional verification are not part of this check-only slice.
 
 The following mapped keycmd-only/channel-only paths therefore report `unattended_unavailable`:
 
@@ -237,10 +248,6 @@ Reinstall or upgrade when a canonical installed binary has a stale static versio
 ### `install.share_dir`
 When helper assets are missing, Homebrew installs use `brew reinstall logic-pro-mcp`; source builds restore the checkout and rebuild; release installs replace the pinned package. Unknown/custom installs should follow this section rather than a package-manager command.
 
-<a id="doctor-releasesignature"></a>
-### `release.signature`
-Reports whether the resolved LogicProMCP binary's signature verifies. A failed or unavailable verification is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
-
 <a id="doctor-releasequarantine"></a>
 ### `release.quarantine`
 Reports the observed quarantine state of the resolved LogicProMCP binary. A present quarantine attribute is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
@@ -301,7 +308,7 @@ No supported Logic Pro installation, or a Creator-Studio-only installation this 
 
 <a id="doctor-logicversion-support"></a>
 ### `logic.version_support`
-A detected Logic Pro version below the 12.0.1 support floor is a terminal unavailable state: the check preserves the measured version without requesting a version change or adding a continuation to `fix_plan`. Logic Pro 12.3 is the latest validated target; other versions at or above the floor remain informational warnings.
+A detected Logic Pro version below the 12.0.1 support floor is a terminal unavailable state: the check preserves the measured version without requesting a version change or adding a continuation to `fix_plan`. Logic Pro 13.0 is the latest validated target; other versions at or above the floor remain informational warnings.
 
 <a id="doctor-logicblocking-dialog"></a>
 ### `logic.blocking_dialog`

@@ -3,13 +3,11 @@ class LogicProMcp < Formula
   homepage "https://github.com/MongLong0214/logic-pro-mcp"
   # Keep the newest published stable version here during source release preparation.
   # After publication, update version and sha256 together from SHA256SUMS.txt.
-  version "3.18.0"
+  version "3.19.0"
   license "MIT"
 
   # GitHub Actions release artifacts are expected to be true universal
-  # tarballs. Historical/local ADHOC prerelease cuts may still record
-  # arm64-only metadata, so inspect RELEASE-METADATA.json when auditing a
-  # specific tag.
+  # tarballs. RELEASE-METADATA.json records the architectures for each tag.
   #
   # SHA256 is copied from the published SHA256SUMS.txt for the current
   # LogicProMCP-macOS-universal.tar.gz release artifact.
@@ -21,15 +19,15 @@ class LogicProMcp < Formula
   # file. Bump `version` and this line together, and let CI confirm it.
   on_macos do
     url "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v#{version}/LogicProMCP-macOS-universal.tar.gz"
-    sha256 "71477955f401acad55e285e339838c09627dd590bb3ee49727b051a5be0d0d62"
+    sha256 "375e9697627b40c9bb58cf3b2185da22dfde38251896aa251c185a8c675edc9d"
   end
 
   depends_on :macos => :sonoma
 
   # NOTE (v3.1.6): no `depends_on xcode:` — this Formula installs the
   # pre-built GitHub release binary; it does not invoke `swift build` or any
-  # Apple toolchain. Source builds via `Package.swift` still require Xcode
-  # 15.0+ (Swift 6.0+).
+  # Apple toolchain. Source builds via `Package.swift` use Command Line Tools
+  # with Swift 6.0+.
 
   def install
     bin.install "LogicProMCP"

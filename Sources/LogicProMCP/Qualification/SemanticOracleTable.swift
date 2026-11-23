@@ -42,7 +42,7 @@ import Foundation
 //      system.clear_traces         deliberate `confirmed:false`; reaching its
 //                                  success path would destroy diagnostic evidence
 //
-//    Only two of these overlap the six the old note named. Two are a promotion
+//    Only two of these overlap the six the old note named. Two are a qualification
 //    decision on #300 rather than qualification work, and two are deliberate and
 //    should stay short. That leaves the library surface as the real Phase-A
 //    remainder.
@@ -303,6 +303,10 @@ enum SemanticOracleTable {
     /// mutating spec, is DISJOINT from the covered set, and carries a reason —
     /// so the uncovered complement is never fully implicit.
     static let structurallyUnverifiedMutatingOperationIDs: [OperationID: String] = [
+        .systemSetupMIDIKeyCommands:
+            "the public surface is check-only and drives Logic's Key Commands UI, but its exact-row "
+            + "inspection is the operation's own evidence; no independent logic:// resource publishes "
+            + "the assignment source or current binding, so it cannot earn semantic qualification credit",
         .systemSetupControlSurface:
             // Arrived on main after this inventory closed (#891). NOT back-dated into one of the
             // phase sets: those record what was pinned when, and putting a later operation into
@@ -322,22 +326,22 @@ enum SemanticOracleTable {
         .mixerSetInputBusVerified:
             "semantic oracle pending — a bounded native round trip verifies the checked bus "
             + "input, physical output and unchanged strip count, but no independent typed-source "
-            + "readback oracle exists; the writer's same-host menu receipt is not promotion evidence",
+            + "readback oracle exists; the writer's same-host menu receipt is not independent qualification evidence",
         .mixerSetSendOutputVerified:
             "semantic oracle pending — bounded native round trips verify one occupied send's "
             + "checked destination and unchanged strip count, but no independent typed-source "
-            + "readback oracle exists; the writer's same-host menu receipt is not promotion evidence",
+            + "readback oracle exists; the writer's same-host menu receipt is not independent qualification evidence",
         .mixerSetSendBypassVerified:
             "semantic oracle pending — a bounded native occupied-send bypass round trip exists, "
             + "but no audited qualification write-and-restore recipe or independent readback "
-            + "oracle exists; the handler's checkbox receipt is not promotion evidence",
+            + "oracle exists; the handler's checkbox receipt is not independent qualification evidence",
         .mixerSetSendLevelVerified:
             "semantic oracle pending — only three occupied-send numeric-editor values have bounded "
             + "native provider evidence; no audited public write-and-restore recipe or independent "
-            + "readback oracle exists, and the handler's display receipt is not promotion evidence",
+            + "readback oracle exists, and the handler's display receipt is not independent qualification evidence",
         .mixerSetSendModeVerified:
             "semantic oracle pending — occupied-send mode requires its own audited write-and-restore "
-            + "recipe and independent readback oracle; a same-host checked-menu receipt is not promotion evidence",
+            + "recipe and independent readback oracle; a same-host checked-menu receipt is not independent qualification evidence",
         .pluginsSetEQBandVerified:
             "live 2026-08-30 evidence establishes the Channel EQ raw AXValue ranges and "
             + "one-step increment-walk behavior only; no end-to-end write/readback round "

@@ -18,33 +18,180 @@ existed is written above rather than left in a file nobody reads. Git has it if 
 
 ## The update rule
 
-**When an issue opens or closes, the same PR updates the table below.** A roadmap that is updated
-"when someone remembers" is stale within two weeks — measured, that is exactly how its predecessor
-got here.
+Update this file in the pull request that materially changes an issue's acceptance or delivery
+state. GitHub issue bodies and maintainer comments remain the acceptance authority. The roadmap is
+a dated operational readback, not a CI policy surface; currentness is checked when it is edited,
+without adding repository machinery whose only purpose is to police the document.
 
-That rule is a convention, and a convention is a claim. **The check now exists**:
-`Scripts/roadmap-table-matches-github.py` runs in CI and fails when this table and GitHub disagree —
-either a row that was never flipped, or an open issue nobody added. It refuses (exit 2) rather than
-reporting clean when it cannot tell: a `gh issue list` result that hit its own `--limit` looks
-identical to a complete one, and written against `--limit 200` this check would have compared
-against the newest 200 of 239 issues and passed. `Scripts/test-roadmap-table-guard.sh` drives every
-one of those paths and asserts the exit codes, so the guard has been watched fail.
-
-One exception, and it is narrow: **a pull request may mark closed the issues it says it closes.**
-Without it a closing PR has no truthful row to write — open while it is open, stale the instant it
-merges — and #684 hit exactly that, turning `main` red on its own merge commit. The exemption
-applies only to issues named in that PR's `Closes #N`, only in the ahead direction, and not at all
-on a push to `main`; a row claiming an open issue is closed still fails, and the closing PR must
-still list the issue rather than delete its row.
-
-It does not check the prose. The "waiting on" column, the order, and the state block below are still
-claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
-
-## State — measured 2026-10-28 at integration head `16f6cc69`
+## State — measured 2026-11-14 03:37 KST at `main` `0d10d5cc`
 
 ```
-24 open issues and 4 open pull requests after paginated GitHub API reads · issue bodies and owner comments remain the acceptance authority
+29 open issues · 1 open pull request (#1561 draft) · latest stable release v3.18.0 · Homebrew installation v3.18.0 · source version 3.19.0 · no v3.19.0 tag or release
 ```
+
+The counts above come from paginated GitHub reads. Issue bodies and maintainer comments remain the
+acceptance authority; neither a local pass, a partial native run, nor an issue-closing action alone is
+completion.
+
+Local/runtime readback at measurement time has Logic Pro 13.0 (7801) installed and running, while
+the installed LogicProMCP binary is v3.18.0 (`db6dc302f09f317f7e057621cd6f92b40935ce6cdc6fc14621c39598c6eb3859`)
+and GitHub's latest published release is v3.18.0. The source candidate reports v3.19.0, and README
+and CHANGELOG predeclare it as stable even though no v3.19.0 tag or release exists. That is
+release-preparation drift to reconcile at the actual cut, not evidence that v3.19.0 shipped.
+Logic shows only the Project Selection window and has no user `.logicx` open. Direct process/root AX
+reads succeed, but Logic 13 exposes an empty `AXWindows` list and no `AXMainWindow` in this state.
+The current product therefore reports a stale document/window state and does not positively identify
+the chooser. Two nonmutating qualification runs against the current candidate each produced 21
+passes, 110 truthful `not_qualified` outcomes and 9 failures because `logic://tracks` never became
+readable. Opening a disposable copied fixture also failed to produce an arrange window; the bounded
+open attempt timed out and was not retried. The host is permission-ready, but release/native
+qualification readiness is **not** restored until chooser-shell observation clears the stale cache
+without authorizing project mutation and the copied fixture can be opened safely.
+
+### Current delivery readback
+
+- PR #1566 merged exact head `7eec57e1` as `33719d05`. It bounds the Logic 13 refresh cost by
+  yielding before background Mixer work; #668 remains open for an approximately 74 AX-visible-row
+  native recurrence and complete deadline evidence.
+- PR #1572 merged exact head `1aff3a7d` as `7494ecf2`. It prevents a timed-out mutation from being
+  credited after ownership is lost; #1565 remains open for the wider first-AX/read latency problem.
+- PR #1576 merged exact head `5e6d6475` as `10156003`. Pull-request run `43432876703` tested exact
+  merge candidate `e7f1ebdf` (parents `33719d05` and `5e6d6475`); its tree `ccb8c12d` is
+  byte-identical to both the PR head tree and final merge tree. Release-build passed in 15m25s and
+  test-build passed in 1h32m7s, including a 1h29m49s coverage-runtime build; the selected serial
+  shard passed 500/500 in 18m19s and the complement passed 7,277/7,277 in 42m23s. Exact-union
+  product validation passed 7,777/7,777 with zero failures or errors, merged coverage measured
+  83.41% regions and 90.60% lines against 70%/78% floors, and the required build fan-in passed. On the preceding
+  `90ff6a43` candidate, the coverage runtime compiled in 5,962.16s and both serial shards passed
+  500/500 and 7,277/7,277; product validation then rejected only a suite/test separator mismatch.
+  The bounded correction canonicalizes the pair before comparison, passes 16/16 contract tests and
+  exact artifact replay at both counts, and has an independent exact-head review with zero findings.
+  It does not change the timeout, tests, shards or coverage floors. The PR removes Xcode, Apple
+  signing/notarization, redundant policy workflows and policy-only documents while retaining
+  product tests, coverage, native release qualification, checksum/install verification and MCP
+  Registry publication.
+- PR #1560 merged exact head `fb3a6e8a` as `0d10d5cc`; the merge tree `19b9458e` is
+  byte-identical to both the head and hosted merge candidate `8df09030` (parents `7ea626ef` and
+  `fb3a6e8a`). Run `43459192789` built an unsigned Command Line Tools release binary with SHA-256
+  `aa2596f33435a2aa2a77a3b47134cd4e2cb446d953ebb07f9ea18c303ebd1473`, passed the exact
+  7,780-test union (500 selected + 7,280 complement) with zero failures/errors, measured 83.44%
+  region and 90.64% line coverage, and passed the required build fan-in. The first validation
+  attempt failed only while GitHub's artifact service timed out listing artifacts five times;
+  failed-job rerun attempt 2 reused every successful producer and completed exact union/coverage in
+  1m15s. Independent exact-head review approved. Reporter evidence on Logic 13.0 (7801) measured
+  6,306 patches, all resolves at or below 24 ms and concurrent `get_regions` resolves below 4 ms;
+  the original Logic 12.4 long-wait recurrence remains unqualified.
+- Draft PR #1561 is exact head `14649e41`; its original hosted checks pass, but three Logic 13
+  reruns prove List-view stem export still refuses at component selection. Column view uses the
+  existing `AXTextField → AXGroup → AXList/AXSelectedChildren` chain; Logic 13 List view exposes
+  only the measured ancestry `AXTextField → AXCell → AXRow → AXOutline (ListView)`.
+  `AXSelectedRows` still requires exact-owner write/readback and navigation proof. Its current head
+  is not the complete #1553 fix and must not merge as such.
+- The #1552 sample-rate fix is merged and passes native readback on Logic 13; the original Logic
+  12.4 environment has not been rerun and is not claimed.
+
+### CI throughput
+
+- #1576 reduces the required graph to change classification, concurrent release and coverage-runtime
+  builds, two isolated serial test shards, merged product/coverage validation and one required
+  `build` fan-in. The current broad `docs/*|*.md` classifier is not a safe blanket fast path:
+  existing tests directly consume README, setup, API, troubleshooting, contribution and ticket
+  documents. The evidence-backed skip boundary is an ordinary mode-100644 modification of
+  `docs/roadmap/README.md` alone. Additions, deletions, renames, symlinks, mixed or empty diffs,
+  diff errors, identity mismatches and changes to consumed documents must select full validation
+  or fail closed.
+- The two shards each retain `--no-parallel`, exact-once inventory/union checks, writable isolated
+  profile output, merged-coverage equivalence and failure/timeout propagation. The audit found real
+  cross-suite environment-variable and host-resource conflicts, so unconstrained in-process test
+  parallelism would reduce reliability. The current hard floors remain 70% region and 78% line;
+  90% is a target rather than a release threshold.
+- #1560 establishes the two-shard timings on the current 7,780-test inventory: selected xUnit
+  689.495s and complement xUnit 3,006.683s. The complement's exact 84
+  `Issue965HeldSelectionAssociationTests/canonical*` cases consumed 1,176.709s. Moving only those
+  cases produces dry-run manifests of 584 and 7,196 tests with zero additions outside that prefix,
+  removals, overlap or gaps, and projects 1,866.204s versus 1,829.974s. That lowers the measured
+  critical xUnit time by 1,140.478s (about 19 minutes) without changing the 7,780-test union,
+  isolation, assertions, failure propagation or coverage merge. The rebalance remains
+  unimplemented and needs its own exact-head hosted validation. Native Logic qualification remains
+  serial and process-isolated.
+- No runner purchase, account-setting change, cached-success substitution, skipped test, weaker
+  assertion or reduced coverage threshold is part of the current plan.
+
+### v3.19.0 release gate and Logic 13 compatibility
+
+The v3.19.0 source boundary is now `main` `0d10d5cc`, with #1576 and #1560 both merged. No final
+release candidate exists until one universal Command Line Tools artifact from that boundary (or a
+later explicitly reviewed blocker correction) is staged and bound for native qualification.
+Earlier candidate hashes and native results remain historical evidence only.
+
+| release decision | exact requirement before the cut |
+|---|---|
+| Candidate | #1576 and #1560 are merged on `main` `0d10d5cc`; exact-head hosted CI, independent review and merge-tree identity pass. Before freezing release bytes, fix the Logic 13 chooser/readiness blocker without widening project-mutation authority, then stage exactly one artifact. |
+| Artifact identity | Stage one final Command Line Tools-built universal artifact before publication, bind it to source SHA/version/archive and executable hashes, and make native qualification consume those exact bytes without rebuilding. Hashes before and after qualification must match; substitution, wrong source/version, absent/failed qualification and interruption must stop before publication. |
+| Latest Logic | On installed Logic Pro 13.0 (7801), run the every-operation independent-readback and release fault-env-refusal tests in separate processes against the exact staged artifact. Retain the debug-only fault-injection rejection as a separate negative control against its deliberate debug executable, then run the full unfiltered suite. Do not mislabel the debug negative as release-byte evidence. Explicit `notQualified` classifications may remain truthful; failed or missing required evidence may not. |
+| Distribution | Verify SHA-256 identity and installation of that unchanged unsigned artifact on Intel and ARM hosted runners, publish only after those checks pass, then retrieve and compare the public GitHub assets before MCP Registry publication. Apple signing, notarization, Gatekeeper, Xcode, private keys and a second promotion CLI are not release requirements. |
+| Recovery | Preserve the existing project, permission state and evidence. Any failed live mutation must retain owned restoration/readback; a failure prevents the tag. |
+| Deferred claims | #1553/#1561, #1565/#668, #1516, #1571, Creator Studio #1546 and the remaining ADR backlog stay open unless their own acceptance is independently complete. They are not closed or claimed merely because v3.19.0 ships. |
+
+Existing native evidence is reused only when the relevant product blobs, Logic build, locale,
+fixture and covered acceptance are unchanged. It is never promoted to exact-binary evidence after
+package or build inputs change.
+
+The current tag workflow rebuilds after local qualification, so it proves published bytes equal the
+hosted package but does not yet prove they equal the natively qualified bytes. The minimal handoff
+above is a release blocker for an exact-binary v3.19.0 claim. It does not satisfy the older,
+broader signature/trust-anchor wording still present in #284/#816; those issues remain open until
+their owners reconcile that superseded scope rather than silently treating an unsigned release as
+whole-issue completion.
+
+### Open-issue execution map
+
+Every one of the 29 issues open at measurement time appears in the table below.
+
+- Release and publication: #284, #816 and #1028; #1550's bounded product fix is merged while its Logic 12.4 recurrence remains open.
+- Latest-Logic compatibility: #668, #1552, #1553 and #1565.
+- Next product lane after the release boundary: #1516, #1571, #291 and #1403.
+- Dependency, contribution and backlog: #299, #302-#306, #308, #862, #884, #955, #967,
+  #969-#971, #1417, #1430 and #1546.
+
+No acceptance is downgraded and no issue is closed to make the count or a date look better.
+
+### Execution order, capacity and forecast
+
+This is a dated operational forecast from the measured blockers above, not a second scheduling
+authority. #308 and each owning issue retain the authority stated at the top of this file.
+
+The merge critical path is `Logic 13 chooser/readiness correction → exact-artifact handoff → freeze
+one candidate → native qualification → unchanged-byte publication/readback`. Use one integration/release owner, at
+most two active implementation slices and one exclusive native Logic session. Independent read-only
+review may run alongside them; a second writer may proceed only on files and acceptance that do not
+overlap the release lane.
+
+| cluster | dependency order and parallel lane |
+|---|---|
+| Release — #284, #816, #1028 | Stage and bind the artifact, qualify scoped native acceptance, then publish and retrieve unchanged bytes. The complete #1028 programme is not a v3.19 prerequisite. |
+| Logic compatibility — #1550, #1552, #1553, #1565, #668 | Preserve merged #1560 and accepted #1552 evidence. Repair chooser-shell readiness first, then #1561 independently. Share one AX/native owner for #1565/#668 and keep Logic 12.4 as a separate evidence gap. |
+| User features — #1516, #1571 | Develop MIDI Learn/readiness and additive read-only pan-mode contracts independently after the release source freeze. Unknown spread remains explicit rather than inferred. |
+| Session repair — #291, #967, #971, #969, #970 | Finish required graph/scalar routes before lifecycle creation/inverse and aggregate scenarios. Layout and colour provider discovery need not block every routing increment. |
+| Plug-ins — #299, #955, #306, #862, #1417, #1430 | Read-only captures and one exact parameter slice can proceed independently. MCU writer claims wait for exact strip binding; #1417 waits for its Logic 12.4 cleanup reproduction. |
+| MIDI/editors — #302, #303, #304, #305, #884 | Establish complete owned read sources before exact-note writers. Tempo, Flex Pitch and automation-point discovery remain separate provider investigations. |
+| Contribution/process — #1546, #1403, #308 | Creator needs an external supported host/contribution. Exercise #1403 through the existing automation path; do not add another coordinator. #308 remains the scheduling index. |
+
+The 2026-11-08 target for resolving every open issue passed unmet. The document keeps each issue
+open rather than manufacturing closure and replaces that missed date with evidence-based gates.
+With the source integration complete and the authorized native host and fixtures still available,
+the engineering forecast for v3.19.0 remains 2–5 working days: the bounded chooser/readiness repair,
+artifact handoff, one final native campaign and distribution readback. A newly exposed native
+defect adds a repair cycle, so this is not a guaranteed date. The next 1–2 weeks then target
+#1553, the bounded #1565/#668 recurrence, #1571 and one complete #1516 background workflow. The
+remaining provider-dependent backlog is forecast in 2–6 week slices only after each initial
+investigation produces a reachable provider or a measured wall.
+
+Reuse focused review and native evidence only while relevant blobs/dependencies, Logic build,
+locale, fixture and acceptance are unchanged. Batch accepted components into one native candidate
+and locale pass; do not repeat full local suites or native matrices for documentation/body edits,
+create duplicate harnesses, or produce further refusal-only planning PRs without advancing a
+positive provider/outcome.
 
 Historical delivery readback for the 2026-10-28 census (this block controls when an older snapshot below names a
 pre-integration head):
@@ -86,7 +233,7 @@ the current PR-state readback when they name an older head or say that a now-mer
 
 | ADR | issue | state | what it is waiting on |
 |---|---|---|---|
-| ADR-001 | #284 | OPEN | **CORRECTION (#956): the removal described next was reversed.** The owner reopened #284 on 2026-09-14 and that decision supersedes the retirement; #926 (`5519079e`) restored the runner, transport, contracts/promotion and CLI on 2026-09-19, and restoration alone did not wire independent enforcement or publish evidence (#284 §2). #373 owns implementation, #290 the atlas evidence adapter and #816 publication. The 2026-09-13 reading, kept as history: The subject was removed on 2026-09-13. The qualification CLI (`--qualify`, `--verify-promotion`), the attestation/waiver types, the `trusted-verifier` product, the managed fixtures and the release-workflow gates that consumed them are all gone; `release.yml` carries no qualification step and `Package.resolved` dropped the sixteen transitive dependencies the verifier pulled in. The row that stood here described a critical path — #373 produces a bundle, #816 publishes it, #815 makes the gates unconditional — through machinery that no longer exists. A future release gate is new work with its own contracts, not a continuation of this. |
+| ADR-001 | #284 | OPEN | The direct qualification runner and transport remain; the standalone trusted verifier, signing/promotion gate and signed public-evidence matrix were removed as a separate policy subsystem in PR #1576. No current exact final candidate has completed terminal acceptance. A release must bind the executable and both unsigned release archives to source and version with SHA-256; carry required same-target mutation readback and owned restore/compensation evidence; pass Desktop en-US/ko-KR `core/cold/empty` qualification on those same bytes; install successfully; and prove the published bytes equal the qualified archives. #816 still requires unauthenticated retrieval, tamper/substitution rejection and truthful public links/scope, without a private signing key or a second promotion CLI. The complete ADR backlog is not an invented release prerequisite; unsupported or deferred claims remain explicit. Closed #373 supplied the candidate/private-bundle path and closed #290 the atlas adapter; open #284 and #816 own the remaining parent acceptance and publication. |
 | ADR-002 | #285 | closed | |
 | ADR-003 | #286 | closed | |
 | ADR-004 | #287 | closed | |
@@ -111,7 +258,7 @@ Also open, outside the ADR set:
 |---|---|---|
 | #308 | OPEN | **The ADR programme's scheduling entry (START HERE).** It selects work and points to one owning issue body per implementation contract, and it stays open permanently and outside release and completion milestones (#308 §1, #956 §4). History: closed 2026-09-05 as superseded by the phases below, on the reasoning that a second copy of the order would drift; reopened 2026-09-21 by the owner, which moved order out of this file rather than into both. The phases below are now dated history (see *Order — the phases*). |
 | #369 | closed | shipped #737 (`466dc20f`) — the drive works against a localized Logic. Seven live rounds found six independent defects, each fatal alone: English-only matching, the panel read ~1 s before it could exist, `AXURL` read as a String, the destination searching the wrong AX roles, navigation confirmed by a *change* when the panel reopens on the last destination, and a progress dialog titled `Logic<U+00A0>Pro`. Terminal State B is the design: three tracks named "Studio Grand" came out as `Studio Grand.aif`/`_1`/`_2`, names Logic assigns after the export |
-| #373 | OPEN | **CORRECTION 2026-09-20: this row opened with "THE SUBJECT OF EVERYTHING BELOW WAS REMOVED ON 2026-09-13", and that stopped being true on 2026-09-19.** #926 (`5519079e`) restored the qualification subsystem: `Sources/LogicProMCP/Qualification/` holds `ProductionReadinessContracts.swift`, `PromotionGate.swift`, `QualificationRunner.swift`, `SemanticOracles.swift` and the rest, and `--qualify`/`--verify-promotion` are back in `MainEntrypoint.swift:66`. It also fixed the defect that made the old evidence unverifiable — a mutating operation's probe is required to have been REFUSED fail-closed while its record was filed under a shape rule demanding `operationIsError == false`, which is not satisfiable, so the verifier rejected every mutating pass while the runner reported it passed; a case now carries the SHA-256 of its record and the verifier checks that binding. WHAT IS STILL MISSING IS THE GATE, not the subject: the seven release steps all carried `if: vars.ADR001_QUALIFICATION_ENFORCED == 'true'` and that variable is set nowhere, deleting the `if:` makes every tag require a `QUALIFICATION_EVIDENCE_URL` secret that does not exist (release OFF, not gate ON), and the old pin is 7,522 lines behind and would reject all 21 Phase-A passes. Wiring it is its own change with a run URL as its acceptance. The Phase-A measurements below are kept and are still facts about the binary they were taken against. Historical record follows. Phase A IS ALREADY DONE and was invisible. Driven live 2026-09-07 against the release binary, **21 of 23** read-only operations report `passed` with `semanticReadback` — not the 15 this row carried, and not the zero the contract evaluator reports. The two that do not are both already understood: `tracks.list_library` is the failure pinned in `knownLiveGateFailures`, and `tracks.scan_plugin_presets` needs a plug-in window. All 90 mutating operations report `notQualified`/`typedDeferral` BY DESIGN — the runner probes them with parameters that must be refused and asserts `writeAttempted == false`, so a qualification run cannot modify a project, and adding a `.passed` branch would be moving the grader. So the remaining work for the read-only surface is NOT producing coverage; it is carrying coverage that exists into the release evidence bundle and into a form the static evaluator can read — that evaluator HAD no live `.passed` input at all and `waivers.json` holds zero entries, so its 113/113 measured its own blindness rather than the product's. The channel now exists: `ProductionReadinessContractEvaluator.evaluate` takes `liveCreditedOperationIDs`, produced only by `PromotionGate.liveCreditedOperationIDs(in:)` applying the release gate's own pass predicate to a real attestation, and defaulting to empty so a bare tree answers as it did before. So the 113/113 is still what this tree reports, but it is now a statement about missing evidence rather than about a missing input. NOT established: that the 21 live passes survive being carried through a bundle — no attestation has been fed to this parameter yet. NOT established: whether a different fixture moves any of the 21, and whether the transport's verdict is release-grade — a bundle also needs the raw transcript, the manifest entry and the signature **MEASURED 2026-09-14 — the subject is gone from the code, and now it is counted rather than asserted.** Grepping `Sources/` for each named type: `QualificationAttestation` 0 files, `ProductionReadinessContractEvaluator` 0, `PromotionGate` 0, `QualificationTransport` 0, `liveCreditedOperationIDs` 0. `QualificationCase` appears **once in the whole tree and it is a doc comment** — the type does not exist. That comment lived in `SelectorAtlas/AtlasQualification.swift`, describing a case it would emit into an attestation and a case manifest; it is corrected in this pass to say the run it was built to feed was removed with ADR-001, and that what survives is the pure decision plus its `--probe-atlas-diff` driver. So this issue's parent (#284) closed as retired and its machinery is measurably absent: what it needs before coverage is a SUBJECT, and the 21-of-23 live read-only passes recorded above remain true about the product's read surface either way. |
+| #373 | closed | GitHub closed this execution issue on 2026-11-07. Closure is not a release PASS: its last native candidate `6e900b1b` produced 40 passed, 3 failed, 90 not qualified and 6 protocol-smoke cases on Logic 12.3/ko-KR, and explicitly left the en-US matrix, stable request-owned Mixer associations, signed two-axis evidence and publication open. Those live obligations remain load-bearing under parent #284, publication #816 and fixed-verifier #1028; the current v3.19.0 candidate is judged by the release gate above rather than by the closed issue state. |
 | #448 | closed | **Closed 2026-09-09 as not planned; a non-completion transfer, not delivery (#308 §3).** The shipped sort stays. The remainder moved: population and hierarchy to #965, naming to #968, arbitrary order and stacks to #969, colour to #970, plan and execution to #966/#971. The row as written before that transfer: `tracks.sort_verified` ships: it drives `Track > Sort Tracks by`, binds the verdict to the menu leaf actually pressed, and checks the effect against a complete caller-supplied order — so a sort by the wrong criterion cannot pass, and an already-sorted project stays State B because a no-op cannot prove the command ran. It refuses a collapsed stack (a scope it cannot enumerate) and a duplicate-name project (an identity it cannot key). Driven live 2026-09-03: 4 of 4 State A. Two things measured and NOT fixed here — Logic 12.3's `트랙 이름` leaf performs no operation at all while `악기 이름` and `생성일` work, all seven reading `AXEnabled = true`; and the settle witness is #757. Still open: anchor-based reorder is drag-only, and colour still needs a definition of verified for a write nothing reads back  MEASURED 2026-09-08: the colour half is not a design question. `AXUIElementCopyAttributeNames` over every element reachable from the main window — **91 distinct attribute names, 0 containing colour, 0 failed name calls, 0 empty answers — and 20 child lists the sweep could NOT read**, so twenty subtrees were never entered. The Mixer, revealed by pressing its own named button, added zero names. A track header declares nineteen attribute names in total and none could carry a colour. So the question moves from what `verified` should mean to whether any observable consequence exists — and none was found anywhere the sweep reached. The record is `partial`, not a wall: this is a census of attribute NAMES, a value could still be carried inside `AXValue` or spelled into `AXDescription`, and twenty subtrees refused to be read. Remaining routes are a different surface (project file, palette window) or an explicit refusal. Limits stated in the record: names not values, palette and dialogs unswept, depth 16 ||
 | #678 | closed | the drift guard and this file's update rule shipped in #684 |
 | #735 | closed | legacy `MIDIPacketList` traversal walked past a value copy and killed the server (SIGBUS), reachable by anyone sending to a published port. `MIDIPacket.data` imports as a fixed 256-byte tuple, so a value copy captures one packet's storage however many the list holds; both sites now walk the ORIGINAL pointer with `unsafeSequence()` and reject rather than truncate an oversized packet. `MIDIFeedback.parse` took the list BY VALUE, so no change inside its body could have fixed it — the signature takes a pointer now. Independently confirmed by #683's reporter: 5 of 5 crashes in isolation at 40 packets per list with the defect, 0 of 8 with the fix, and 2 of 3 in-server deaths on `LogicProMCP-MIDI-In`. The live-gate rule that could not express this proof is #754; the inbound destination nothing reads is #755 |
@@ -158,7 +305,7 @@ Also open, outside the ADR set:
 | #854 | closed | **제품 결함이 아니었습니다 — 실측으로 종료.** AX 사실 자체는 유효하고 관측 기록으로 남습니다(아렌지에서 `AXPress` 는 `AXFocused` 요소만 액추에이트하고, 포커스 없는 press 는 `rc=0` 을 돌려주며 아무것도 하지 않는다). 다만 제품의 액추에이터 사다리는 이미 그 위에서 동작하도록 실측 기반으로 만들어져 있었다 — `AccessibilityChannel+Tracks.swift:781` 이 그대로 적어놓고 있다: *SOLO flips on AXPress; MUTE needs exclusive-select + key 'm'; ARM needs exclusive-select + the key chord. **The read-back — not each rung's return value — decides State A.*** MUTE/ARM 은 애초에 AXPress 를 쓰지 않고 선택을 먼저 세우며, AXPress 에 의존하는 것은 SOLO 하나다. 실측 2026-09-12: track 1·5 mute 양방향, track 5·12 solo 양방향 — 전부 검증된 State A. Acceptance 1번은 “세우지 않는 이유를 기록한다” 쪽으로 이미 충족(코드 주석이 그 기록), 3번은 포커스가 아니라 **readback** 으로 판정하므로 rc 를 믿지 않는 더 강한 형태로 충족. 2번(#291 슬롯 센서스 재실행)은 이 이슈가 아니라 ADR-008 소관이므로 그쪽으로 넘긴다 |
 | #852 | closed | **네 acceptance 모두 완료. 오래 막혀 있던 원인은 Logic 이 아니라 우리 프로브였다.** 역할 집합 단일화·체크박스 인식·drift guard 확장은 PR #857 에서 끝나 있었고, 남아 있던 4번(Compressor·Gain 의 Controls-view 체크박스 수를 #292 에 게시)이 열려 있었다. 그 측정을 막던 것: `insert_plugin` 은 플러그인 창을 **열어둔 채** 끝나므로, 삽입 후 Open 을 누르는 프로브 실행은 그 창을 **닫았고**(실측 창 3→2), `newWindows` 는 추가만 보므로 `opened_windows: []` → `not_found` 를 보고했다. `not_found` 는 없는 슬롯·틀린 라벨·읽히지 않는 스트립·토글로 닫힌 창이 **전부 내는 같은 한 단어**라, 하루에 블로커를 네 번 틀리게 짚었다(픽스처 → 구조적이라 단정한 `-25200` → 내 한국어 라벨 → "표면 자체의 벽"). 고친 것은 둘이고 첫째가 본질: 창을 닫은 press 는 before/after 창 수와 함께 `toggled_closed` 로 보고하고, 방향이 알려졌으므로 한 번 더 눌러 연다 — 희망 섞인 재시도가 아니라 한 연산의 나머지 절반이다. 고정 대기 `usleep(1_400_000)` 도 폴링으로 바꿨으나(`open_wait_ms` 가 영수증에 남음) 그것만으로는 결함이 안 고쳐졌고 커밋에 그렇게 적었다. 측정 결과: **Compressor 29행 중 AXCheckBox 2** (`Limiter On:`, `Auto Release:`), **Gain 2행 중 0** — 체크박스가 이 저장소가 액추에이트한 유일한 Controls-view 역할이므로, 이 평면에서 검증된 쓰기가 가능한 파라미터의 상한이 각각 2개와 0개라는 뜻이고 #292 에 그렇게 게시했다 |
 | #851 | closed | **FIXED: the staleness rule is evaluated once per payload.** `mcu.feedback_stale` and the word in the MCU `channels[].detail` line shipped in one document and came from TWO reads of the cache — `router.healthReport()`, which reached `MCUChannel.healthCheck` and let it derive the word from its own read, and `cache.getMCUConnection()` a few lines later for the wire field — so feedback arriving between them put `…feedback stale` beside `feedback_stale: false`, with neither field wrong at the instant it was taken and the document wrong as a whole. This is the check `live_849` REFUSED to write: comparing the two fields was its first shape, rejected as green-by-luck and red-on-a-race, and filed here instead of written. `MCUChannel.healthCheck` now renders no staleness at all and reports what it can answer without a clock; the dispatcher takes one snapshot, computes staleness once, and the same boolean produces both the wire field and the clause on the MCU row, so agreement is structural rather than lucky. A disconnected port earns NO clause in either direction — it is not stale under the rule and not active either, and a renderer reading only the boolean would print `feedback active` on a dead port, which is the mutation the live harness catches deterministically. The live run cannot show that the race USED to happen and says so in its own docstring; what it adds is that the ASSEMBLED payload is self-consistent across both answers, with the sweep required to contain both because a surface that is permanently stale agrees with itself forever |
-| #816 | OPEN | R-PUB asks where a third party can retrieve and verify qualification evidence. #926 (`5519079e`) restored the qualification subsystem. PR #1416 then merged the bounded publication/consumer path as `5c3ffa34` from exact head `df1163df`: `release.yml` verifies owner-prepared final executable/archive bytes and a signed public envelope without repackaging, publishes the public proof assets, and exercises controlled unauthenticated retrieval. Its exact-head Code run 40165264587 passed all jobs, with same-head policy and CommitLore preservation also green; controlled negatives cover missing, altered and FIFO proof, substituted metadata/private manifest, omitted upload/publication entries and missing/altered retrieval. This replaces the stale claim that nothing publishes evidence, but it is not terminal #816 acceptance. A real independently accepted #373 bundle, authenticated public-key distribution, authorized publication, an actual externally retrievable unauthenticated URL, verification of those exact public bytes and final release/README links remain outstanding. |
+| #816 | OPEN | R-PUB asks where a third party can retrieve and verify qualification evidence. The signed public-envelope path once delivered by #1416 was removed with the standalone trusted verifier and promotion subsystem in #1576; it is historical evidence, not the current release workflow. The current authorized scope is an unsigned CLT-built artifact bound to source, version, artifact identity and archive/binary SHA-256, installed on Intel and ARM before publication, then fetched without authentication and byte-compared before registry publication. The exact-artifact handoff, a real public release URL and final release/README links remain outstanding. The issue stays open unless its older signature/trust-anchor wording is explicitly reconciled; an unsigned cut is not silently whole-issue completion. |
 | #846 | SHIPPED | The AX plug-in probe restates a label rule the PRODUCT owns and the two spellings diverged: `AXLogicProElements+Mixer.swift:265` lowercases before comparing against `AXLocalePolicy.mixerNamedElement`, and `ax_plugin_menu_probe.swift`'s `trimmed()` does not — so Logic's `"Mixer"` can never match the label set's `"mixer"`, and only a locale without case distinction (`믹서`) passes. That is why `live_306` was written against a Korean fixture. **Filed with a second defect that turned out to be my own misreading**: I reported the probe's structural model as wrong after finding no labelled `AXGroup` ancestor, but I had measured the INSPECTOR — Logic describes its two-strip area `Mixer` too, and the matcher's ancestor clause is what correctly rejects it. Open the real Mixer and the structure is exactly what the matcher expects. With the case fix applied the chain runs end to end (mixer 1 -> strip 1 -> slot 1 -> open_press 0 -> 7 Controls sliders). SHIPPED in #848: all thirteen policy-label comparisons go through one `matchesPolicyLabel` that folds BOTH sides, user identifiers stay exact, and `check-probe-label-matching.py` fails when probe and product can drift — its own first version had three holes a mutation run found, so its self-test now injects six defects. The Korean-fixture regression question was answered by construction rather than by a run: every observed string there is Hangul, where folding is the identity. **The second defect I filed was my own misreading** — I had measured the INSPECTOR, whose two-strip area Logic also describes `Mixer`; the matcher's ancestor clause is what correctly rejects it, and the case fix alone was sufficient. Unblocked #299's measurement, which is what turned #292 from three options into two |
 | #843 | SHIPPED | `FileHandle.availableData` raises an Objective-C `NSFileHandleOperationException` when its pipe goes bad, and a Swift `catch` cannot see one: a full-suite run aborted at `QualificationSubprocessSession.startReaders` and took the whole test process with it, so every test after that point went UNRUN rather than failed. An audit found two more of the same shape in `BoundedProcessRunner`, where it is worse — inside a `readabilityHandler` the exception skips `group.leave()`, so a surviving process waits forever. **The first fix was wrong and the live harness caught it**: `read(upToCount:)` throws properly but WAITS for the count, and a handshake frame never fills 64 KiB — 27s green became a 45s `timeout:handshake`, pinned by reverting that one file and rebuilding. The unit tests were 8/8 green on both versions. All four sites now use POSIX `read`, which returns what is available AND reports failure by return value. NOT covered, stated in the file rather than implied by a green test: #843 has no regression test — a mutant left the first attempt passing, because a child that `kill -9`s itself closes its pipes normally and the exception never fires, and there is no seam to make a descriptor go bad while a reader is blocked on it |
 | #821 | SHIPPED | The release path could not publish a tag once the release commit was merged. Both halves of the refusal were narrowed rather than waived. The LIVE GATE was over-broad by exactly one case: rules are read with `git show "$RULE_REF:…"` — from the ref, never the worktree — so "a branch edits its own judge" needs HEAD to carry commits the reviewed ref lacks, and `HEAD == origin/main` has none by definition. That case is exempt now and says so in its output; a local ref and a literal `HEAD` are still refused. The STAMP GATE demanded a token for content already published: a commit reachable from any remote-tracking ref passed the gate on the branch that carried it, and re-demanding a stamp keyed on (tree, HEAD, BASE) asks for one no honest route can mint after a merge. It is now skipped for those, the way a deletion is. Neither change lets a RED gate mint a stamp, and `Scripts/test-preflight-stamp.sh` proves it by building an unpublished commit in a scratch repo AND copying the stamper into it — without that copy the refusal case had been passing for the wrong reason, reporting "gate NOT enforced" and exiting 0. Verified by the release completing: `refs/tags/v3.16.0` -> `c1568bd2`, 5 assets. Found on the way: the pre-push hook in this checkout was a three-week-old COPY of the script, not the documented symlink, so fixing the script would have changed nothing |
@@ -262,6 +409,16 @@ Also open, outside the ADR set:
 | #1420 | closed | Closed by #1431, merged normally as `e5e0af92`. The tested source tree is byte-identical to the merge tree and the required final-head checks passed. `record_sequence` now acquires the four-component Beats display mode under retained ownership, restores the originally checked mode with observed menu cleanup on every exit, and blocks import until that restoration is verified. This closure does not claim the separate Logic 12.4 activation failure in #1084 is fixed; reporter retest remains requested there. |
 | #1422 | closed | Closed by PR #1429, merged normally at `3227b459` after exact-head review and all required checks passed. Default duplicate-name requests remain nonmutating and return every collision; only explicit `allow_temporary_track_rename` consents to the owned temporary rename. The merged path retains physical-target continuity, publishes only through the managed no-overwrite boundary, restores on success/failure/cancellation/deadline while custody still holds, and refuses verified success rather than overwriting a later user rename when restoration cannot be proved. |
 | #1430 | OPEN | Add read-only `get_param_verified` coverage for ChromaVerb, Space Designer, Tape Delay, Stereo Delay and Overdrive in the issue's priority order. An explicit occupied `plugin_insert_ref`, verbatim display value, truthful partial coverage and verified editor cleanup are required. Exact AX row/control evidence for these plug-ins has not yet been captured, so no parameter metadata is inferred from UI names alone. |
+| #668 | OPEN | PR #1566 merged exact head `7eec57e1` as `33719d05` after focused, affected, hosted and independent review gates passed. It yields before background Mixer work so an explicit refresh is not forced to wait behind that section. The larger bundled tutorial fixture identifies 165 project tracks while its collapsed view exposes only 11 AX rows, so it does not satisfy the issue's approximately 74-visible-row recurrence. A preserved project reports metadata `NumberOfTracks = 74`, but metadata count is not AX-visible-row proof. Remaining acceptance is a current-main native run that first proves approximately 74 visible rows, then demonstrates complete refresh fields and deadline/ceiling behavior without skipping work. |
+| #1516 | OPEN | PR #1522 (`cc2edb33`) merged the strict first binding-catalog entry; #1562 (`dcd10403`) merged the internal fail-closed read-only binding check; #1563 (`9dee61e6`) merged the public consented check command. These are prerequisites, not the whole feature. Remaining acceptance is Learn through the owned MIDI port, source-aware functional verification, persistence/invalidation, per-operation readiness and fallback suppression, health/doctor/docs, a qualified region command, and live background execution with independent result and focus/restoration evidence. Local health/record-doctor branches exist but have no current-main PR or fresh exact-head gate and are not release claims. |
+| #1530 | closed | Closed by the pull request carrying this row. PR #1539 merged as `8c926dc8` with deterministic stuck-AXCancel fallback and fail-closed counterexamples. A reporter then reran a main commit containing that merge on Logic 12.4/en-US: `record_sequence` imported the eight-note region, restored Beats & Project with no stuck menu, and the project survived save/reopen. The separately observed untitled-project, GM-lane, Bounce-dialog and MIDI-note-read behaviors are not silently folded into this menu fix. |
+| #1546 | OPEN | Creator Studio remains outside `QualificationAxis.shipVariants`, and the maintainer host has no `com.apple.mobilelogic`, so native Creator support cannot be claimed locally. Waiting on the reporter's bounded draft PR and Creator Studio 13 disposable-project evidence: explicit developer opt-in only, desktop still default, RED/GREEN test, exact app/macOS/locale/operation/readback/cleanup, and no private paths or attestation. Stable support and the separate #683 MCU question remain unclaimed until that evidence and a product-scope decision exist. |
+| #1550 | OPEN | PR #1560 merged exact head `fb3a6e8a` as `0d10d5cc`, with byte-identical head/merge tree `19b9458e`. Hosted merge candidate `8df09030` passed the 7,780-test exact union, Command Line Tools release build, 83.44% region / 90.64% line coverage, required fan-in and independent exact-head review. Logic 13 native comparison on the unchanged cache/resolver path found at most 24 ms and under 4 ms while `get_regions` held AX work, with structured response equivalence across leaf/folder/miss/malformed/cold-cache cases. The bounded product defect is delivered; the issue remains open because the original Logic 12.4 long-wait case has not been rerun against the delivered candidate. |
+| #1552 | OPEN | PR #1558 merged as `ca7e2b63` and prefers the saved project sample rate when the live transport value disagrees. Deterministic tests and hosted CI pass. On Logic 13/en-US the exact merge reports 48000 from both `project_file` and `ax_live` for the same 48 kHz project, matching the Project Settings UI; the pre-fix build reports 44100. This correction is included in the current release candidate. The original Logic 12.4 native rerun is still absent, so that version is not retroactively claimed. |
+| #1553 | OPEN | Draft PR #1561 at `14649e41` structurally fixes the first sidebar-outline ambiguity and its original hosted checks pass, but it does not complete the issue. Its current merge-tree has only a `CHANGELOG.md` conflict; the existing product/test paths auto-merge. Three Logic 13 List-view reruns reach the next fail-closed refusal, `stem_destination_component_group_unresolved`. Preserve Column view's exact `AXTextField → AXGroup → AXList/AXSelectedChildren` path and add only List view's measured ancestry `AXTextField → AXCell → AXRow → AXOutline (ListView)`. Treat `AXSelectedRows` only as a candidate mechanism until exact owner, write/readback and navigation are proven. Duplicate path fields, broken ancestry, unreadable selection, wrong-owner rows, rejected writes and echoed-without-navigation cases must still refuse. Then rerun native List/Column acceptance on the new exact head. |
+| #1565 | OPEN | The reporter measured en-US 25 s timeouts across transport, health, refresh, track creation and project creation, and a timed-out `project.new` landed roughly 90 seconds later. PR #1572 merged exact head `1aff3a7d` as `7494ecf2`, so a timed-out mutation now retains settlement ownership and cannot be credited after the deadline without independent observation. The remaining broad latency is measured by the unpushed diagnostic slice `5de8b4e9`: refresh 3.929 s, with Mixer 2.163 s the largest section, tracks 0.875 s, markers 0.437 s and transport 0.270 s on the inspected Logic 13 project. This diagnostic does not close the issue; it still needs an accepted product correction and exact-candidate native qualification without repeating destructive `project.new`. |
+| #1568 | closed | PR #1574 merged exact head `de509595` normally as `b7053947` after deterministic focused/affected tests, independent review, native two-process acceptance twice and all exact-head hosted gates passed. The passive child owned no endpoints, routed demand made the serving child acquire the demanded MIDI group, the passive child's late demand received the terminal ownership conflict, MCU stayed honestly deferred, and both owned processes exited cleanly through stdin close. The merge parents and ten expected product/test paths were read back from `origin/main`; Doctor remains truthful that setup checks do not themselves prove runtime ownership. |
+| #1571 | OPEN | Preserve the existing `pan` and `panReadback` fields and add optional read-only mode fields from the already-owned unique pan control: `balance`, `stereo_pan`, `unrecognized`, or explicit unknown. Report spread only when an exact owned read source exists; otherwise return null with a machine-readable reason rather than guessing from labels or geometry. Logic 13 inspection found only the generic balance-style pan identity and no independently identifiable spread control. Implementation must keep legacy decoding and nil omission, round-trip the new fields, propagate them through Mixer fixtures, and authorize no mutation. |
 
 ### Three reopen reasons, checked rather than inferred
 
@@ -445,7 +602,8 @@ Deliver release enforcement backed by evidence for the artifact actually distrib
 
 ## What this file does not claim
 
-It does not claim any of the above is verified live. Issue state here is a transcription of GitHub
-at the measured date, and the "waiting on" column is transcribed from each issue's own recorded
-findings. Where this file and an issue disagree, **the issue is right and this file is the one that
-is wrong** — the same relationship its predecessor declared toward a file nobody could read.
+It does not promote a recorded native measurement into outstanding acceptance or whole-issue
+completion. Issue state here is a transcription of GitHub at the measured date, and the "waiting
+on" column is transcribed from each issue's own recorded findings. Where this file and an issue
+disagree, **the issue is right and this file is the one that is wrong** — the same relationship its
+predecessor declared toward a file nobody could read.

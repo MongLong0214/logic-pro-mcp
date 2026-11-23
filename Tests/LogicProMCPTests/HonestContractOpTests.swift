@@ -313,6 +313,10 @@ func testSetCycleRangeTransportWithoutLocatorFieldsIsTerminal(
     let window = builder.element(821)
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [])
+    // A readable focus that is no text editor, so the lookup this test is about is reached.
+    let focusedGroup = builder.element(822)
+    builder.setAttribute(focusedGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, focusedGroup)
     let runtime = AccessibilityChannel.Runtime.axBacked(
         isTrusted: { true },
         isLogicProRunning: { true },

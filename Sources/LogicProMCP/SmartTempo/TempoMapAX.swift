@@ -299,11 +299,11 @@ enum TempoMapAX {
     /// owned step is still reconciled through the bounded rollback; cancellation never suppresses
     /// compensation for a write this request proved it made.
     ///
-    /// `convergenceDeadlineOverride` exists so a test can decide WHICH of the two bounds it is
-    /// measuring in both the forward walk and any rollback. With both left at their defaults the
-    /// two race, and which one fires depends on how fast the machine runs the fixture: a budget
-    /// test written against a 3 s default passed here and failed on a slower CI runner, where the
-    /// deadline arrived first and the refusal named the other bound. Production never passes it.
+    /// `convergenceDeadlineOverride` exists so a test can decide WHICH bound it is measuring in
+    /// both the forward walk and any rollback. It replaces the overall convergence interval and
+    /// each per-write settle interval together; otherwise the production 0.5 s settle cap remains
+    /// a hidden third race even after a test pushes the overall deadline out. With the override
+    /// absent, production retains its 3 s overall and 0.5 s per-write bounds.
     static func setExistingTempo(
         at index: Int,
         to target: Double,
@@ -408,6 +408,7 @@ enum TempoMapAX {
             localeIdentifier: localeIdentifier,
             runtime: runtime,
             deadline: Date().addingTimeInterval(convergenceDeadlineOverride ?? convergenceDeadline),
+            postWriteSettleInterval: convergenceDeadlineOverride ?? postWriteSettleDeadline,
             observesCancellation: true
         )
         switch forward {
@@ -779,6 +780,7 @@ enum TempoMapAX {
         localeIdentifier: String?,
         runtime: AXLogicProElements.Runtime,
         deadline: Date,
+        postWriteSettleInterval: TimeInterval,
         observesCancellation: Bool
     ) -> Convergence {
         guard let budget = attemptBudget(from: initial.tempo, to: target) else {
@@ -925,7 +927,7 @@ enum TempoMapAX {
                 in: window,
                 localeIdentifier: localeIdentifier,
                 runtime: runtime,
-                deadline: min(deadline, Date().addingTimeInterval(postWriteSettleDeadline))
+                deadline: min(deadline, Date().addingTimeInterval(postWriteSettleInterval))
             ) {
             case let .success(observed):
                 next = observed
@@ -1170,6 +1172,7 @@ enum TempoMapAX {
             localeIdentifier: localeIdentifier,
             runtime: runtime,
             deadline: Date().addingTimeInterval(convergenceDeadlineOverride ?? convergenceDeadline),
+            postWriteSettleInterval: convergenceDeadlineOverride ?? postWriteSettleDeadline,
             // Forward cancellation has already won. Compensation remains bounded by the same
             // deadline/budget and must observe its real result instead of being skipped.
             observesCancellation: false

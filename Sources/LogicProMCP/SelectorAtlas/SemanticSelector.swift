@@ -66,6 +66,7 @@ enum AmbiguityPolicy: Equatable, Sendable {
 struct SemanticSelector: Sendable {
     let id: SelectorID
     let requiredRole: String
+    let alternateRoles: Set<String>
     let allowedSubroles: Set<String>
     let titleAliases: [String: [String]]
     let ancestorConstraints: [AncestorConstraint]
@@ -73,6 +74,30 @@ struct SemanticSelector: Sendable {
     let geometryHint: GeometryHint?
     let minimumConfidence: Double
     let ambiguityPolicy: AmbiguityPolicy
+
+    init(
+        id: SelectorID,
+        requiredRole: String,
+        alternateRoles: Set<String> = [],
+        allowedSubroles: Set<String>,
+        titleAliases: [String: [String]],
+        ancestorConstraints: [AncestorConstraint],
+        attributePredicates: [AttributePredicate],
+        geometryHint: GeometryHint?,
+        minimumConfidence: Double,
+        ambiguityPolicy: AmbiguityPolicy
+    ) {
+        self.id = id
+        self.requiredRole = requiredRole
+        self.alternateRoles = alternateRoles
+        self.allowedSubroles = allowedSubroles
+        self.titleAliases = titleAliases
+        self.ancestorConstraints = ancestorConstraints
+        self.attributePredicates = attributePredicates
+        self.geometryHint = geometryHint
+        self.minimumConfidence = minimumConfidence
+        self.ambiguityPolicy = ambiguityPolicy
+    }
 }
 
 /// How much of the evidence this selector ASKED FOR the candidate actually carries.
@@ -100,7 +125,8 @@ struct SemanticSelector: Sendable {
 ///   - role alone cannot exceed 0.49 either. Under a ratio a selector naming ONLY a role would
 ///     otherwise score 1.0 for matching a role, and "it is a slider" is not an identification.
 func confidence(of candidate: ResolvableCandidate, against selector: SemanticSelector) -> Double {
-    guard candidate.role == selector.requiredRole else { return 0 }
+    guard candidate.role == selector.requiredRole
+        || selector.alternateRoles.contains(candidate.role) else { return 0 }
     guard selector.allowedSubroles.isEmpty
         || candidate.subrole.map(selector.allowedSubroles.contains) == true else { return 0 }
 

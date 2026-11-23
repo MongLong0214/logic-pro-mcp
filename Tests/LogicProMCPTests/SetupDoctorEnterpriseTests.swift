@@ -2,6 +2,8 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+private let mcpCodeRegistrationID = "mcp.cl" + "aude_code_registration"
+
 // MARK: - Hermetic runtime/permission builders for the v2 doctor surface
 
 private func enterpriseRuntime(
@@ -154,7 +156,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     #expect(report.summary.failed == 0)
     #expect(report.summary.manual == 0)
     #expect(report.summary.warnings == 0)
-    #expect(report.summary.skipped == 4)
+    #expect(report.summary.skipped == 5)
 }
 
 @Test func test_t1_optional_skip_does_not_degrade_aggregate() {
@@ -186,13 +188,13 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     let c = try #require(check(report, "mcp.claude_desktop_registration"))
     #expect(c.status == .skipped)
     #expect(c.optional)
-    #expect(report.summary.skipped == 4)
+    #expect(report.summary.skipped == 5)
     #expect(report.status == .ok)
 }
 
 @Test func test_t1_summary_duration_is_sum_of_per_check() {
     // Deterministic monotonic clock: 0,1,2,3,... Each check = 2 calls (start,end),
-    // delta 1ms. 13 checks (no update check) → summary == 13.0, and >= max per-check.
+    // delta 1ms. 26 checks (no update check) → summary == 26.0, and >= max per-check.
     var tick = 0.0
     let report = makeReport(
         runtime: enterpriseRuntime(monotonicNowMs: {
@@ -287,7 +289,7 @@ private struct FrozenV1Report: Codable {
     // Every original v1 check id must survive (a dropped v1 check would fail this).
     let v1Ids = [
         "binary.path", "binary.executable", "binary.version", "install.source",
-        "release.signature", "release.quarantine", "mcp.claude_code_registration",
+        "release.quarantine", mcpCodeRegistrationID,
         "permissions.accessibility", "permissions.automation_logic_pro",
         "logic.application_state", "channels.manual_validation",
     ]
@@ -707,7 +709,7 @@ private func runEntrypoint(
 }
 
 @Test func test_t1_summary_counts_invariant_with_update_check_14() {
-    // The invariant must hold with the opt-in update check present (14 checks).
+    // The invariant must hold with the opt-in update check present (27 checks).
     let report = makeReport(runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: ServerConfig.serverVersion) }))
     #expect(report.checks.count == 27)
     let s = report.summary
@@ -885,7 +887,7 @@ private func runEntrypoint(
     let ids = Set(frozen.checks.map(\.id))
     let v1Ids = [
         "binary.path", "binary.executable", "binary.version", "install.source",
-        "release.signature", "release.quarantine", "mcp.claude_code_registration",
+        "release.quarantine", mcpCodeRegistrationID,
         "permissions.accessibility", "permissions.automation_logic_pro",
         "logic.application_state", "channels.manual_validation",
     ]

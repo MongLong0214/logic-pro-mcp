@@ -420,13 +420,17 @@ The opt-in `dominant_peak` mode adds `dominantPeakComparison` from each analysis
 
 ### `logic_system`
 
-Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundle`, `setup_arm_key`, `list_recent_traces`, `get_trace`, `clear_traces`, `saga_preflight`, `saga_execute`, `saga_status`, `saga_cancel`, `help`.
+Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundle`, `setup_arm_key`, `setup_midi_key_commands`, `list_recent_traces`, `get_trace`, `clear_traces`, `saga_preflight`, `saga_execute`, `saga_status`, `saga_cancel`, `help`.
 
 Use `health` for channel readiness and `help` for command summaries. `help` accepts category `all`, `transport`, `tracks`, `mixer`, `midi`, `edit`, `navigate`, `project`, `audio`, `plugins`, or `system`.
 
 #### `setup_arm_key` (v3.12.0)
 
 Consent-gated auto-setup for Logic's "Toggle Track Record Enable" key command — the coordinate-free arm actuator's prerequisite. Without `consent: true` it returns State C `consent_required` before any parameter validation or mutation (consent-first). With consent it runs verify-first: it drives a real record-arm flip **and restore** using only the configured chord, so an already-working mapping short-circuits to State A (`write_source: "existing_mapping_verify"`) with zero GUI mutation; otherwise it performs the assignment in Logic's Key Commands window and functionally re-verifies the new mapping the same way. Every outcome is an Honest Contract envelope: State A only after an observed flip AND restore; a chord already owned by another command fails closed as `chord_conflict` and is never stolen; an environment with no selectable track fails closed as `verify_environment_unavailable` with no GUI mutation attempted. Evidence fields include `configuration_write_attempted`, `verification_mutation_attempted`, `restored`, `safe_to_retry`, and (GUI path) window/search/selection/learn readbacks. Set `LOGIC_PRO_MCP_ARM_KEYCODE` / `LOGIC_PRO_MCP_ARM_MODIFIERS` to choose a non-default chord.
+
+#### `setup_midi_key_commands` (check-only slice)
+
+`{ "consent": "true", "mode": "check" }` inspects the first fixed MIDI Key Command catalog row. Consent is checked before strict parameter validation, tracing, app activation, or UI inspection. The exact string values are required. Check mode opens and searches Logic's Key Commands window but never presses Learn, sends a CC, writes configuration, or promotes routing readiness. A matching label is returned as source-unverified because the visible assignment does not identify its MIDI input port. Missing, conflicting, ambiguous, provisional, unreadable, and unknown-command observations remain distinct State B outcomes; UI-drive or cleanup failures remain State C with their actual stage and cleanup state. This slice provides no apply mode and claims no native binding success.
 
 Operation tracing is on by default (set `LOGIC_MCP_ADR005_OPERATION_TRACE=0` to disable), so every **successful** mutating result (State A/B) carries a `trace_id`; State C failures do not (nothing was traced to completion). `list_recent_traces` returns bounded summaries from the in-process trace store and accepts optional `limit`.
 `get_trace` returns one stored trace by required `trace_id`.

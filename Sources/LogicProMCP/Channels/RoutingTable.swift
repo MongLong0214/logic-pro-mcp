@@ -215,6 +215,7 @@ extension ChannelRouter {
         // weight by design.
         "nav.goto_marker":            [.midiKeyCommands, .cgEvent],
         "nav.open_marker_list":       [.accessibility],
+        "nav.release_marker_list":    [.accessibility],
         "nav.create_marker":          [.accessibility],
         // A channel that cannot express the operation's target must not be in that operation's chain.
         // `delete_marker` takes an `index`; the MIDI key-command rung has no way to carry it and can

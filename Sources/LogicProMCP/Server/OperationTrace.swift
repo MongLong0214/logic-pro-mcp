@@ -48,8 +48,13 @@ final class OperationTraceWriteBoundaryArm: @unchecked Sendable {
     /// Called by `ChannelRouter` at each channel.started. No arm (read route,
     /// or a write route outside an arm scope) means no-op.
     static func commitIfArmed() async -> Bool {
-        guard let arm = current, arm.claimCommit() else { return true }
+        guard let arm = current else { return true }
+        // Execution permission is per channel attempt, not per trace event.
+        // A fallback reaches this seam after the once-only boundary is already
+        // committed, so it must still atomically lose to a timeout that won
+        // after ChannelRouter's advisory permission check.
         guard OperationTraceContext.claimDeadlineEffect(arm.deadlineStage) else { return false }
+        guard arm.claimCommit() else { return true }
         // Saga parents inherit the corrected timing through the same hook the
         // pre-route emit used, so a child's first real write moves the parent
         // boundary too.
@@ -115,6 +120,11 @@ final class OperationTraceContext: @unchecked Sendable {
     /// install this closure; every existing context otherwise preserves its
     /// current behavior.
     let claimDeadlineEffect: (@Sendable (String) -> Bool)?
+    /// After a write boundary has been crossed, every later routed channel must
+    /// re-check whether the request still owns the right to begin another
+    /// external effect. This is separate from the once-only trace arm: fallback
+    /// and multi-route operations may reach more than one channel execution.
+    let allowRouteAfterDeadlineEffect: (@Sendable () -> Bool)?
 
     init(
         parentTraceID: TraceID? = nil,
@@ -122,14 +132,18 @@ final class OperationTraceContext: @unchecked Sendable {
         ownsGate: @escaping @Sendable () -> Bool = { true },
         deadline: ContinuousClock.Instant? = nil,
         cancellationRequested: @escaping @Sendable () -> Bool = { false },
-        claimDeadlineEffect: (@Sendable (String) -> Bool)? = nil
+        claimDeadlineEffect: (@Sendable (String) -> Bool)? = nil,
+        allowRouteAfterDeadlineEffect: (@Sendable () -> Bool)? = nil
     ) {
+        let inherited = OperationTraceContext.current
         self.parentTraceID = parentTraceID
         self.mutationGateAcquired = mutationGateAcquired
         self.ownsGate = ownsGate
         self.deadline = deadline
         self.cancellationRequested = cancellationRequested
-        self.claimDeadlineEffect = claimDeadlineEffect
+        self.claimDeadlineEffect = claimDeadlineEffect ?? inherited?.claimDeadlineEffect
+        self.allowRouteAfterDeadlineEffect = allowRouteAfterDeadlineEffect
+            ?? inherited?.allowRouteAfterDeadlineEffect
     }
 
     var traceID: TraceID? {
@@ -159,6 +173,13 @@ final class OperationTraceContext: @unchecked Sendable {
             return claim(stage)
         }
         return !rejectTaskCancellationWithoutContext || !Task.isCancelled
+    }
+
+    /// Whether another channel execution may begin after the current operation's
+    /// deadline/effect race. Context-free tests and read-only calls retain their
+    /// historical behavior.
+    static func routePermittedAfterDeadlineEffect() -> Bool {
+        current?.allowRouteAfterDeadlineEffect?() ?? true
     }
 
     /// Record a phase on the active trace, if one is registered in the current

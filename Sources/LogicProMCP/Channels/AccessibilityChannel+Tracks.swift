@@ -26,14 +26,20 @@ extension AccessibilityChannel {
     /// the walk ends there: `yielded` is true and no states are returned, since a partial list
     /// would read as a project with fewer tracks. Help reads already under way run to their end.
     static func defaultGetTrackStates(
-        runtime: AXLogicProElements.Runtime = .production, stoppingWhen stop: () -> Bool
+        runtime: AXLogicProElements.Runtime = .production,
+        preferringShallowExactRail: Bool = false,
+        stoppingWhen stop: () -> Bool
     ) -> (states: [TrackState]?, yielded: Bool) {
         // Keep acquisition failure distinct from a successfully observed empty rail.
         // The shared reader tolerates unrelated loading subtrees, but rejects an
         // unreadable rail or row role rather than shifting the remaining row indices.
-        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
-              case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime)
         else { return (nil, false) }
+        let headerRead = preferringShallowExactRail
+            ? AXLogicProElements.shallowExactTrackHeadersRead(in: window, runtime: runtime)
+                ?? AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+            : AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        guard case .read(let headers) = headerRead else { return (nil, false) }
         return readTrackStates(from: headers, in: window, runtime: runtime, stoppingWhen: stop)
     }
 
@@ -2147,6 +2153,21 @@ extension AccessibilityChannel {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
+        // Read the focus before anything else touches Logic. Measured on Logic 13 (7801):
+        // with the track rename field focused, the field was already gone when the press rung
+        // started. Looking up the header's toggle ended the edit and COMMITTED its pending text,
+        // and the key rung's focus guard then saw a checkbox and let the key through.
+        if let refusal = textEditorFocusedRefusal(runtime: runtime) {
+            return .error(HonestContract.encodeStateC(
+                error: refusal.error,
+                hint: refusal.hint,
+                extras: [
+                    "track": index,
+                    "button": buttonName,
+                    "requested": (params["enabled"] ?? "true") == "true",
+                ].merging(refusal.extras) { _, new in new }
+            ))
+        }
         let finder: (Int) -> AXUIElement? = switch buttonName {
         case "Mute": { AXLogicProElements.findTrackMuteButton(trackIndex: $0, runtime: runtime) }
         case "Solo": { AXLogicProElements.findTrackSoloButton(trackIndex: $0, runtime: runtime) }
@@ -2967,20 +2988,38 @@ extension AccessibilityChannel {
             case appRoot
             case focusedElement
             case role
+            /// The insertion-point read failed with a status that is not an answer of absence.
+            case insertionPoint
         }
 
         /// The focused element edits text. `byInsertionPoint` is false when its role is an
         /// editable one and true when only a text insertion point gave it away.
         case textEditing(role: String, byInsertionPoint: Bool)
+        /// A focused element of a non-text role answers a text insertion point, but AX reads both
+        /// its AXSelectedTextRange and AXValue as not settable (the Logic 13 channel-strip group).
+        /// It does not edit text, so a synthetic key or a background read need not yield to it.
+        /// It is not `.notTextEditing` either: a reader that lends such a focus only under its
+        /// passive witness (`PassiveMixerReadFocus`, the header and routing witnesses) still
+        /// requires that witness, so window, document, strip and value custody stay enforced.
+        case passiveInsertionPoint(role: String)
         /// The focused element and its role were read, and it does not edit text.
         case notTextEditing
         case unreadable(UnreadableStage)
+
+        /// The focus read, and it is no text editor: `.notTextEditing` or `.passiveInsertionPoint`.
+        var readsAsNoEditor: Bool {
+            switch self {
+            case .notTextEditing, .passiveInsertionPoint: return true
+            case .textEditing, .unreadable: return false
+            }
+        }
     }
 
     /// Reads Logic's focused UI element (the application element's `AXFocusedUIElement`) and
     /// classifies it: an editable text surface (rename field, Notes, search/combo box) by role, or
-    /// any element exposing a text insertion point, since that marks an editable surface even when
-    /// the role is unusual.
+    /// an element of another role that exposes a text insertion point unless AX reads both its
+    /// AXSelectedTextRange and AXValue as not settable (`.passiveInsertionPoint`, the Logic 13
+    /// channel-strip group).
     static func readLogicKeyboardFocus(runtime: AXLogicProElements.Runtime) -> LogicKeyboardFocus {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
             return .unreadable(.appRoot)
@@ -3008,12 +3047,33 @@ extension AccessibilityChannel {
         if editableRoles.contains(role) {
             return .textEditing(role: role, byInsertionPoint: false)
         }
-        if let _: NSNumber = AXHelpers.getAttribute(
+        // Only "this element has no insertion point" (attributeUnsupported, noValue) or a value
+        // that is not a number means no insertion point. Any other status (cannotComplete,
+        // failure, illegalArgument, ...) is a read that did not happen and proves nothing.
+        let insertionPoint: Result<NSNumber?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
             focused, kAXInsertionPointLineNumberAttribute, runtime: runtime.ax
-        ) {
-            return .textEditing(role: role, byInsertionPoint: true)
+        )
+        switch insertionPoint {
+        case .failure(let error):
+            return error.isDefinitiveAbsence ? .notTextEditing : .unreadable(.insertionPoint)
+        case .success(let value):
+            if value == nil { return .notTextEditing }
         }
-        return .notTextEditing
+        // An insertion point alone does not prove an editable surface. Measured on Logic 13
+        // (2026-11-16): a focused mixer channel-strip group (AXLayoutItem) answers
+        // AXInsertionPointLineNumber=0 and AXSelectedTextRange={0,0}, yet neither AXValue nor
+        // AXSelectedTextRange is settable on it, while a focused text field reports both settable.
+        // Only a read `false` for both rules the surface out; an unreadable claim keeps it editing.
+        let rangeSettable = AXHelpers.isAttributeSettable(
+            focused, kAXSelectedTextRangeAttribute, runtime: runtime.ax
+        )
+        let valueSettable = AXHelpers.isAttributeSettable(
+            focused, kAXValueAttribute, runtime: runtime.ax
+        )
+        if rangeSettable == false, valueSettable == false {
+            return .passiveInsertionPoint(role: role)
+        }
+        return .textEditing(role: role, byInsertionPoint: true)
     }
 
     /// #6 — refuse a synthetic global command key when Logic's keyboard focus is
@@ -3045,6 +3105,11 @@ extension AccessibilityChannel {
                 reason: "the focused element's role is unreadable — focus safety cannot be proven",
                 focus: "role_unreadable"
             )
+        case .unreadable(.insertionPoint):
+            return unsafeFocusRefusal(
+                reason: "the focused element's insertion point is unreadable — focus safety cannot be proven",
+                focus: "insertion_point_unreadable"
+            )
         case .textEditing(let role, byInsertionPoint: false):
             return unsafeFocusRefusal(
                 reason: "an editable text field is focused (role \(role))", focus: role
@@ -3054,7 +3119,7 @@ extension AccessibilityChannel {
                 reason: "a text-editing surface with an insertion point is focused",
                 focus: role
             )
-        case .notTextEditing:
+        case .notTextEditing, .passiveInsertionPoint:
             return nil
         }
     }
@@ -3175,6 +3240,49 @@ extension AccessibilityChannel {
             hint: "refused to post the track key command: \(reason). The key was not posted and the "
                 + "invocation terminated with the observed unsafe focus preserved.",
             extras: terminalNoHumanExtras(["focus_guard": focus])
+        )
+    }
+
+    /// A track toggle acts only on a focus that READ as no text editor. Anything else refuses before
+    /// any lookup, press or key: a focused text editor, and a focus that did not read, because a
+    /// reading that failed cannot show that no editor is open, and the header lookup alone ended a
+    /// rename edit and committed its text on Logic 13. The Logic 13 strip group
+    /// (`.passiveInsertionPoint`) reads as no editor and still reaches the press rung. No other
+    /// channel may act either: MCU or a CGEvent key would hit the same open editor.
+    static func textEditorFocusedRefusal(runtime: AXLogicProElements.Runtime) -> RungRefusal? {
+        let focus = readLogicKeyboardFocus(runtime: runtime)
+        let guardName: String
+        let cause: String
+        switch focus {
+        case .notTextEditing, .passiveInsertionPoint:
+            return nil
+        case .textEditing(let role, let byInsertionPoint):
+            guardName = role
+            cause = byInsertionPoint
+                ? "a text-editing surface with an insertion point is focused"
+                : "an editable text field (role \(role)) is focused"
+        case .unreadable(.appRoot):
+            guardName = "app_root_unreadable"
+            cause = "the Logic application root did not read, so no open text editor can be ruled out"
+        case .unreadable(.focusedElement):
+            guardName = "focus_unreadable"
+            cause = "Logic's focused element did not read, so no open text editor can be ruled out"
+        case .unreadable(.role):
+            guardName = "role_unreadable"
+            cause = "the focused element's role did not read, so no open text editor can be ruled out"
+        case .unreadable(.insertionPoint):
+            guardName = "insertion_point_unreadable"
+            cause = "the focused element's insertion point did not read, so no open text editor can be ruled out"
+        }
+        return RungRefusal(
+            error: .unsafeFocusForSyntheticKey,
+            hint: "refused the track toggle: \(cause). Nothing in the track header was read, pressed or "
+                + "posted, so any editor and its pending text were left as they were.",
+            extras: terminalNoHumanExtras([
+                "focus_guard": guardName,
+                "focus_guard_stage": "before_actuation",
+                "fallback_unsafe": true,
+            ])
         )
     }
 
@@ -3617,7 +3725,9 @@ extension AccessibilityChannel {
                 // The owned setter may close its editor during that value read,
                 // after the earlier held-editor check. Verify the same original
                 // target/footprint; never post Return into the replacement focus.
-                if case .notTextEditing = editorFocus,
+                // A passive strip focus (`.passiveInsertionPoint`) is not an editor either: the
+                // editor closed, so verify the committed name; Return is never posted into it.
+                if editorFocus.readsAsNoEditor,
                    editorValue == nil || editorValue?.utf8.elementsEqual(desired.utf8) == true {
                     return committedSetterResult()
                 }
@@ -3744,7 +3854,9 @@ extension AccessibilityChannel {
         // fail-closed"; #1103 review R2, F1: the wait retried an unreadable reading).
         var reading = focus()
         var attempt = 1
-        while case .notTextEditing = reading, attempt < focusWaitAttempts {
+        // A passive strip focus is not the editor yet, exactly like an ordinary focus.
+        while reading.readsAsNoEditor,
+              attempt < focusWaitAttempts {
             mouseRuntime.sleepMicros(focusWaitMicros)
             reading = focus()
             attempt += 1
@@ -3786,6 +3898,7 @@ extension AccessibilityChannel {
             switch reading {
             case .textEditing(let role, _): return role
             case .notTextEditing: return "not_text_editing"
+            case .passiveInsertionPoint(let role): return "passive_insertion_point_\(role)"
             case .unreadable(let stage): return "unreadable_\(stage)"
             }
         }

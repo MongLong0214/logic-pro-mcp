@@ -778,17 +778,65 @@ struct Issue1079PollYieldsToTextEditingTests {
         )
     }
 
-    @Test("classifier: an insertion point marks a text surface whatever its role")
-    func classifierCountsAnInsertionPoint() {
-        let fixture = Self.focusFixture(role: kAXGroupRole as String)
-        fixture.builder.setAttribute(
-            fixture.focused, kAXInsertionPointLineNumberAttribute as String, NSNumber(value: 0)
+    @Test("classifier: an insertion point on a surface whose text range or value is settable is text editing")
+    func classifierCountsAnEditableInsertionPoint() {
+        for settable in [kAXSelectedTextRangeAttribute as String, kAXValueAttribute as String] {
+            let fixture = Self.focusFixture(role: kAXGroupRole as String)
+            fixture.builder.setAttribute(
+                fixture.focused, kAXInsertionPointLineNumberAttribute as String, NSNumber(value: 0)
+            )
+            fixture.builder.setAttributeSettable(fixture.focused, settable, true)
+
+            #expect(
+                AccessibilityChannel.readLogicKeyboardFocus(runtime: fixture.logicRuntime())
+                    == .textEditing(role: kAXGroupRole as String, byInsertionPoint: true),
+                "settable \(settable)"
+            )
+        }
+    }
+
+    /// Values read from Logic Pro 13.0 (ko) on 2026-11-16 with the focused element dumped by
+    /// AXUIElementCopyAttributeValue / AXUIElementIsAttributeSettable (impl-logic13 M6, N1).
+    @Test("classifier: the Logic 13 channel-strip group is not text editing; a focused Logic text field is")
+    func classifierUsesMeasuredLogic13Surfaces() {
+        // Mixer channel-strip group after an insert's editor closed: AXLayoutItem answering an
+        // insertion point, a character count and an empty range, none settable; AXValue -25212.
+        let strip = Self.focusFixture(role: "AXLayoutItem")
+        strip.builder.setAttribute(strip.focused, kAXRoleDescriptionAttribute as String, "채널 스트립 그룹")
+        strip.builder.setAttribute(strip.focused, kAXInsertionPointLineNumberAttribute as String, NSNumber(value: 0))
+        strip.builder.setAttribute(strip.focused, kAXNumberOfCharactersAttribute as String, NSNumber(value: 0))
+        var empty = CFRange(location: 0, length: 0)
+        strip.builder.setAttribute(
+            strip.focused, kAXSelectedTextRangeAttribute as String, AXValueCreate(.cfRange, &empty)!
+        )
+        #expect(AccessibilityChannel.readLogicKeyboardFocus(runtime: strip.logicRuntime()) == .passiveInsertionPoint(role: "AXLayoutItem"))
+        #expect(!StatePoller.backgroundTickYields(to: AccessibilityChannel.readLogicKeyboardFocus(runtime: strip.logicRuntime())))
+        #expect(AccessibilityChannel.syntheticKeyFocusRefusal(runtime: strip.logicRuntime()) == nil)
+
+        // Mixer strip name field in edit: AXTextField, value and range settable.
+        let field = Self.focusFixture(role: kAXTextFieldRole as String)
+        field.builder.setAttribute(field.focused, kAXValueAttribute as String, "오디오 7")
+        field.builder.setAttribute(field.focused, kAXInsertionPointLineNumberAttribute as String, NSNumber(value: 0))
+        field.builder.setAttribute(field.focused, kAXNumberOfCharactersAttribute as String, NSNumber(value: 5))
+        var whole = CFRange(location: 0, length: 5)
+        field.builder.setAttribute(
+            field.focused, kAXSelectedTextRangeAttribute as String, AXValueCreate(.cfRange, &whole)!
+        )
+        field.builder.setAttributeSettable(field.focused, kAXValueAttribute as String, true)
+        field.builder.setAttributeSettable(field.focused, kAXSelectedTextRangeAttribute as String, true)
+        #expect(
+            AccessibilityChannel.readLogicKeyboardFocus(runtime: field.logicRuntime())
+                == .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
         )
 
-        #expect(
-            AccessibilityChannel.readLogicKeyboardFocus(runtime: fixture.logicRuntime())
-                == .textEditing(role: kAXGroupRole as String, byInsertionPoint: true)
-        )
+        // Every editable role stays text editing even when AX claims nothing is settable.
+        for role in [kAXTextFieldRole as String, kAXTextAreaRole as String, kAXComboBoxRole as String] {
+            let bare = Self.focusFixture(role: role)
+            #expect(
+                AccessibilityChannel.readLogicKeyboardFocus(runtime: bare.logicRuntime())
+                    == .textEditing(role: role, byInsertionPoint: false), "\(role)"
+            )
+        }
     }
 
     @Test("classifier: each stage that does not read is reported as that stage, not as no text field")

@@ -193,13 +193,13 @@ PS_COMM = """\
   501     1 /Applications/Logic Pro.app/Contents/MacOS/Logic Pro
   610   600 /Users/me/.verify-build/bin/LogicProMCP-d7fb006de0ead0e94cf3a6f73eed709a983386dc-0123456789abcdef
   620   600 /usr/bin/python3
-  630   600 /Applications/Xcode.app/Contents/Developer/usr/bin/xctest
+  630   600 /Library/Developer/CommandLineTools/usr/bin/xctest
   640   600 /x/.build/debug/LogicProMCPPackageTests.xctest/Contents/MacOS/LogicProMCPPackageTests
   650   600 /x/.build/release/LogicProMCP
 """
 PS_ARGS = """\
   620 /usr/bin/python3 live_1020.py --binary /x/.build/release/LogicProMCP
-  630 /Applications/Xcode.app/Contents/Developer/usr/bin/xctest /x/.build/debug/LogicProMCPPackageTests.xctest
+  630 /Library/Developer/CommandLineTools/usr/bin/xctest /x/.build/debug/LogicProMCPPackageTests.xctest
   640 /x/.build/debug/LogicProMCPPackageTests.xctest/Contents/MacOS/LogicProMCPPackageTests
 """
 

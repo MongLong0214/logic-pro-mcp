@@ -5,6 +5,13 @@ import Testing
 
 @Suite("#965 population producers preserve acquisition failures")
 struct Issue965PopulationAcquisitionStatusTests {
+    private final class ReadCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func increment() { lock.withLock { value += 1 } }
+        var count: Int { lock.withLock { value } }
+    }
+
     private final class DiscoveryReads: @unchecked Sendable {
         private let lock = NSLock()
         private var batches = 0
@@ -198,6 +205,43 @@ struct Issue965PopulationAcquisitionStatusTests {
         #expect(rows.map(\.id) == [0, 1])
         #expect(rows.map(\.name) == [" Bass 0 ", " Bass 1 "])
         #expect(!read.yielded)
+        #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+    }
+
+    @Test("poller finds a shallow exact rail before descending an earlier unrelated tree")
+    func pollerFindsShallowExactRailBeforeEarlierDeepTree() async throws {
+        let f = Fixture()
+        // Logic 13 exposes the live rail as a localized AXGroup, not the legacy AXList fixture.
+        f.builder.setRole(f.rail, kAXGroupRole as String)
+        f.builder.setAttribute(f.rail, kAXDescriptionAttribute as String, "트랙 헤더")
+        let deep = (0..<5).map { f.builder.element(965_810 + $0) }
+        for node in deep { f.builder.setRole(node, kAXGroupRole as String) }
+        for (parent, child) in zip(deep, deep.dropFirst()) {
+            f.builder.setChildren(parent, [child])
+        }
+        f.builder.setChildren(deep.last!, [])
+        f.builder.setChildren(f.window, [deep[0], f.rail])
+        let deepReads = ReadCounter()
+        let runtime = f.builder.makeLogicRuntime(
+            appElement: f.app,
+            childrenResultHandler: { element in
+                if CFEqual(element, deep.last!) { deepReads.increment() }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+
+        let channel = AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
+            logicRuntime: runtime
+        ))
+        let read = await channel.readTrackStates(stoppingWhen: { false })
+        #expect(read.states?.map(\.name) == [" Bass 0 ", " Bass 1 "])
+        #expect(!read.yielded)
+        #expect(deepReads.count == 0,
+                "a shallow exact Track Headers rail must win before the earlier unrelated tree is descended")
         #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
     }
 

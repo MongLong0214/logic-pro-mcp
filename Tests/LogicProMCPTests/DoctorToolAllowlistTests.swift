@@ -42,10 +42,10 @@ private func doctorSourceFilesForProcessLint() throws -> [(String, String)] {
 
 // Case 12
 @Test func test_t1v3_doctor_tool_allowlist_accepts_known_tools() throws {
-    // AC-6: BOTH brew prefixes resolve (else install.source regresses), plus a /usr/bin tool.
+    // AC-6: BOTH brew prefixes resolve (else install.source regresses), plus a bounded /usr/bin tool.
     #expect(try #require(DoctorTool.resolve("/opt/homebrew/bin/brew")) == .brew)
     #expect(try #require(DoctorTool.resolve("/usr/local/bin/brew")) == .brew)
-    #expect(try #require(DoctorTool.resolve("/usr/bin/codesign")) == .codesign)
+    #expect(try #require(DoctorTool.resolve("/usr/bin/xattr")) == .xattr)
 }
 
 // Case 13

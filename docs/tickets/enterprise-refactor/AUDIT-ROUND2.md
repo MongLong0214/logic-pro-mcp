@@ -28,7 +28,7 @@ Crown-jewel sinks EXEMPLARY (arg-array exec never shell, backslash-first AppleSc
 MEDIUM (must-fix before enterprise release):
 - M1 [REAL VULN] .github/workflows/publish-mcp.yml:25 `VERSION="${{ github.event.release.tag_name }}"` no SemVer guard, interpolated into run: block; job has id-token:write + mcp-publisher login+publish. Malicious tag_name → arbitrary code in runner under OIDC identity. Reachable: release-publisher (not anon). FIX: env RELEASE_TAG then `VERSION="${RELEASE_TAG#v}"`. Risk none. **← INCLUDE, must-fix #1.** (owner: new WS-F extended to .github/workflows.)
 - M2 install.sh:39 normalize_path (symlink-resolve) BEFORE validate_install_dir; install-common.sh:74 blocklist misses macOS /private trio (/etc→/private/etc etc). LOGIC_PRO_MCP_INSTALL_DIR=/etc → /private/etc passes → sudo mv. Reachable: operator/MDM env. FIX: blocklist realpath +/private/etc,/private/tmp,/private/var. Risk low. **← INCLUDE (WS-F).**
-- M3 [by-design, documented] ADHOC releases: integrity yes (codesign verify+SHA256) authenticity no (adhoc sig anyone). hardened path fail-closed + out-of-band pin. FIX: ship notarized (path exists release.yml:99-137) OR document out-of-band-pin as sole enterprise path. **← Phase D doc + Phase E release decision.**
+- M3 [superseded] The release is intentionally unsigned and distributed with exact SHA-256 manifests; Apple signing/notarization is outside this project.
 
 LOW (INCLUDE the cheap ones):
 - L1 env-var exec (LOGIC_PRO_MCP_BOUNCE_HELPER, INSTALL_DIR) no ownership/allowlist — asymmetric vs library-inventory pattern (ResourceHandlers:1358-1403). FIX: apply ownership+location allowlist. **← INCLUDE (Swift, WS-D or WS-E owner TBD).**

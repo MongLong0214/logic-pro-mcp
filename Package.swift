@@ -6,13 +6,12 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "LogicProMCP", targets: ["LogicProMCPCLI"]),
-        .executable(name: "trusted-verifier", targets: ["TrustedVerifier"]),
         .library(name: "LogicProMCPKit", targets: ["LogicProMCP"]),
     ],
     dependencies: [
         // swift-sdk 0.11.0+ adopts the short-form
         // `withThrowingTaskGroup { group in }` syntax (Swift 6.2 inference).
-        // CI requires Xcode 16.4+ (Swift 6.2) — see .github/workflows/ci.yml.
+        // CI uses Swift 6.2 from the standalone Command Line Tools.
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.11.0"),
         // H-5 (2026-05-08 enterprise review) — honest-deferred again in
         // v3.4.0. The deprecation warning ("Swift Testing is now included
@@ -28,7 +27,7 @@ let package = Package(
         // tradeoff until Apple closes the gap.
         // #1088: 0.99.0, which `from: "0.12.0"` resolved to, records no failure for a false
         // `#expect(a == b)` over two Bools under Swift 6.2.4; 6.1.3 records it. Kept on the 6.1
-        // line, whose manifest is tools-version 6.0, for CI's Xcode 16.4.
+        // line, whose manifest is tools-version 6.0, for the CI Swift 6.2 toolchain.
         .package(url: "https://github.com/swiftlang/swift-testing.git", .upToNextMinor(from: "6.1.3")),
         // Test-only: a Swift-syntax-aware call-site lint (MIDIReadbackCallSiteLintTests)
         // needs correct lexing to prove the dark MIDI-readback core has no
@@ -62,11 +61,6 @@ let package = Package(
             name: "LogicProMCPCLI",
             dependencies: ["LogicProMCP"],
             path: "Sources/LogicProMCPCLI"
-        ),
-        .executableTarget(
-            name: "TrustedVerifier",
-            dependencies: ["LogicProMCP"],
-            path: "Sources/TrustedVerifier"
         ),
         .testTarget(
             name: "LogicProMCPTests",

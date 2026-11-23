@@ -2,33 +2,31 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-/// #984, decided yes: a mutating operation whose qualification passed write → independent
-/// readback → restore → restore read back and MATCHED is credited as live-verified, and a restore
-/// record that is merely present is not enough.
+/// #984: a mutating operation passes qualification only when write → independent readback →
+/// restore → restore readback all happened and matched. A restore record that is merely present
+/// is not enough.
 ///
 /// Every case here starts from the real producer (`QualificationOperationResult`) and changes ONE
-/// thing, and every test that asserts a refusal carries the credited case beside it in the same
-/// run. A refusal alone would stay green on the rule this issue replaced, which credited no write
-/// cycle at all.
+/// thing, so the tests exercise the product's cycle-shape decision rather than a duplicate gate.
 ///
 /// NO `#expect(<Bool> == <Bool>)` HERE (#393, `Scripts/ci-forbid-dead-expect.sh`): on this
 /// toolchain such a comparison records no issue. A first draft of this file had one, and a mutant
 /// that made every restore "verified" survived it. Booleans are asserted bare or negated, and
 /// optionals are unwrapped with `#require` first.
-@Suite("#984 verified write cycle credit")
+@Suite("#984 verified write cycles")
 struct Issue984VerifiedWriteCycleCreditTests {
     private static let binarySHA256 = String(repeating: "a", count: 64)
 
     /// The three readings are whole resource envelopes, because `readingThatDidNotHappen` parses
     /// each one; `mutation` and `restore` are the values written.
     private static func record(
-        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"before"}]}"#
+        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"before"}]}"#
     ) -> QualificationMutationRestoreRecord {
         QualificationMutationRestoreRecord(
             operationID: OperationID.tracksRename.rawValue,
-            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"before"}]}"#,
+            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"before"}]}"#,
             mutation: #"{"state":"A","success":true}"#,
-            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"after"}]}"#,
+            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"after"}]}"#,
             restore: #"{"state":"A","success":true}"#,
             restoreReadback: restoreReadback
         )
@@ -46,10 +44,10 @@ struct Issue984VerifiedWriteCycleCreditTests {
             command: spec.command,
             mutability: spec.mutability,
             requestID: "cycle-response",
-            responseData: Data(#"{"success":false,"state":"C","error":"consent_required"}"#.utf8),
+            responseData: Data(#"{"success":false,"state":"C","error":"invalid_params"}"#.utf8),
             isError: true,
             state: "C",
-            error: "consent_required",
+            error: "invalid_params",
             hint: nil,
             writeAttempted: false,
             readbackSource: "logic://tracks",
@@ -88,109 +86,16 @@ struct Issue984VerifiedWriteCycleCreditTests {
         )
     }
 
-    private static func attestation(_ cases: [QualificationCase]) -> ReleaseQualificationAttestation {
-        ReleaseQualificationAttestation(
-            schema: "release-qualification-attestation/v2",
-            serverVersion: "1.2.3",
-            commitSHA: String(repeating: "c", count: 40),
-            binarySHA256: binarySHA256,
-            logicVariant: .desktop,
-            logicVersion: "11.2.0",
-            locale: .enUS,
-            profile: .core,
-            startedAt: Date(timeIntervalSince1970: 1_000),
-            completedAt: Date(timeIntervalSince1970: 1_060),
-            total: cases.count,
-            passed: cases.filter { $0.status == .passed }.count,
-            failed: 0,
-            waived: 0,
-            cases: cases,
-            waivers: [],
-            evidenceManifestSHA256: String(repeating: "e", count: 64)
-        )
-    }
 
-    /// The two readers of the credit rule, asked about one case each. Returned together so a
-    /// test cannot assert one and let the other drift.
-    private struct Readers: Equatable {
-        let releaseGateSatisfied: Bool
-        let debtBoardCredited: Bool
-    }
-
-    private static func readers(_ operationCase: QualificationCase) -> Readers {
-        let operationID = operationCase.operationID
-        let decision = PromotionGate().evaluate(
-            attestation: attestation([operationCase]),
-            releaseVersion: "1.2.3",
-            expectedBinarySHA256: binarySHA256,
-            presentArtifacts: [],
-            requiredArtifacts: [],
-            requiredOperationIDs: [operationID]
-        )
-        let credited = PromotionGate.liveCreditedOperationIDs(in: attestation([operationCase]))
-        let report = ProductionReadinessContractEvaluator.evaluate(
-            releaseWorkflowYAML: "",
-            registeredOperationIDs: [operationID],
-            semanticValidatorOperationIDs: [],
-            requiredMatrixAxisCount: 0,
-            debtBoardMarkdown: nil,
-            expectedAuthorityBaseSHA: nil,
-            publishedReleaseEvidencePresent: false,
-            mutationRestoreCompensationEvidencePresent: false,
-            independentProvenanceEnforced: false,
-            liveCreditedOperationIDs: credited
-        )
-        let rSEMOpen = report.findings.contains {
-            $0.id == .semanticCoverageIncomplete && $0.detail.contains("semantic coverage missing")
-        }
-        return Readers(
-            releaseGateSatisfied: !decision.rejections.contains(
-                .requiredOperationNotSatisfied(operationID: operationID)),
-            debtBoardCredited: credited == [operationID] && !rSEMOpen
-        )
-    }
-
-    private static let credited = Readers(releaseGateSatisfied: true, debtBoardCredited: true)
-    private static let notCredited = Readers(releaseGateSatisfied: false, debtBoardCredited: false)
-
-    @Test func aWriteCyclePassWhoseRestoreVerifiedIsCreditedByBothReaders() throws {
+    @Test func aWriteCyclePassCarriesItsVerifiedRestore() throws {
         let cycle = try Self.result(record: Self.record())
         // What the producer files, so the credit below is earned by a real result's shape.
         #expect(cycle.status == .passed)
         #expect(cycle.verificationKind == .verifiedWriteCycle)
         let digest = try QualificationRunner.recordDigest(Self.record())
         #expect(cycle.restore == QualificationRestoreEvidence(recordSHA256: digest, verified: true))
-
-        let operationCase = Self.qualificationCase(cycle)
-        #expect(PromotionGate.operationIsLiveCredited(operationCase))
-        #expect(Self.readers(operationCase) == Self.credited)
     }
 
-    /// Present-but-unverified, failed, and missing, each one field away from the credited case.
-    @Test func aWriteCycleWhoseRestoreDidNotVerifyCreditsNothing() throws {
-        let cycle = try Self.result(record: Self.record())
-        let digest = try QualificationRunner.recordDigest(Self.record())
-
-        // Positive control, same run.
-        #expect(Self.readers(Self.qualificationCase(cycle)) == Self.credited)
-
-        let presentButUnverified = Self.qualificationCase(
-            cycle, restore: .some(QualificationRestoreEvidence(recordSHA256: digest, verified: false)))
-        #expect(!PromotionGate.operationIsLiveCredited(presentButUnverified))
-        #expect(Self.readers(presentButUnverified) == Self.notCredited)
-
-        let missing = Self.qualificationCase(cycle, restore: .some(nil))
-        #expect(!PromotionGate.operationIsLiveCredited(missing))
-        #expect(Self.readers(missing) == Self.notCredited)
-
-        // A cycle whose restore verified but whose case did not pass. The restore is necessary,
-        // not sufficient.
-        let failed = Self.qualificationCase(cycle, status: .notQualified)
-        let failedRestore = try #require(failed.restore)
-        #expect(failedRestore.verified)
-        #expect(!PromotionGate.operationIsLiveCredited(failed))
-        #expect(Self.readers(failed) == Self.notCredited)
-    }
 
     /// The producer's side of "verified": a record exists AND every reading in it happened.
     @Test func theProducerCallsARestoreVerifiedOnlyWhenItsReadingsHappened() throws {
@@ -212,15 +117,12 @@ struct Issue984VerifiedWriteCycleCreditTests {
         }
     }
 
-    @Test func readableWrongRestoreNeverEarnsWriteCycleCredit() throws {
+    @Test func readableWrongRestoreCannotPass() throws {
         let cycle = try Self.result(record: Self.record(
-            restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"after"}]}"#))
+            restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"after"}]}"#))
         let restore = try #require(cycle.restore)
         #expect(!restore.verified)
         #expect(cycle.status == .notQualified)
-        let operationCase = Self.qualificationCase(cycle)
-        #expect(!PromotionGate.operationIsLiveCredited(operationCase))
-        #expect(Self.readers(operationCase) == Self.notCredited)
     }
 
     @Test func valueCycleComparesTheTrackValueAndIdentity() {
@@ -247,7 +149,7 @@ struct Issue984VerifiedWriteCycleCreditTests {
         changedRef: String = "track-1", restoredRef: String = "track-2"
     ) -> QualificationMutationRestoreRecord {
         func reading(_ ref: String, _ value: String) -> String {
-            #"{"source":"ax_live","data":[{"track_ref":"\#(ref)","\#(field)":\#(value)}]}"#
+            #"{"source":"ax_live","data":[{"track_ref":"\#(ref)","isSelected":true,"\#(field)":\#(value)}]}"#
         }
         return QualificationMutationRestoreRecord(
             operationID: operation.rawValue,
@@ -280,6 +182,47 @@ struct Issue984VerifiedWriteCycleCreditTests {
         ).verifiedCycleShape)
     }
 
+    /// The boolean and name recipes write the SELECTED track (the third row of four on the measured
+    /// fixture), so the record is read at that row and not at row 0.
+    private static func selectedRowRecord(
+        selected: [Bool], changedRow: Int
+    ) -> QualificationMutationRestoreRecord {
+        func reading(muted: [Bool]) -> String {
+            let rows = selected.indices.map { index in
+                #"{"track_ref":"track-\#(index)","isSelected":\#(selected[index]),"isMuted":\#(muted[index])}"#
+            }.joined(separator: ",")
+            return #"{"source":"ax_live","data":[\#(rows)]}"#
+        }
+        let none = selected.map { _ in false }
+        var moved = none
+        moved[changedRow] = true
+        return QualificationMutationRestoreRecord(
+            operationID: OperationID.tracksMute.rawValue,
+            preState: reading(muted: none),
+            mutation: #"{"state":"A","success":true}"#,
+            readback: reading(muted: moved),
+            restore: #"{"state":"A","success":true}"#,
+            restoreReadback: reading(muted: none)
+        )
+    }
+
+    @Test func aFlagCycleOnTheSelectedRowVerifiesEvenWhenRowZeroIsNotIt() {
+        #expect(Self.selectedRowRecord(
+            selected: [false, false, true, false], changedRow: 2).verifiedCycleShape)
+    }
+
+    @Test func aFlagCycleThatMovedAnotherRowThanTheSelectedOneDoesNotVerify() {
+        #expect(!Self.selectedRowRecord(
+            selected: [false, false, true, false], changedRow: 0).verifiedCycleShape)
+    }
+
+    @Test func aFlagCycleWithNoSingleSelectedRowDoesNotVerify() {
+        #expect(!Self.selectedRowRecord(
+            selected: [false, false, false, false], changedRow: 2).verifiedCycleShape)
+        #expect(!Self.selectedRowRecord(
+            selected: [false, true, true, false], changedRow: 2).verifiedCycleShape)
+    }
+
     @Test func historyRestoreMustReadBackTheSameTrack() {
         #expect(Self.trackRecord(
             operation: .editUndo, field: "name", before: #""before""#,
@@ -306,7 +249,7 @@ struct Issue984VerifiedWriteCycleCreditTests {
         #expect(!record("track-3").verifiedCycleShape)
     }
 
-    @Test func aNoOpReadbackNeverEarnsWriteCycleCredit() throws {
+    @Test func aNoOpReadbackCannotPass() throws {
         let before = Self.record().preState
         let record = QualificationMutationRestoreRecord(
             operationID: OperationID.tracksRename.rawValue,
@@ -321,9 +264,6 @@ struct Issue984VerifiedWriteCycleCreditTests {
         let restore = try #require(cycle.restore)
         #expect(!restore.verified)
         #expect(cycle.status == .notQualified)
-        let operationCase = Self.qualificationCase(cycle)
-        #expect(!PromotionGate.operationIsLiveCredited(operationCase))
-        #expect(Self.readers(operationCase) == Self.notCredited)
         #expect(!Self.trackRecord(
             operation: .tracksRename, field: "name", before: #""before""#,
             changed: #""after""#, changedRef: "track-2", restoredRef: "track-1"
@@ -364,7 +304,7 @@ struct Issue984VerifiedWriteCycleCreditTests {
 
     /// `transportRestoreCycle` records its pre-state before its precondition stage, so a transport
     /// already where the operation puts it gives pre-state == readback on a genuine cycle.
-    @Test func aStagedTransportCycleEarnsCreditAndAMisplacedReadbackDoesNot() throws {
+    @Test func aStagedTransportCycleVerifiesAndAMisplacedReadbackDoesNot() throws {
         #expect(QualificationTransport.transportExpectedPlaying.count == 3)
         let modes: [QualificationTransport.TransportMotion] = [.stopped, .paused, .moving]
         for (operation, expectedPlaying) in QualificationTransport.transportExpectedPlaying {
@@ -388,43 +328,9 @@ struct Issue984VerifiedWriteCycleCreditTests {
         }
     }
 
-    /// Read credit is what it was: `.semanticReadback` does not consult `restore`.
-    @Test func semanticReadbackCreditIsUnchanged() {
-        func readCase(
-            readbackVerified: Bool,
-            restore: QualificationRestoreEvidence? = nil
-        ) -> QualificationCase {
-            QualificationCase(
-                id: "in-process/system.health",
-                status: .passed,
-                tool: "logic_system",
-                command: "health",
-                traceID: "",
-                verified: true,
-                evidenceFiles: ["evidence/operation-system.health.json"],
-                binarySHA256: Self.binarySHA256,
-                operationID: "system.health",
-                verificationKind: .semanticReadback,
-                readback: QualificationReadbackEvidence(
-                    source: "logic://system/health",
-                    requestID: "rb",
-                    verified: readbackVerified,
-                    sha256: String(repeating: "b", count: 64)
-                ),
-                restore: restore
-            )
-        }
-        #expect(Self.readers(readCase(readbackVerified: true)) == Self.credited)
-        #expect(Self.readers(readCase(
-            readbackVerified: true,
-            restore: QualificationRestoreEvidence(recordSHA256: "x", verified: false)
-        )) == Self.credited)
-        #expect(Self.readers(readCase(readbackVerified: false)) == Self.notCredited)
-    }
 
-    /// The attestation's `restore` is what the credit rule reads, so it must name the record the
-    /// case's evidence file binds -- or a bundle could say "verified" about a record it does not
-    /// carry.
+    /// The attestation's `restore` must name the record the case's evidence file binds -- or a
+    /// bundle could say "verified" about a record it does not carry.
     @Test func aCaseMustNameTheRecordItsEvidenceBinds() throws {
         let cycle = try Self.result(record: Self.record())
         let operationCase = Self.qualificationCase(cycle)

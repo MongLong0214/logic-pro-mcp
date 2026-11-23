@@ -6,8 +6,8 @@ import Foundation
 // WHY: `QualificationSemanticReadbackValidator` shipped with a single bespoke
 // case (system.health). Every other read-only operation fell through to `nil`,
 // which the runner honestly records as `protocolSmoke` — "the transport worked,
-// nobody checked the meaning". PromotionGate requires every operation
-// passed-or-waived, so the read-only surface could never qualify.
+// nobody checked the meaning". Direct qualification therefore could not claim
+// semantic coverage for the read-only surface.
 //
 // This file gives each read-only spec an oracle: a declarative set of
 // constraints over the operation's ACTUAL response shape (derived by reading

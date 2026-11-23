@@ -505,6 +505,23 @@ actor StateCache {
         }
     }
 
+    /// Apply one positive, read-only project-chooser observation as a single
+    /// cache transition. Repeated positive samples must not clear the project
+    /// again: `clearProjectState()` advances the project epoch and section
+    /// revisions, so it is invoked only for the true-to-false document edge.
+    /// Occlusion and dialog flags are always cleared because the positively
+    /// identified chooser itself is the current non-document surface.
+    @discardableResult
+    func applyObservedProjectChooser() -> Bool {
+        let documentChanged = hasDocument
+        if documentChanged {
+            updateDocumentState(false)
+        }
+        updateAXOccluded(false)
+        updateBlockingDialogButtons(nil)
+        return documentChanged
+    }
+
     /// v3.1.4 (#4) — set the AX occlusion flag. Idempotent; called every
     /// poll cycle by `StatePoller.pollOnce`.
     func updateAXOccluded(_ occluded: Bool) {

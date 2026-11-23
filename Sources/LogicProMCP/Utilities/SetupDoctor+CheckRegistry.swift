@@ -8,7 +8,6 @@ extension SetupDoctor {
         case installSource = "install.source"
         case installBinaryInventory = "install.binary_inventory"
         case installShareDir = "install.share_dir"
-        case releaseSignature = "release.signature"
         case releaseQuarantine = "release.quarantine"
         case mcpClaudeCodeRegistration = "mcp.claude_code_registration"
         case mcpRegistrationTarget = "mcp.registration_target"
@@ -27,6 +26,7 @@ extension SetupDoctor {
         case channelsManualValidation = "channels.manual_validation"
         case channelsKeycmdReference = "channels.keycmd_reference"
         case channelsMCUWiringHint = "channels.mcu_wiring_hint"
+        case channelsRuntimeEndpointOwnership = "channels.runtime_endpoint_ownership"
         case dependenciesClickFallback = "dependencies.click_fallback"
         case updatesLatestRelease = "updates.latest_release"
     }
@@ -98,7 +98,6 @@ extension SetupDoctor {
         .init(.installSource, remediationAnchor: "docs/SETUP.md#doctor-installsource"),
         .init(.installBinaryInventory, remediationAnchor: "docs/SETUP.md#doctor-installbinary-inventory"),
         .init(.installShareDir, remediationAnchor: "docs/SETUP.md#doctor-installshare-dir"),
-        .init(.releaseSignature, dependencies: [.binaryPath], remediationAnchor: "docs/SETUP.md#doctor-releasesignature"),
         .init(.releaseQuarantine, dependencies: [.binaryPath], remediationAnchor: "docs/SETUP.md#doctor-releasequarantine"),
         .init(.mcpClaudeCodeRegistration, remediationAnchor: "docs/SETUP.md#doctor-mcpclaude-code-registration", clientRule: "claude-code"),
         .init(.mcpRegistrationTarget, dependencies: [.mcpClaudeCodeRegistration], remediationAnchor: "docs/SETUP.md#doctor-mcpregistration-target", clientRule: "claude-code"),
@@ -119,6 +118,7 @@ extension SetupDoctor {
         // verifies Logic, so this terminal check has no actionable dependency.
         .init(.channelsManualValidation, capabilityGroups: ["keycmd_only_ops", "legacy_scripter"], remediationAnchor: "docs/SETUP.md#doctor-channelsmanual-validation", profileRule: "keycmd|legacy-scripter|full"),
         .init(.channelsMCUWiringHint, capabilityGroups: ["mixer_mcu"], remediationAnchor: "docs/SETUP.md#doctor-channelsmcu-wiring-hint", profileRule: "full"),
+        .init(.channelsRuntimeEndpointOwnership, optionalByDefault: true),
         .init(.dependenciesClickFallback, remediationAnchor: "docs/SETUP.md#doctor-dependenciesclick-fallback"),
         .init(
             .updatesLatestRelease,

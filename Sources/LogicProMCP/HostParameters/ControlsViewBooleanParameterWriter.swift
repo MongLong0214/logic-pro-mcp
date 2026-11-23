@@ -320,6 +320,13 @@ enum ControlsViewBooleanParameterWriter {
         }
     }
 
+    enum ViewPickBoundary: Sendable {
+        case willPick
+        case didPick
+        case didObserveDuringConfirmation(AXUIElementSendable)
+        case didConfirm(AXUIElementSendable)
+    }
+
     /// Owns one confirmed temporary view selection. Its caller restores this
     /// exact entry view on every exit path, including a locator refusal.
     final class ViewSession: @unchecked Sendable {
@@ -354,7 +361,10 @@ enum ControlsViewBooleanParameterWriter {
         /// caller before it returns either a successful write or a State C; the
         /// already-observed parameter-write verdict is never recast as though it
         /// had not run.
-        func restore(allowingChanges: () -> Bool = { true }) -> ViewRestoration {
+        func restore(
+            allowingChanges: () -> Bool = { true },
+            observingPickBoundary: ((ViewPickBoundary) -> Void)? = nil
+        ) -> ViewRestoration {
             guard !restorationFinished else {
                 return ViewRestoration(
                     attempted: false,
@@ -384,6 +394,7 @@ enum ControlsViewBooleanParameterWriter {
                 confirmationTimeout: viewConfirmationTimeout,
                 allowingChanges: allowingChanges,
                 headerBoundUndescribedView: headerBoundUndescribedView,
+                observingPickBoundary: observingPickBoundary,
                 runtime: runtime
             ) {
             case let .confirmed(switched):
@@ -425,7 +436,7 @@ enum ControlsViewBooleanParameterWriter {
     }
 
     private enum ViewWaitResult {
-        case confirmed
+        case confirmed(AXUIElementSendable)
         case deadlineExpired(ViewStructureObservation)
         case readFailed(ViewEvidenceReadFailure)
     }
@@ -461,12 +472,41 @@ enum ControlsViewBooleanParameterWriter {
     ) -> ViewPreparationResult {
         let effectiveWindowRefresher = windowRefresher ?? { window }
         let entryView: PluginWindowView
-        let entryObservation = observedView(
+        // A window Logic has only just opened can expose its table before the
+        // rows that make it Controls-shaped. That is an unsettled structure, not
+        // a refusal: wait for it, bounded by the same deadline a view switch
+        // gets, and refuse `entry_view_not_confirmed` only when it never settles.
+        // Only a structure that was READ in full and is present-but-unconfirmed
+        // is waited on: one table whose census and rows read without failure.
+        // A failed census or row read is unreadable, not settling, and a
+        // structural transition seen before any selection is not ours to wait
+        // out (only an owned, post-selection transition is re-observed); both
+        // refuse at once, and a view is never guessed.
+        let entryDeadline = Date().addingTimeInterval(max(0, confirmationTimeout))
+        var entryStructureSettling = false
+        var entryObservation = observedView(
             in: window,
             windowRefresher: effectiveWindowRefresher,
             headerBoundUndescribedView: headerBoundUndescribedView,
+            structureSettling: { entryStructureSettling = $0 },
             runtime: runtime
         )
+        while case .success(.none) = entryObservation, entryStructureSettling {
+            let remaining = entryDeadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            guard allowingChanges() else {
+                return .refused(.contextOwnershipEnded, restoration: nil)
+            }
+            Thread.sleep(forTimeInterval: min(viewConfirmationPollInterval, remaining))
+            entryStructureSettling = false
+            entryObservation = observedView(
+                in: window,
+                windowRefresher: effectiveWindowRefresher,
+                headerBoundUndescribedView: headerBoundUndescribedView,
+                structureSettling: { entryStructureSettling = $0 },
+                runtime: runtime
+            )
+        }
         switch entryObservation {
         case let .success(.some(observed)):
             entryView = observed
@@ -593,13 +633,18 @@ enum ControlsViewBooleanParameterWriter {
         in window: AXUIElement,
         windowRefresher: @escaping () -> AXUIElement?,
         headerBoundUndescribedView: ((PluginWindowView) -> Bool)? = nil,
+        observingWindow: ((AXUIElement) -> Void)? = nil,
+        structureSettling: ((Bool) -> Void)? = nil,
         runtime: AXHelpers.Runtime
     ) -> Result<PluginWindowView?, ViewEvidenceReadFailure> {
         var attempts = 0
         while true {
             attempts += 1
             let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
-            let observation = observedViewOnce(in: currentWindow, headerBoundUndescribedView: headerBoundUndescribedView, runtime: runtime)
+            observingWindow?(currentWindow)
+            let observation = observedViewOnce(
+                in: currentWindow, headerBoundUndescribedView: headerBoundUndescribedView,
+                structureSettling: structureSettling, runtime: runtime)
             switch observation {
             case .success:
                 return observation
@@ -615,9 +660,14 @@ enum ControlsViewBooleanParameterWriter {
         }
     }
 
+    /// `structureSettling` is told, for an unconfirmed (`.success(nil)`) answer
+    /// only, whether it came from a table structure read in full that is not yet
+    /// Controls-shaped (true) or from anything else (never called): a failed
+    /// read or a transition observed through the header-bound witness.
     private static func observedViewOnce(
         in window: AXUIElement,
         headerBoundUndescribedView: ((PluginWindowView) -> Bool)? = nil,
+        structureSettling: ((Bool) -> Void)? = nil,
         runtime: AXHelpers.Runtime
     ) -> Result<PluginWindowView?, ViewEvidenceReadFailure> {
         switch describedNativeEditorSliderEvidence(in: window, runtime: runtime) {
@@ -665,12 +715,14 @@ enum ControlsViewBooleanParameterWriter {
         case .notDescribed:
             break
         }
-        switch controlsViewStateIsBound(in: window, runtime: runtime) {
+        let table = controlsTableEvidence(in: window, runtime: runtime)
+        switch table.evidence {
         case .controls:
             return .success(.controls)
         case .noTable:
             return .success(.editor)
         case .unconfirmed:
+            structureSettling?(table.readInFull)
             return .success(nil)
         }
     }
@@ -827,6 +879,7 @@ enum ControlsViewBooleanParameterWriter {
         forceSelection: Bool = false,
         allowingChanges: () -> Bool = { true },
         headerBoundUndescribedView: ((PluginWindowView) -> Bool)? = nil,
+        observingPickBoundary: ((ViewPickBoundary) -> Void)? = nil,
         runtime: AXHelpers.Runtime
     ) -> ViewChangeResult {
         if !forceSelection {
@@ -926,16 +979,23 @@ enum ControlsViewBooleanParameterWriter {
             return .refused(.viewEvidenceReadFailed(.menuItemEnabled(error)), targetSelectionAttempted: false)
         }
         guard allowingChanges() else { return .refused(.contextOwnershipEnded, targetSelectionAttempted: false) }
+        observingPickBoundary?(.willPick)
+        guard allowingChanges() else { return .refused(.contextOwnershipEnded, targetSelectionAttempted: false) }
         _ = AXHelpers.performAction(target, kAXPickAction as String, runtime: runtime)
+        observingPickBoundary?(.didPick)
         switch waitForView(
             targetView,
             in: window,
             windowRefresher: windowRefresher,
             timeout: confirmationTimeout,
             headerBoundUndescribedView: headerBoundUndescribedView,
+            observingWindow: {
+                observingPickBoundary?(.didObserveDuringConfirmation(AXUIElementSendable($0)))
+            },
             runtime: runtime
         ) {
-        case .confirmed:
+        case let .confirmed(confirmedWindow):
+            observingPickBoundary?(.didConfirm(confirmedWindow))
             break
         case let .deadlineExpired(observed):
             return .refused(
@@ -1065,19 +1125,27 @@ enum ControlsViewBooleanParameterWriter {
         windowRefresher: @escaping () -> AXUIElement?,
         timeout: TimeInterval,
         headerBoundUndescribedView: ((PluginWindowView) -> Bool)? = nil,
+        observingWindow: ((AXUIElement) -> Void)? = nil,
         runtime: AXHelpers.Runtime
     ) -> ViewWaitResult {
         let started = Date()
         let deadline = started.addingTimeInterval(max(0, timeout))
         repeat {
+            var observedWindow: AXUIElement?
             switch observedView(
                 in: window,
                 windowRefresher: windowRefresher,
                 headerBoundUndescribedView: headerBoundUndescribedView,
+                observingWindow: {
+                    observedWindow = $0
+                    observingWindow?($0)
+                },
                 runtime: runtime
             ) {
             case let .success(.some(observed)) where observed == expected:
-                return .confirmed
+                if let observedWindow {
+                    return .confirmed(AXUIElementSendable(observedWindow))
+                }
             case let .failure(error):
                 return .readFailed(error)
             case .success:
@@ -1173,6 +1241,16 @@ enum ControlsViewBooleanParameterWriter {
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> ControlsTableEvidence {
+        controlsTableEvidence(in: window, runtime: runtime).evidence
+    }
+
+    /// The table evidence, and whether it was read in full: the census, the one
+    /// table's rows and every row's pair check all answered. Only an
+    /// `.unconfirmed` answer read in full is a structure that may still settle.
+    private static func controlsTableEvidence(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> (evidence: ControlsTableEvidence, readInFull: Bool) {
         let tables: [AXUIElement]
         switch AXHelpers.censusDescendantResult(
             of: window, role: kAXTableRole, maxDepth: 8, runtime: runtime
@@ -1180,16 +1258,16 @@ enum ControlsViewBooleanParameterWriter {
         case let .success(census):
             tables = census.matches
         case .failure:
-            return .unconfirmed
+            return (.unconfirmed, false)
         }
-        if tables.isEmpty { return .noTable }
-        guard tables.count == 1, let table = tables.first else { return .unconfirmed }
+        if tables.isEmpty { return (.noTable, true) }
+        guard tables.count == 1, let table = tables.first else { return (.unconfirmed, false) }
         let rows: [AXUIElement]
         switch controlsRows(in: table, runtime: runtime) {
         case let .success(observed):
             rows = observed
         case .failure:
-            return .unconfirmed
+            return (.unconfirmed, false)
         }
         // Heading and section rows have no interactive control in the live
         // table. A Controls view is bound by the presence of at least one
@@ -1197,15 +1275,18 @@ enum ControlsViewBooleanParameterWriter {
         // A failed row read is not negative evidence and cannot erase a pair
         // observed in another row; without a pair, the table remains
         // unconfirmed rather than becoming Editor evidence.
+        var everyRowRead = true
         for row in rows {
             switch rowCarriesParameterPair(row, runtime: runtime) {
             case .success(true):
-                return .controls
-            case .success(false), .failure:
+                return (.controls, true)
+            case .success(false):
                 continue
+            case .failure:
+                everyRowRead = false
             }
         }
-        return .unconfirmed
+        return (.unconfirmed, everyRowRead)
     }
 
     /// Resolve a row-label address without positional fallbacks. A candidate

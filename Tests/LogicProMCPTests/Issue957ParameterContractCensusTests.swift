@@ -92,7 +92,13 @@ struct Issue957ParameterContractCensusTests {
         case .logicAudio:
             result = await AudioDispatcher.handle(command: command, params: params)
         case .logicSystem:
-            result = await SystemDispatcher.handle(command: command, params: params, router: router, cache: cache)
+            result = await SystemDispatcher.handle(
+                command: command,
+                params: params,
+                router: router,
+                cache: cache,
+                midiKeyCommandSetup: { _, _ in .checked(.missing) }
+            )
         case .logicPlugins:
             result = await PluginsDispatcher.handle(verifiedGate: VerifiedOpGate(), command: command, params: params, router: router, cache: cache,
                                                     liveTrackNames: names)

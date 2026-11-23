@@ -382,4 +382,60 @@ struct Issue965StripHelpSampleTests {
         #expect((reads.counts.first(where: { CFEqual($0.0, input) })?.1 ?? 0) > beforeStandalone,
             "Standalone routing/parameter consumers remain ordinary fresh reads")
     }
+
+    @Test(arguments: [false, true])
+    func boundReadOnlyPollSharesHelpOnlyWithinOneStripAndOneCycle(failed: Bool) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(1_965_900)
+        let mixer = builder.element(1_965_901)
+        let strip = builder.element(1_965_902)
+        let insert = builder.element(1_965_903)
+        let input = builder.element(1_965_904)
+        let output = builder.element(1_965_905)
+        builder.setRole(window, kAXWindowRole as String)
+        builder.setRole(mixer, kAXLayoutAreaRole as String)
+        builder.setRole(strip, kAXLayoutItemRole as String)
+        builder.setButton(insert, description: "Audio Plug-in", help: "Audio Plug-in",
+                          x: 0, y: 0, width: 60, height: 20)
+        builder.setButton(input, description: "Input 1", help: "Input slot",
+                          x: 0, y: 30, width: 60, height: 20)
+        builder.setButton(output, description: "Stereo Output", help: "Output slot",
+                          x: 0, y: 60, width: 60, height: 20)
+        builder.setChildren(strip, [insert, input, output])
+        builder.setChildren(mixer, [strip])
+        builder.setChildren(window, [mixer])
+        let reads = Reads(builder: builder, input: input, failFirstInput: failed)
+        let runtime = builder.makeLogicRuntime(attributeValueHandler: { element, attribute in
+            guard attribute == kAXHelpAttribute as String else { return nil }
+            return .some(try? reads.read(element).get())
+        }, attributeValueResultHandler: { element, attribute in
+            guard attribute == kAXHelpAttribute as String else { return nil }
+            return reads.read(element)
+        }, setAttributeHandler: nil, performActionHandler: nil)
+
+        let first = try #require(AccessibilityChannel.readChannelStrips(
+            from: [strip], runtime: runtime, window: window, mixer: mixer,
+            sharingHelpWithinBoundStripRead: true, stoppingWhen: { false }
+        ))
+        if failed {
+            #expect(first.first?.inputObservation?.state == .unreadable,
+                    "a failed Help sample must stay failed throughout this strip extraction")
+        } else {
+            #expect(first.first?.input == "Input 1")
+            #expect(first.first?.output == "Stereo Output")
+            #expect(first.first?.pluginsSource == "ax")
+        }
+        #expect(reads.counts.allSatisfy { $0.1 == 1 },
+                "each physical Help element must be sampled once in the bound strip extraction")
+        let firstCounts = reads.counts
+
+        _ = AccessibilityChannel.readChannelStrips(
+            from: [strip], runtime: runtime, window: window, mixer: mixer,
+            sharingHelpWithinBoundStripRead: true, stoppingWhen: { false }
+        )
+        #expect(firstCounts.allSatisfy { old in
+            reads.counts.first(where: { CFEqual($0.0, old.0) })?.1 == 2
+        }, "the next poll cycle must take a fresh Help sample")
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
 }

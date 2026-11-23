@@ -54,6 +54,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemSagaStatus = "system.saga_status"
     case systemSagaCancel = "system.saga_cancel"
     case systemSetupArmKey = "system.setup_arm_key"
+    case systemSetupMIDIKeyCommands = "system.setup_midi_key_commands"
     case systemSetupControlSurface = "system.setup_control_surface"
     case pluginsGetInventory = "plugins.get_inventory"
     case pluginsGetHostParameterManifest = "plugins.get_host_parameter_manifest"
@@ -343,7 +344,7 @@ enum OperationRegistry {
             "system.list_recent_traces", "system.get_trace", "system.clear_traces",
             "system.export_support_bundle", "system.help", "system.saga_preflight",
             "system.saga_execute", "system.saga_status", "system.saga_cancel",
-            "system.setup_arm_key", "system.setup_control_surface",
+            "system.setup_arm_key", "system.setup_midi_key_commands", "system.setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
             "plugins.get_inventory", "plugins.get_host_parameter_manifest", "plugins.get_param_verified", "plugins.get_channel_eq_state_verified", "plugins.plan_parameter_changes", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
@@ -404,7 +405,7 @@ enum OperationRegistry {
             "health", "permissions", "refresh_cache", "export_support_bundle", "help",
             "list_recent_traces", "get_trace", "clear_traces",
             "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
-            "setup_arm_key", "setup_control_surface",
+            "setup_arm_key", "setup_midi_key_commands", "setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
             "get_inventory", "get_host_parameter_manifest", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
@@ -727,6 +728,8 @@ enum OperationRegistry {
         (.systemSagaCancel, "saga_cancel", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, ["idempotency_key"]),
         // WHY: a consent-gated one-time Key Commands configuration write (#413); mutating with a long budget (drives the KC GUI + a functional arm-flip verify), consent is the only required param.
         (.systemSetupArmKey, "setup_arm_key", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["consent"]),
+        // WHY: even check mode activates and drives Logic's Key Commands UI; this first public slice is consent-gated, long-running, and preserves its independent readback result without advertising apply support.
+        (.systemSetupMIDIKeyCommands, "setup_midi_key_commands", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["consent", "mode"]),
         // WHY: a consent-gated one-time control-surface install + port binding (#884); mutating with a long budget (drives the Setup window, the Install picker and two port popups, then waits for MCU feedback newer than the drive), consent is the only required param.
         (.systemSetupControlSurface, "setup_control_surface", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["consent"]),
     ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy, Set<String>)]).map { entry in

@@ -335,9 +335,177 @@ import Testing
     #expect(warningIsPresent)
 }
 
+// resolve_path is an in-memory lookup over the cached scan. It must not queue
+// behind a synchronous AX read that is holding the AccessibilityChannel actor.
+@Test func testResolvePathDoesNotWaitForSynchronousAXReadOnChannel() async throws {
+    let entered = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+    let channel = AccessibilityChannel(runtime: makeRuntime(trackStates: {
+        entered.signal()
+        _ = release.wait(timeout: .now() + 5)
+        return []
+    }))
+    await channel.seedLastScanForTest(
+        makeTestRoot(categories: ["Bass"], presets: ["Sub Bass"]), source: "disk"
+    )
+    let blockedRead = Task.detached { await channel.readTrackStates() }
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        DispatchQueue.global().async {
+            entered.wait()
+            continuation.resume()
+        }
+    }
+
+    let start = ContinuousClock.now
+    let result = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Bass/Sub Bass"]
+    )
+    let elapsed = ContinuousClock.now - start
+    release.signal()
+    _ = await blockedRead.value
+
+    #expect(elapsed < .seconds(1), "resolve_path waited \(elapsed) for an unrelated AX read")
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+    let exists = try #require(obj["exists"] as? Bool)
+    #expect(exists)
+    #expect(obj["source"] as? String == "disk")
+    let loadable = try #require(obj["loadable"] as? Bool)
+    #expect(loadable)
+}
+
+@Test func testResolvePathConcurrentPublicationReturnsWholeSnapshot() async throws {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let leafRoot = makeTestRoot(categories: ["Category"], presets: ["Target"])
+    let folderRoot = makeAtomicFolderRoot()
+    await channel.seedLastScanForTest(leafRoot, source: "old")
+    let initial = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Category/Target"]
+    ).message
+
+    var messages = [initial]
+    messages += await withTaskGroup(of: [String].self, returning: [String].self) { group in
+        group.addTask {
+            for index in 0..<2_000 {
+                if index.isMultiple(of: 2) {
+                    await channel.seedLastScanForTest(folderRoot, source: "new")
+                } else {
+                    await channel.seedLastScanForTest(leafRoot, source: "old")
+                }
+                await Task.yield()
+            }
+            return []
+        }
+        for _ in 0..<4 {
+            group.addTask {
+                var batch: [String] = []
+                batch.reserveCapacity(500)
+                for _ in 0..<500 {
+                    batch.append(await channel.execute(
+                        operation: "library.resolve_path",
+                        params: ["path": "Category/Target"]
+                    ).message)
+                    await Task.yield()
+                }
+                return batch
+            }
+        }
+
+        var collected: [String] = []
+        for await batch in group { collected.append(contentsOf: batch) }
+        return collected
+    }
+    await channel.seedLastScanForTest(folderRoot, source: "new")
+    messages.append(await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Category/Target"]
+    ).message)
+
+    var observedSources = Set<String>()
+    for message in messages {
+        let obj = try #require(JSONSerialization.jsonObject(
+            with: Data(message.utf8)
+        ) as? [String: Any])
+        let source = try #require(obj["source"] as? String)
+        observedSources.insert(source)
+        switch source {
+        case "old":
+            #expect(obj["kind"] as? String == "leaf")
+            #expect(obj["children"] == nil)
+        case "new":
+            #expect(obj["kind"] as? String == "folder")
+            #expect(obj["children"] as? [String] == ["Child"])
+        default:
+            Issue.record("unexpected cache source \(source)")
+        }
+    }
+    #expect(observedSources.contains("old"))
+    #expect(observedSources.contains("new"))
+    #expect(observedSources.count == 2)
+}
+
+@Test func testResolvePathSixThousandLeafDiskInventory() async throws {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let root = makeLargeDiskRoot(categories: 15, foldersPerCategory: 6, leavesPerFolder: 70)
+    #expect(root.leafCount == 6_300)
+    await channel.seedLastScanForTest(root, source: "disk")
+
+    let start = ContinuousClock.now
+    let leaf = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Category 14/Folder 5/Patch 69"]
+    )
+    let folder = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Category 14/Folder 5"]
+    )
+    let miss = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Category 14/Folder 5/Patch 70"]
+    )
+    let elapsed = ContinuousClock.now - start
+    #expect(elapsed < .seconds(1), "three lookups over 6,300 leaves took \(elapsed)")
+
+    let leafObj = try #require(JSONSerialization.jsonObject(
+        with: Data(leaf.message.utf8)
+    ) as? [String: Any])
+    let leafExists = try #require(leafObj["exists"] as? Bool)
+    #expect(leafExists)
+    #expect(leafObj["kind"] as? String == "leaf")
+    #expect(leafObj["matchedPath"] as? String == "Category 14/Folder 5/Patch 69")
+    #expect(leafObj["source"] as? String == "disk")
+    let leafLoadable = try #require(leafObj["loadable"] as? Bool)
+    #expect(leafLoadable)
+    #expect(leafObj["reason"] == nil)
+
+    let folderObj = try #require(JSONSerialization.jsonObject(
+        with: Data(folder.message.utf8)
+    ) as? [String: Any])
+    #expect(folderObj["kind"] as? String == "folder")
+    let folderLoadable = try #require(folderObj["loadable"] as? Bool)
+    #expect(!folderLoadable)
+    #expect(folderObj["reason"] as? String == "folder_path")
+    #expect((folderObj["children"] as? [String])?.count == 70)
+
+    let missObj = try #require(JSONSerialization.jsonObject(
+        with: Data(miss.message.utf8)
+    ) as? [String: Any])
+    let missExists = try #require(missObj["exists"] as? Bool)
+    #expect(!missExists)
+    #expect(
+        missObj["reason"] as? String
+            == "Library path segment 'Patch 70' was not found under 'Category 14/Folder 5' in the scanned library cache."
+    )
+}
+
 // MARK: - Helpers
 
-private func makeRuntime() -> AccessibilityChannel.Runtime {
+private func makeRuntime(
+    trackStates: @escaping @Sendable () -> [TrackState]? = { nil }
+) -> AccessibilityChannel.Runtime {
     AccessibilityChannel.Runtime(
         isTrusted: { true },
         isLogicProRunning: { true },
@@ -347,6 +515,7 @@ private func makeRuntime() -> AccessibilityChannel.Runtime {
         setTempo: { _ in .success("{}") },
         setCycleRange: { _ in .success("{}") },
         tracks: { .success("[]") },
+        trackStates: trackStates,
         selectedTrack: { .success("{}") },
         selectTrack: { _ in .success("{}") },
         setTrackToggle: { _, _ in .success("{}") },
@@ -376,6 +545,69 @@ private func makeTestRoot(categories: [String], presets: [String]) -> LibraryRoo
         cycleCount: 0, nodeCount: 1 + categories.count + categories.count * presets.count,
         leafCount: categories.count * presets.count, folderCount: 1 + categories.count,
         root: root, categories: categories, presetsByCategory: byCat
+    )
+}
+
+private func makeAtomicFolderRoot() -> LibraryRoot {
+    let child = LibraryNode(
+        name: "Child", path: "Category/Target/Child", kind: .leaf, children: []
+    )
+    let target = LibraryNode(
+        name: "Target", path: "Category/Target", kind: .folder, children: [child]
+    )
+    let category = LibraryNode(
+        name: "Category", path: "Category", kind: .folder, children: [target]
+    )
+    let root = LibraryNode(
+        name: "(library-root)", path: "", kind: .folder, children: [category]
+    )
+    return LibraryRoot(
+        generatedAt: "2026-11-08T00:00:00Z",
+        scanDurationMs: 0, measuredSettleDelayMs: 0,
+        selectionRestored: false, truncatedBranches: 0, probeTimeouts: 0,
+        cycleCount: 0, nodeCount: 4, leafCount: 1, folderCount: 3,
+        root: root, categories: ["Category"], presetsByCategory: ["Category": ["Child"]]
+    )
+}
+
+private func makeLargeDiskRoot(
+    categories: Int, foldersPerCategory: Int, leavesPerFolder: Int
+) -> LibraryRoot {
+    var topChildren: [LibraryNode] = []
+    var byCat: [String: [String]] = [:]
+    for c in 0..<categories {
+        let category = "Category \(c)"
+        var folders: [LibraryNode] = []
+        var categoryLeaves: [String] = []
+        for f in 0..<foldersPerCategory {
+            let folderPath = "\(category)/Folder \(f)"
+            let leaves = (0..<leavesPerFolder).map { l in
+                LibraryNode(
+                    name: "Patch \(l)", path: "\(folderPath)/Patch \(l)",
+                    kind: .leaf, children: []
+                )
+            }
+            categoryLeaves += leaves.map(\.name)
+            folders.append(LibraryNode(
+                name: "Folder \(f)", path: folderPath, kind: .folder, children: leaves
+            ))
+        }
+        byCat[category] = categoryLeaves
+        topChildren.append(LibraryNode(
+            name: category, path: category, kind: .folder, children: folders
+        ))
+    }
+    let root = LibraryNode(
+        name: "(library-root)", path: "", kind: .folder, children: topChildren
+    )
+    let counts = root.countNodes()
+    return LibraryRoot(
+        generatedAt: "2026-11-08T00:00:00Z",
+        scanDurationMs: 0, measuredSettleDelayMs: 0,
+        selectionRestored: false, truncatedBranches: 0, probeTimeouts: 0,
+        cycleCount: 0, nodeCount: counts.total,
+        leafCount: counts.leaves, folderCount: counts.folders,
+        root: root, categories: topChildren.map(\.name), presetsByCategory: byCat
     )
 }
 

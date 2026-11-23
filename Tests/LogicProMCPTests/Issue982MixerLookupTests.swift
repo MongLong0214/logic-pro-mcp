@@ -49,6 +49,95 @@ extension Issue982UnreadChildrenTests {
         #expect(Self.isNotFound(lookup), "\(lookup)")
     }
 
+    static func runtime(
+        observingLogicVersion version: String?, from base: AXLogicProElements.Runtime
+    ) -> AXLogicProElements.Runtime {
+        AXLogicProElements.Runtime(
+            logicProPID: base.logicProPID,
+            ax: base.ax,
+            executeAppleScript: base.executeAppleScript,
+            executeAppleScriptWithTimeout: base.executeAppleScriptWithTimeout,
+            onScreenWindowList: { [] },
+            postPopupMenuEscape: {},
+            focusedApplicationPID: { nil },
+            observeHost: { _ in .init(logicVersion: version, logicBuild: "fixture") }
+        )
+    }
+
+    /// Logic 13's hidden Mixer is an observed negative result. The default read-only inventory
+    /// must not descend an unrelated deep track tree before returning that result.
+    @Test func logic13InventoryBoundsAHiddenMixerLookup() {
+        let f = Self.fixture(.logic123, mixerShowing: false)
+        let existing = f.builder.makeAXRuntime().children(f.window)
+        let branch = (0...4).map { f.builder.element(9860 + $0) }
+        for element in branch {
+            f.builder.setAttribute(element, kAXRoleAttribute as String, kAXGroupRole as String)
+        }
+        for index in 0..<(branch.count - 1) {
+            f.builder.setChildren(branch[index], [branch[index + 1]])
+        }
+        f.builder.setChildren(branch.last!, [])
+        f.builder.setChildren(f.window, [branch[0]] + existing)
+        let deepReads = MutableBox(0)
+        let base = f.builder.makeLogicRuntime(
+            appElement: f.app,
+            childrenResultHandler: { element in
+                if CFEqual(element, branch[4]) { deepReads.value += 1 }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+        let runtime = Self.runtime(observingLogicVersion: "13.0", from: base)
+
+        #expect(AccessibilityChannel.mixerWithoutRevealForInventory(
+            runtime: runtime, revealRequested: false) == nil)
+        #expect(deepReads.value == 0, "the Logic 13 negative lookup descended past its bound")
+        #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+    }
+
+    /// Version uncertainty and an explicit reveal keep the complete legacy discovery. A bounded
+    /// Logic 13 default read is the only path allowed to decide a shallow absence.
+    @Test(arguments: [
+        (nil, false), ("12.3", false), ("13.0", true), ("14.0", false),
+    ] as [(String?, Bool)])
+    func completeInventoryLookupRemainsForLegacyUnknownAndReveal(
+        version: String?, revealRequested: Bool
+    ) throws {
+        let f = Self.fixture(.identified)
+        let existing = f.builder.makeAXRuntime().children(f.window)
+            .filter { !CFEqual($0, f.mixer) }
+        let wrappers = (0...3).map { f.builder.element(9870 + $0) }
+        for wrapper in wrappers {
+            f.builder.setAttribute(wrapper, kAXRoleAttribute as String, kAXGroupRole as String)
+        }
+        for index in 0..<(wrappers.count - 1) {
+            f.builder.setChildren(wrappers[index], [wrappers[index + 1]])
+        }
+        f.builder.setChildren(wrappers.last!, [f.mixer])
+        f.builder.setChildren(f.window, existing + [wrappers[0]])
+        let runtime = Self.runtime(
+            observingLogicVersion: version,
+            from: f.builder.makeLogicRuntime(appElement: f.app)
+        )
+
+        let found = try #require(AccessibilityChannel.mixerWithoutRevealForInventory(
+            runtime: runtime, revealRequested: revealRequested)?.mixer)
+        #expect(CFEqual(found, f.mixer))
+    }
+
+    @Test func logic13BoundedLookupPreservesUnreadMixerStatus() throws {
+        let (f, failing) = try #require(Self.unidentified.first).fixture()
+        let base = Self.runtime(f, failing: failing)
+        let observed = try #require(AccessibilityChannel.mixerWithoutRevealForInventory(
+            runtime: Self.runtime(observingLogicVersion: "13.0", from: base),
+            revealRequested: false))
+        #expect(observed.mixer == nil)
+        #expect(observed.result.mixerChildrenUnread)
+        #expect(!observed.result.attempted)
+        #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
+    }
+
     /// 12.3's toolbar is a Mixer-named container too. Its failed read does not hide a Mixer that
     /// reads beside it.
     @Test func anUnreadToolbarDoesNotHideTheMixerBesideIt() throws {

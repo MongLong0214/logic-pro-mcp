@@ -315,6 +315,72 @@ class GuardBehaviour(unittest.TestCase):
         result = self.run_guard()
         self.assertNotIn("LOGIC-FACING", result.stderr)
 
+    def _add_nowhere_policy_literal(self, literal):
+        path = os.path.join(self.root, "docs", "canon", "POLICY-LITERALS.json")
+        with open(path, encoding="utf-8") as handle:
+            body = json.load(handle)
+        body["literals"][literal] = "nowhere"
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(body, handle, ensure_ascii=False)
+
+    def test_a_new_nowhere_literal_over_the_same_logic_fails(self):
+        """A build transition must not become a general escape from the debt ratchet."""
+        self._add_nowhere_policy_literal("not shipped anywhere same build 91xq")
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may only SHRINK", result.stderr)
+
+    def test_a_brand_new_nowhere_literal_under_a_different_logic_still_fails(self):
+        literal = "not shipped anywhere changed build 91xq"
+        self._add_nowhere_policy_literal(literal)
+        manifest_path = os.path.join(self.root, "docs", "canon", "MANIFEST.json")
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        manifest["logic"] = dict(manifest.get("logic") or {}, build="9999")
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False)
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may not introduce arbitrary new waiver text", result.stderr)
+
+    def test_metadata_only_logic_change_does_not_open_the_transition_exception(self):
+        self._add_nowhere_policy_literal("not shipped metadata only 91xq")
+        manifest_path = os.path.join(self.root, "docs", "canon", "MANIFEST.json")
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        manifest["logic"] = dict(manifest.get("logic") or {}, app="Renamed Logic")
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False)
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may only SHRINK", result.stderr)
+
+    def test_a_previously_answered_literal_removed_by_different_logic_is_reproved_and_allowed(self):
+        """Apple may remove a string, but the replacement corpus must prove that exact fact.
+
+        The base must already classify the literal as answered; a build bump cannot invent a new
+        waiver. The replacement corpus then proves the old literal absent everywhere.
+        """
+        literal = "removed by changed build 91xq"
+        policy_path = os.path.join(self.root, "docs", "canon", "POLICY-LITERALS.json")
+        with open(policy_path, encoding="utf-8") as handle:
+            policy = json.load(handle)
+        policy["literals"][literal] = "strings_value"
+        with open(policy_path, "w", encoding="utf-8") as handle:
+            json.dump(policy, handle, ensure_ascii=False)
+        self.assertEqual(self._git("add", "-A").returncode, 0)
+        self.assertEqual(self._git("commit", "--amend", "--no-edit", "-q").returncode, 0)
+        self._add_nowhere_policy_literal(literal)
+        manifest_path = os.path.join(self.root, "docs", "canon", "MANIFEST.json")
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        manifest["logic"] = dict(manifest.get("logic") or {}, build="9999")
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False)
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("re-proved absent from every pinned corpus", result.stderr)
+
     # `test_removing_from_a_requirement_list_fails` used to sit here, over `CI-GATE.json`. That
     # list and the three other CI-only lists moved to `.github/ci/` with their owner in #951, and
     # the case moved with them, to `test_every_ci_job_is_required.py`. A case left behind would

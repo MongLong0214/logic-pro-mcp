@@ -401,6 +401,34 @@ struct NavigateDispatcher: OperationTraceDispatching {
         guard openResult.isSuccess else {
             return toolTextResult(openResult)
         }
+        // A list this request opened is this request's to close, whatever the outcome below.
+        let openedByThisRequest = honestContractExtras(from: openResult.message)["already_open"] as? Bool == false
+        let result = await createMarkerAfterOpen(
+            requestedName: requestedName, router: router, cache: cache, traceID: traceID)
+        guard openedByThisRequest else { return result }
+        let release = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "nav.release_marker_list")
+        }
+        let released = honestContractExtras(from: release.message)
+        var closing: [String: Any] = [:]
+        for key in ["marker_list_closed", "ui_restored", "ui_restore_reason"] {
+            if let value = released[key] { closing[key] = value }
+        }
+        if !release.isSuccess { closing["marker_list_closed"] = false; closing["ui_restored"] = false }
+        let text = result.content.compactMap { item -> String? in
+            if case .text(let value, _, _) = item { return value }
+            return nil
+        }.first ?? ""
+        return toolTextResult(
+            HonestContract.addExtras(closing, into: text), isError: result.isError ?? false)
+    }
+
+    private static func createMarkerAfterOpen(
+        requestedName: String?,
+        router: ChannelRouter,
+        cache: StateCache,
+        traceID: TraceID?
+    ) async -> CallTool.Result {
         let beforeMarkers = await liveMarkers(router: router, cache: cache)
         var routeParams: [String: String] = [:]
         if let requestedName {
@@ -459,6 +487,17 @@ struct NavigateDispatcher: OperationTraceDispatching {
         }
 
         if let requestedName, createdMarker.name != requestedName {
+            return toolTextResult(
+                HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras),
+                isError: true
+            )
+        }
+
+        // Logic's Create Marker clears the region selection and the channel writes it back. A
+        // selection that did not read back as it was is a side effect this request left behind,
+        // so the create is not reported as a clean success.
+        if extras["region_selection"] as? String
+            == AccessibilityChannel.RegionSelectionRestoreOutcome.notRestored.rawValue {
             return toolTextResult(
                 HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras),
                 isError: true

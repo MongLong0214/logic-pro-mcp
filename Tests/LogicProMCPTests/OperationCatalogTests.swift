@@ -174,6 +174,7 @@ struct OperationCatalogTests {
         .systemSagaStatus: ["idempotency_key"],
         .systemSagaCancel: ["idempotency_key"],
         .systemSetupArmKey: ["consent"],
+        .systemSetupMIDIKeyCommands: ["consent", "mode"],
         .systemSetupControlSurface: ["consent"],
         .pluginsGetInventory: ["track_index", "reveal_mixer"],
         .pluginsGetHostParameterManifest: [

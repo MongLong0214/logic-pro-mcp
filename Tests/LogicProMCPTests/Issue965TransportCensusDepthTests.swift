@@ -76,6 +76,35 @@ struct Issue965TransportCensusDepthTests {
             in: f.window, runtime: f.runtime, checking: {}) == nil)
     }
 
+    @Test("Logic 13 transport evidence follows the toolbar, not the same-named view group")
+    func logic13ToolbarTransportActivity() throws {
+        let f = Fixture()
+        f.builder.setRole(f.bar, kAXToolbarRole as String)
+        let playWrapper = f.builder.element(965_708)
+        let recordWrapper = f.builder.element(965_709)
+        for (wrapper, control) in [(playWrapper, f.play), (recordWrapper, f.record)] {
+            f.builder.setRole(wrapper, kAXGroupRole as String)
+            f.builder.setChildren(wrapper, [control])
+        }
+        f.builder.setChildren(f.bar, [playWrapper, recordWrapper])
+
+        let viewGroup = f.builder.element(965_710)
+        let inspector = f.builder.element(965_711)
+        f.builder.setRole(viewGroup, kAXGroupRole as String)
+        f.builder.setAttribute(viewGroup, kAXDescriptionAttribute as String, "Control Bar")
+        f.builder.setRole(inspector, kAXCheckBoxRole as String)
+        f.builder.setAttribute(inspector, kAXDescriptionAttribute as String, "Inspector")
+        f.builder.setChildren(inspector, [])
+        f.builder.setChildren(viewGroup, [inspector])
+        f.builder.setChildren(f.window, [viewGroup, f.bar])
+
+        let observed = try #require(try AXLogicProElements.observedTransportActivity(
+            in: f.window, runtime: f.runtime, checking: {}))
+        #expect(CFEqual(observed.controlBar, f.bar))
+        #expect(CFEqual(observed.play, f.play) && CFEqual(observed.record, f.record))
+        #expect(!observed.isPlaying && !observed.isRecording)
+    }
+
     @Test("a group that becomes a competing bar during the complete census is not an earlier absence")
     func descriptionChangedDuringCensusRefuses() throws {
         let f = Fixture()
@@ -91,7 +120,13 @@ struct Issue965TransportCensusDepthTests {
         let runtime = AXHelpers.Runtime(axApp: base.axApp, attributeValue: base.attributeValue,
             attributeIsSettable: base.attributeIsSettable, setAttributeValue: base.setAttributeValue,
             children: base.children, performAction: base.performAction, childCount: base.childCount,
-            childrenResult: base.childrenResult, attributeValueResult: base.attributeValueResult,
+            childrenResult: base.childrenResult,
+            attributeValueResult: { element, attribute in
+                if CFEqual(element, later), attribute == kAXRoleAttribute as String {
+                    f.builder.setAttribute(competitor, kAXDescriptionAttribute as String, "Control Bar")
+                }
+                return base.attributeValueResult?(element, attribute) ?? .success(base.attributeValue(element, attribute))
+            },
             attributeValuesResult: { node, attributes in
                 if CFEqual(node, later) {
                     f.builder.setAttribute(competitor, kAXDescriptionAttribute as String, "Control Bar")

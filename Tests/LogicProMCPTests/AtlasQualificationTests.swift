@@ -98,7 +98,7 @@ struct AtlasQualificationTests {
     @Test("the case is filed under the axis the run measured")
     func theCaseCarriesTheRunsAxis() throws {
         // A result about a Korean Logic filed under `en` would read as a claim about a Logic nobody
-        // looked at, and the axis is exactly what a promotion gate matches on.
+        // looked at, and the axis is part of the emitted qualification evidence.
         let other = QualificationAxis(
             variant: .desktop, locale: .enUS, profile: .core, cache: .cold, fixture: .empty)
         let armed = AtlasQualification.outcome(armed: true, pairs: try pairs())
@@ -133,11 +133,8 @@ struct AtlasQualificationTests {
             clean, axis: axis, binarySHA256: "abc", traceID: "t")).status == .passed)
     }
 
-    @Test("a refused atlas diff is not promotable")
-    func aRefusedDiffBlocksPromotion() throws {
-        // The defect this closes: `PromotionGate` rejects a FAILED case only when its id equals a
-        // required axis key, and `atlas.drift_diff` is not one — so the step reported a failure
-        // that stopped nothing, which is the "gate that does not gate" shape it exists to remove.
+    @Test("a refused atlas diff keeps a stable failure identity")
+    func aRefusedDiffKeepsStableFailureIdentity() throws {
         let failed = try #require(AtlasQualification.caseFor(
             .diffed(verdict: .failClosedMutation,
                     drifts: [SelectorDrift(
@@ -148,9 +145,6 @@ struct AtlasQualificationTests {
             axis: axis, binarySHA256: "abc", traceID: "t"))
         #expect(failed.status == .failed)
         #expect(failed.id == "atlas.drift_diff")
-        // The gate looks the case up by exactly this id; the rejection lives in PromotionGate and
-        // is exercised there. What this pins is the contract between them — a rename on either
-        // side leaves the gate watching a name nothing produces.
         let failedReason = try #require(failed.reason)
         #expect(failedReason.contains("failClosedMutation"))
     }
@@ -167,9 +161,8 @@ struct AtlasQualificationTests {
         #expect(emitted.id == "atlas.drift_diff")
         #expect(emitted.operationID == "atlas.drift_diff")
 
-        // And it must not look like the ids the promotion gate matches on. That gate finds a
-        // required operation by `id == "in-process/<operationID>"`, so a case shaped like one would
-        // be read as satisfying an operation this step never drove.
+        // And it must not look like a driven operation case. A case shaped like one would be read
+        // as evidence for an operation this step never drove.
         #expect(!emitted.id.hasPrefix("in-process/"))
     }
 

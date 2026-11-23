@@ -3,6 +3,10 @@ import Darwin
 import Foundation
 
 struct SupportBundleBuilder: Sendable {
+    private enum WriteAuthorizationError: Error {
+        case deadlineWon
+    }
+
     private static let blockingQueue = DispatchQueue(
         label: "logic-pro-mcp.support-bundle.blocking",
         qos: .utility,
@@ -139,6 +143,9 @@ struct SupportBundleBuilder: Sendable {
         onFirstWrite: @Sendable () async -> Void = {}
     ) async throws -> Result {
         try Self.requireAbsent(directory)
+        guard OperationTraceContext.claimDeadlineEffect(
+            "support_bundle_materialization"
+        ) else { throw WriteAuthorizationError.deadlineWon }
         await onFirstWrite()
         return try await Self.runBlocking {
             try Self.requireAbsent(directory)

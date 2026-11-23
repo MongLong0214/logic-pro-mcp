@@ -147,6 +147,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `saga_status` | `idempotency_key`: string | `idempotency_key` | open | read_only | none | none | none | never_automatic | default_install |
 | `setup_arm_key` | `consent` | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `setup_control_surface` | `consent` | none | closed | mutating | none | none | readback_required | never_automatic | default_install |
+| `setup_midi_key_commands` | `consent`: string (true), `mode`: string (check) | `consent`; `mode` | closed | mutating | none | none | readback_required | never_automatic | default_install |
 
 ## `logic_tracks`
 

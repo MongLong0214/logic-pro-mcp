@@ -79,7 +79,7 @@ enum ProjectExportExecutor {
         var pollAttempts: Int
         var pollIntervalNanos: UInt64
         var sleep: @Sendable (UInt64) async -> Void
-        var onFirstWrite: @Sendable () async -> Void = {}
+        var onFirstWrite: @Sendable () async -> Bool = { true }
         /// Minimum sane duration (seconds) for a produced artifact. A bounce that
         /// yields a sub-tick file is treated as not-verified (State B).
         var minimumDurationSeconds: Double
@@ -270,7 +270,25 @@ enum ProjectExportExecutor {
         // open route, so an export boundary is still intent — not observation —
         // if that route dispatches no channel. The arm/commit seam covers routed
         // dispatcher writes, not this injected callback.
-        await firstWriteNotifier.notify()
+        guard await firstWriteNotifier.notify() else {
+            let arts = zip(project.expectedArtifacts, preflightArtifacts).flatMap { pair -> [RunArtifact] in
+                let (artifact, preflight) = pair
+                if let preflight { return subjectScopedArtifacts(preflight, for: artifact) }
+                return subjectScopedArtifacts(
+                    failedArtifact(artifact, error: "deadline_won_before_project_open"),
+                    for: artifact
+                )
+            }
+            return RunProject(
+                index: project.index,
+                projectPath: project.projectPath,
+                displayName: project.displayName,
+                observedProjectPath: nil,
+                identityVerified: false,
+                opened: false,
+                artifacts: arts
+            )
+        }
         let openResult = await router.route(
             operation: "project.open",
             params: ["path": project.projectPath]
@@ -355,17 +373,18 @@ enum ProjectExportExecutor {
     }
 
     private actor FirstWriteNotifier {
-        private let action: @Sendable () async -> Void
-        private var notified = false
+        private let action: @Sendable () async -> Bool
+        private var authorization: Bool?
 
-        init(action: @escaping @Sendable () async -> Void) {
+        init(action: @escaping @Sendable () async -> Bool) {
             self.action = action
         }
 
-        func notify() async {
-            guard !notified else { return }
-            notified = true
-            await action()
+        func notify() async -> Bool {
+            if let authorization { return authorization }
+            let result = await action()
+            authorization = result
+            return result
         }
     }
 }

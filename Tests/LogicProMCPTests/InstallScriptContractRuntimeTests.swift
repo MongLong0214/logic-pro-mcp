@@ -26,7 +26,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
             "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
@@ -50,7 +49,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
             "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
@@ -79,7 +77,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
             "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
@@ -128,7 +125,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
             "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
@@ -152,7 +148,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
         environment: [
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": "deadbeef",
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": installDir.path,
             "LOGIC_PRO_MCP_SHARE_DIR": sandbox.appendingPathComponent("unsafe-share").path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
@@ -194,7 +189,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
             "FAKE_SUDO_UNLOCK_PATH": protectedRoot.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
             "LOGIC_PRO_MCP_SHARE_DIR": customShareDir.path,
             "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
@@ -218,7 +212,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
             "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
@@ -236,7 +229,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
         environment: [
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": "deadbeef",
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": "/tmp/logicpromcp-missing/../../usr/bin",
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LOGIC_PRO_MCP_REGISTER_CLAUDE": "0",
@@ -261,7 +253,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
             environment: [
                 "LOGIC_PRO_MCP_VERSION": "v3.7.1",
                 "LOGIC_PRO_MCP_SHA256": "deadbeef",
-                "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
                 "LOGIC_PRO_MCP_INSTALL_DIR": caseVaried,
                 "LOGIC_PRO_MCP_SKIP_SUDO": "1",
                 "LOGIC_PRO_MCP_REGISTER_CLAUDE": "0",
@@ -295,7 +286,6 @@ func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws 
             environment: [
                 "LOGIC_PRO_MCP_VERSION": "v3.7.1",
                 "LOGIC_PRO_MCP_SHA256": "deadbeef",
-                "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
                 "LOGIC_PRO_MCP_INSTALL_DIR": caseVaried,
                 "LOGIC_PRO_MCP_SKIP_SUDO": "1",
                 "LOGIC_PRO_MCP_REGISTER_CLAUDE": "0",
@@ -877,7 +867,6 @@ private func makeUninstallLaunchAgentFixture(
             "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
@@ -911,7 +900,6 @@ private func makeUninstallLaunchAgentFixture(
             "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
-            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
             "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
@@ -922,16 +910,6 @@ private func makeUninstallLaunchAgentFixture(
     let removedTool = "cli" + "click"
     #expect(!result.combinedOutput.contains("required dependency missing: \(removedTool)"))
     #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
-}
-
-@Test func testReleasePackageScriptRequiresTeamIDForNotarizedMode() throws {
-    let result = try runShellScript(
-        "Scripts/release-package.sh",
-        environment: ["RELEASE_MODE": "notarized"]
-    )
-
-    #expect(result.exitCode != 0)
-    #expect(result.combinedOutput.contains("APPLE_NOTARY_TEAM_ID is required when RELEASE_MODE=notarized"))
 }
 
 @Test func testReleaseTarballFixtureMatchesFormulaInstallPaths() throws {

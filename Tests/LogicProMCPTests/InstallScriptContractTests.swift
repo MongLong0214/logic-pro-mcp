@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LogicProMCP
 
 @Test func testInstallScriptRequiresPinnedReleaseVerificationByDefault() throws {
     let script = try scriptContents("Scripts/install.sh")
@@ -16,9 +17,15 @@ import Testing
     let readme = try scriptContents("README.md")
     let setup = try scriptContents("docs/SETUP.md")
     let installer = try scriptContents("Scripts/install.sh")
+    let registryData = Data(try scriptContents("server.json").utf8)
+    let registry = try #require(
+        try JSONSerialization.jsonObject(with: registryData) as? [String: Any]
+    )
+    let publishedVersion = try #require(registry["version"] as? String)
+    let installerURLPrefix = "https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp"
 
-    #expect(readme.contains("v3.19.0/Scripts/install.sh"))
-    #expect(setup.contains("v3.19.0/Scripts/install.sh"))
+    #expect(readme.contains("\(installerURLPrefix)/v\(publishedVersion)/Scripts/install.sh"))
+    #expect(setup.contains("\(installerURLPrefix)/v\(ServerConfig.serverVersion)/Scripts/install.sh"))
     #expect(installer.contains("awk -v artifact=\"$ARCHIVE\" '$2 == artifact {print $1}'"))
     #expect(readme.contains("verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive"))
     #expect(readme.contains("LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry"))
@@ -27,25 +34,16 @@ import Testing
     #expect(!setup.contains("sha256 for bare LogicProMCP entry"))
 }
 
-@Test func testInstallScriptIncludesSignatureAndGatekeeperVerification() throws {
-    let script = try scriptContents("Scripts/install.sh")
-    let removedTool = "cli" + "click"
-
-    #expect(script.contains("verify_signature()"))
-    #expect(script.contains("verify_gatekeeper()"))
-    #expect(script.contains("codesign --verify --strict --verbose=2"))
-    #expect(script.contains("spctl --assess --type execute"))
-    #expect(script.contains("RELEASE-METADATA.json"))
-    #expect(script.contains("could not resolve TeamIdentifier from release metadata"))
-    #expect(!script.contains("require_command \"\(removedTool)\""))
-}
-
-@Test func testInstallScriptExtractsTeamIDFromSingleLineReleaseMetadata() throws {
+@Test func testInstallScriptUsesChecksumWithoutAppleSigning() throws {
     let script = try scriptContents("Scripts/install.sh")
 
-    #expect(script.contains("METADATA_JSON=$(curl -fsSL \"$METADATA_URL\")"))
-    #expect(script.contains("\"team_id\"[[:space:]]*:[[:space:]]*\""))
-    #expect(!script.contains("awk -F'\"' '/\"team_id\"[[:space:]]*:/ {print $4; exit}'"))
+    #expect(script.contains("LOGIC_PRO_MCP_SHA256"))
+    #expect(script.contains("Verifying SHA256"))
+    #expect(script.contains("validate_release_archive_manifest"))
+    for forbidden in ["codesign", "spctl", "notarytool", "LOGIC_PRO_MCP_TEAM_ID",
+                      "EXPECTED_TEAM_ID", "RELEASE-METADATA.json"] {
+        #expect(!script.contains(forbidden), "installer contains \(forbidden)")
+    }
 }
 
 @Test func testInstallScriptRegistersClaudeAndKeyCommandsByDefault() throws {
@@ -89,39 +87,17 @@ import Testing
     #expect(script.contains("path_writable_without_sudo \"$INSTALL_DIR\" && path_writable_without_sudo \"$SHARE_DIR\""))
 }
 
-@Test func testReleaseWorkflowRejectsUnvalidatedSigningAndPublishesMetadata() throws {
+@Test func testReleaseWorkflowPublishesUnsignedChecksumVerifiedArchives() throws {
     let workflow = try scriptContents(".github/workflows/release.yml")
     let packageScript = try scriptContents("Scripts/release-package.sh")
 
-    // Developer ID credentials fail closed until notarization is validated.
-    // Credential-free stable and prerelease tags retain the ADHOC path.
-    #expect(workflow.contains("Detect release mode"))
-    #expect(!workflow.contains("mode=notarized"))
-    #expect(workflow.contains("mode=adhoc"))
-    #expect(workflow.contains("Release mode: owner-staged ADHOC"))
-    #expect(!workflow.contains("Stable ADHOC releases are not permitted"))
-    #expect(!workflow.contains("Do not push stable tags manually"))
-    #expect(!workflow.contains("ALLOW_ADHOC_STABLE"))
-    #expect(workflow.contains("configured_credentials=("))
-    #expect(workflow.contains("Notarized releases are disabled until privately validated"))
-    #expect(!workflow.contains("Codesign binary (Developer ID)"))
-    #expect(workflow.contains("if [ -n \"${!credential}\" ]; then"))
-    for credential in ["MACOS_CERT_BASE64", "MACOS_CERT_PASSWORD", "MACOS_SIGNING_IDENTITY",
-                       "MACOS_KEYCHAIN_PASSWORD", "APPLE_NOTARY_APPLE_ID",
-                       "APPLE_NOTARY_TEAM_ID", "APPLE_NOTARY_APP_PASSWORD"] {
-        #expect(workflow.contains("\(credential): ${{ secrets.\(credential) }}"))
-    }
-    #expect(!workflow.contains("Codesign binary (ADHOC)"))
-    #expect(!workflow.contains("codesign --force"))
-    #expect(workflow.contains("bash Scripts/release-consume-final.sh verify-public"))
-    #expect(workflow.contains("Qualification-matrix-SHA256: "))
-    #expect(workflow.contains("EXPECTED_MATRIX_SHA256"))
-    #expect(!workflow.contains("Qualification-manifest-SHA256: "))
-    #expect(!workflow.contains("EXPECTED_MANIFEST_SHA256"))
+    #expect(workflow.contains("DEVELOPER_DIR=/Library/Developer/CommandLineTools"))
+    #expect(workflow.contains("bash Scripts/release-build-universal.sh"))
     #expect(workflow.contains("bash Scripts/release-verify-formula-install-paths.sh"))
     #expect(workflow.contains("validate-install"))
-    #expect(workflow.contains("macos-15"))
-    #expect(workflow.contains("macos-14"))
+    #expect(workflow.contains("macos-15-intel"))
+    #expect(workflow.contains("macos-26"))
+    #expect(!workflow.contains("macos-14"))
     #expect(workflow.contains("LOGIC_PRO_MCP_INSTALL_DIR"))
     #expect(workflow.contains("LOGIC_PRO_MCP_SHARE_DIR"))
     #expect(workflow.contains("LogicProMCP-macOS-universal.tar.gz"))
@@ -131,19 +107,117 @@ import Testing
     #expect(packageScript.contains("Scripts/logic_bounce_ui.py"))
     #expect(packageScript.contains("Scripts/logic_ui_jxa.py"))
     #expect(packageScript.contains("Scripts/logic_input_source.py"))
-    #expect(packageScript.contains("APPLE_NOTARY_TEAM_ID is required when RELEASE_MODE=notarized"))
     #expect(packageScript.contains("rm -f LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt RELEASE-METADATA.json"))
     #expect(packageScript.contains("binary_file=\"$binary_dir/$binary_name\""))
-    #expect(packageScript.contains("python3 - \"$release_version\" \"$team_id\" \"$signing\" \"$arch_json\""))
+    #expect(packageScript.contains("\"signing\": \"unsigned\""))
+    for forbidden in ["codesign", "spctl", "notarytool", "APPLE_NOTARY", "MACOS_CERT"] {
+        #expect(!workflow.contains(forbidden), "release workflow contains \(forbidden)")
+        #expect(!packageScript.contains(forbidden), "package script contains \(forbidden)")
+    }
     let removedTool = "cli" + "click"
     #expect(!workflow.contains("brew install \(removedTool)"))
     #expect(!(try scriptContents("Formula/logic-pro-mcp.rb")).contains("depends_on \"\(removedTool)\""))
 }
 
+@Test func testReleaseWorkflowBoundsHostedInstallerPermissionFailure() throws {
+    let workflow = try scriptContents(".github/workflows/release.yml")
+    let lines = workflow.components(separatedBy: .newlines)
+    let terminal = "  Error: Installation unsuccessful: required Logic Pro capabilities are unavailable."
+    var installBlocks: [String] = []
+
+    for (index, line) in lines.enumerated()
+    where line.trimmingCharacters(in: .whitespaces) == "run: |" {
+        let indentation = line.prefix { $0 == " " }.count
+        var end = index + 1
+        while end < lines.count {
+            let candidate = lines[end]
+            let trimmed = candidate.trimmingCharacters(in: .whitespaces)
+            let candidateIndentation = candidate.prefix { $0 == " " }.count
+            if !trimmed.isEmpty, candidateIndentation <= indentation {
+                break
+            }
+            end += 1
+        }
+        let block = lines[(index + 1)..<end].joined(separator: "\n")
+        if block.contains("bash Scripts/install.sh") { installBlocks.append(block) }
+    }
+
+    #expect(installBlocks.count == 2)
+    for block in installBlocks {
+        #expect(block.contains("set +e"))
+        #expect(block.contains("bash Scripts/install.sh >\"$installer_log\" 2>&1"))
+        #expect(block.contains("installer_status=$?"))
+        #expect(block.contains("cat \"$installer_log\""))
+        #expect(block.contains("expected_permission_failure='\(terminal)'"))
+        #expect(block.contains("[ \"$installer_status\" -eq 0 ]"))
+        #expect(block.contains("[ \"$installer_status\" -eq 1 ]"))
+        #expect(block.contains("[ \"$(tail -n 1 \"$installer_log\")\" = \"$expected_permission_failure\" ]"))
+        #expect(block.contains("exit \"$installer_status\""))
+        #expect(!block.contains("|| true"))
+        #expect(!block.contains("continue-on-error"))
+        #expect(block.contains("LogicProMCP\" --version"))
+        #expect(block.contains("LogicProMCP\" --help >/dev/null"))
+        #expect(block.contains("test -f \"$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py\""))
+    }
+}
+
+@Test func testHostedInstallerPermissionClassifierShellBoundary() throws {
+    let workflow = try scriptContents(".github/workflows/release.yml")
+    let assignmentPrefix = "expected_permission_failure='"
+    let configuredMessages = workflow.components(separatedBy: .newlines).compactMap { line -> String? in
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix(assignmentPrefix), trimmed.hasSuffix("'") else { return nil }
+        return String(trimmed.dropFirst(assignmentPrefix.count).dropLast())
+    }
+    #expect(configuredMessages.count == 2)
+    #expect(Set(configuredMessages).count == 1)
+    let configuredMessage = try #require(configuredMessages.first)
+    let actualTerminal = "  Error: Installation unsuccessful: required Logic Pro capabilities are unavailable."
+    let sandbox = try makeInstallScriptTempDir("hosted-installer-classifier-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: sandbox) }
+    let log = sandbox.appendingPathComponent("installer.log")
+    let classifier = #"""
+        set -u
+        installer_status="$1"
+        installer_log="$2"
+        expected_permission_failure="$EXPECTED_PERMISSION_FAILURE"
+        if [ "$installer_status" -eq 0 ]; then
+          :
+        elif [ "$installer_status" -eq 1 ] \
+          && [ "$(tail -n 1 "$installer_log")" = "$expected_permission_failure" ]; then
+          :
+        else
+          exit "$installer_status"
+        fi
+        """#
+
+    func classify(status: Int32, finalLine: String) throws -> Int32 {
+        try "\(finalLine)\n".write(to: log, atomically: true, encoding: .utf8)
+        return try runProcess(
+            executable: "/bin/bash",
+            arguments: ["-c", classifier, "classifier", String(status), log.path],
+            currentDirectoryURL: sandbox,
+            environment: ["EXPECTED_PERMISSION_FAILURE": configuredMessage]
+        ).exitCode
+    }
+
+    #expect(try classify(status: 0, finalLine: "unrelated output") == 0)
+    #expect(try classify(status: 1, finalLine: actualTerminal) == 0)
+    #expect(try classify(status: 1, finalLine: String(actualTerminal.dropFirst(2))) == 1)
+    #expect(try classify(status: 1, finalLine: "  Error: unrelated failure") == 1)
+    #expect(try classify(status: 2, finalLine: actualTerminal) == 2)
+}
+
 @Test func testReleaseWorkflowMarksHyphenTagsAsPrereleases() throws {
     let workflow = try scriptContents(".github/workflows/release.yml")
 
-    #expect(workflow.contains("prerelease: ${{ contains(github.ref_name, '-') }}"))
+    let hyphenCheck = try #require(workflow.range(of: "if [[ \"$TAG\" == *-* ]]; then"))
+    let prereleaseFlag = try #require(workflow.range(of: "create_args+=(--prerelease)",
+                                                     range: hyphenCheck.upperBound..<workflow.endIndex))
+    let create = try #require(workflow.range(of: "gh release create \"$TAG\"",
+                                             range: prereleaseFlag.upperBound..<workflow.endIndex))
+    #expect(hyphenCheck.lowerBound < prereleaseFlag.lowerBound)
+    #expect(prereleaseFlag.lowerBound < create.lowerBound)
 }
 
 @Test func testReleaseWorkflowShareDirSatisfiesInstallerValidator() throws {
@@ -189,49 +263,33 @@ import Testing
     }
 }
 
-/// The coverage gate, across the two files it now lives in.
-///
-/// The thresholds moved to `Scripts/ci-coverage-gate.sh` on 2026-09-18, because inline in the
-/// workflow the only way to watch the gate refuse anything was to push a branch whose coverage had
-/// actually dropped. This case follows them. Asserting `MIN_REGION=70` against `ci.yml` after the
-/// number moved would be a test looking in the wrong file and passing for it -- the shape this
-/// repository keeps finding, and the reason each claim below names which file holds it.
 @Test func testCoverageGateFailsClosedAndUsesWritableProfilePath() throws {
     let workflow = try scriptContents(".github/workflows/ci.yml")
     let gate = try scriptContents("Scripts/ci-coverage-gate.sh")
 
-    // Running the tests and collecting the profile stays in the workflow: it is the one part a
-    // fixture cannot stand in for.
     #expect(workflow.contains("set -euo pipefail"))
-    #expect(workflow.contains("PROFRAW_DIR=\"$RUNNER_TEMP/logicpromcp-profraw\""))
+    #expect(workflow.contains("PROFRAW_DIR=\"$RUNNER_TEMP/logicpromcp-build-profraw\""))
+    #expect(workflow.contains("PROFRAW_DIR=\"$RUNNER_TEMP/logicpromcp-profraw-$SHARD\""))
     #expect(workflow.contains("export LLVM_PROFILE_FILE=\"$PROFRAW_DIR/%m-%p.profraw\""))
-    #expect(workflow.contains("COVERAGE_LOG=\"$RUNNER_TEMP/logicpromcp-coverage.log\""))
-    #expect(workflow.contains("PROFILE_WARNING_COUNT=$(grep -c \"LLVM Profile Error\" \"$COVERAGE_LOG\" || true)"))
-    #expect(workflow.contains("continuing to profdata/report validation"))
-    #expect(workflow.contains("LLVM profile warnings: ${PROFILE_WARNING_COUNT:-0}."))
-
-    // A cached `default.profdata` is the previous run's answer to a question nobody asked again.
-    #expect(workflow.contains("find .build -type d -name codecov"))
-
-    // The workflow must actually CALL the gate. A gate nothing invokes is the defect one level up.
+    #expect(workflow.contains("COVERAGE_LOG=\"$out/test.log\""))
+    #expect(workflow.contains("swift build --build-tests --enable-code-coverage"))
+    #expect(workflow.contains("swift test --skip-build --enable-code-coverage"))
     #expect(workflow.contains("bash Scripts/ci-coverage-gate.sh"))
-
-    // GitHub's default `run:` shell is `bash -e` with no pipefail, so `a | tee log` reports tee's
-    // exit code. Naming `bash` selects `bash --noprofile --norc -eo pipefail`.
     #expect(workflow.contains("defaults:"))
     #expect(workflow.contains("shell: bash"))
 
-    // The thresholds, where they now are. Unchanged at 70/78, with 90 a notice and not a gate.
     #expect(gate.contains("set -euo pipefail"))
     #expect(gate.contains("LPM_COVERAGE_MIN_REGION:-70"))
     #expect(gate.contains("LPM_COVERAGE_MIN_LINE:-78"))
     #expect(gate.contains("LPM_COVERAGE_TARGET:-90"))
 
-    // H-4: the coverage step disabled error handling and exited 0, so regressions never blocked a
-    // merge. Neither file may turn it off, in code OR in a comment -- this is a substring search
-    // and cannot tell them apart, which has already cost one red run.
     let forbidden = "set " + "+e"
-    #expect(!workflow.contains(forbidden))
+    // The one sanctioned use is the native-status wait loop, which must read the consumer's exit
+    // code 3 ("no status yet") instead of dying on it. Everything else stays fail-closed.
+    let nativeWaitReadsExitCode = "            \(forbidden)\n            python3 - "
+    #expect(workflow.components(separatedBy: forbidden).count - 1 == 1)
+    #expect(workflow.contains(nativeWaitReadsExitCode))
+    #expect(!workflow.replacingOccurrences(of: nativeWaitReadsExitCode, with: "").contains(forbidden))
     #expect(!gate.contains(forbidden))
     #expect(!workflow.contains("lets transient instrumentation flakes"))
 }
@@ -306,42 +364,39 @@ import Testing
     }
 }
 
-@Test func testLocalReleaseScriptSupportsStableAdhocAndFailsClosedOnRemoteCheck() throws {
+@Test func testLocalReleaseScriptUsesCLTNativeQualificationAndHostedPublication() throws {
     let script = try scriptContents("Scripts/release.sh")
-    let consumer = try scriptContents("Scripts/release-consume-final.sh")
 
-    #expect(script.contains("Owner-staged ADHOC release consumption"))
-    #expect(script.contains("FINAL_CANDIDATE PRIVATE_MATRIX TRUSTED_VERIFIER"))
-    #expect(!script.contains("refuses stable tags"))
-    #expect(!script.contains("There is intentionally no override"))
-    #expect(!script.contains("LOGIC_PRO_MCP_ALLOW_ADHOC_STABLE"))
+    #expect(script.contains("DEVELOPER_DIR=/Library/Developer/CommandLineTools"))
+    #expect(script.contains("bash Scripts/release-qualify.sh"))
+    #expect(script.contains("git diff --exit-code Package.resolved"))
     #expect(script.contains("set -euo pipefail"))
-    #expect(script.contains("REMOTE_TAGS=$(git ls-remote --tags origin \"$VERSION\")"))
-    #expect(script.contains("Final-candidate-SHA256: $BINARY_SHA"))
-    #expect(script.contains("Qualification-matrix-SHA256: $MATRIX_SHA"))
-    #expect(!script.contains("Qualification-manifest-SHA256: "))
-    #expect(consumer.contains("verify-matrix --candidate"))
-    #expect(consumer.contains("verify-public-matrix --public-directory"))
-    #expect(consumer.contains("release-qualification-matrix.json"))
-    #expect(consumer.contains("EXPECTED_MATRIX_SHA256"))
-    #expect(!consumer.contains("EXPECTED_MANIFEST_SHA256"))
+    #expect(script.contains("RUN_ID=\"${2:-}\""))
+    #expect(script.contains("git ls-remote --tags origin"))
+    #expect(script.contains("remote tag lookup failed; absence was not established"))
+    #expect(script.contains("Scripts/release-verify-candidate.py run"))
+    #expect(script.contains("Native-qualified: $QUALIFIED"))
+    #expect(script.contains("Candidate-run-id: $RUN_ID"))
+    #expect(script.contains("Candidate-run-attempt: $RUN_ATTEMPT"))
+    #expect(script.contains("Candidate-artifact-id: $ARTIFACT_ID"))
+    #expect(script.contains("Candidate-artifact-digest: $ARTIFACT_DIGEST"))
+    #expect(script.contains("Candidate-manifest-sha256: $MANIFEST_SHA"))
     #expect(!script.contains("gh release create"))
+    #expect(!script.contains("ADHOC"))
+    #expect(!script.contains("codesign"))
 }
 
-@Test func testStableReleaseScriptPreflightsAdhocTagBeforePush() throws {
+@Test func testStableReleaseScriptPreflightsTagBeforePush() throws {
     let script = try scriptContents("Scripts/release-stable.sh")
 
     #expect(script.contains("release.sh"))
-    #expect(script.contains("FINAL_CANDIDATE PRIVATE_MATRIX TRUSTED_VERIFIER"))
-    #expect(!script.contains("PRIVATE_BUNDLE"))
-    #expect(!script.contains("gh secret list --repo \"$REPO\" --app actions"))
-    #expect(!script.contains("Stable tag '$VERSION' was NOT created."))
-    #expect(!script.contains("MACOS_CERT_BASE64"))
-    #expect(!script.contains("APPLE_NOTARY_APPLE_ID"))
-    #expect(script.contains("gh release view \"$1\""))
-    let availability = try #require(script.range(of: "gh release view \"$1\""))
+    #expect(script.contains("[ \"$#\" != 2 ]"))
+    #expect(script.contains("[[ \"$2\" =~ ^[1-9][0-9]*$ ]]"))
+    #expect(script.contains("Usage: $0 vMAJOR.MINOR.PATCH CANDIDATE_RUN_ID"))
+    #expect(!script.contains("gh release view"))
+    let validation = try #require(script.range(of: "[ \"$#\" != 2 ]"))
     let delegate = try #require(script.range(of: "exec bash \"$(dirname \"$0\")/release.sh\" \"$@\""))
-    #expect(availability.lowerBound < delegate.lowerBound)
+    #expect(validation.lowerBound < delegate.lowerBound)
 }
 
 @Test func testFormulaClaudeRegistrationCaveatIncludesShareDirEnv() throws {

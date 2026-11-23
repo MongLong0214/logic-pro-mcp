@@ -44,6 +44,42 @@ struct Issue290AtlasEvidenceTests {
         #expect(QualificationRunner.evidenceShapeIsValid(decoded))
     }
 
+    @Test func logic13ToolbarCurrentCanQualifyAgainstGroupBaseline() throws {
+        var documents = try pairs()
+        let index = try #require(documents.firstIndex {
+            AXLocalePolicy.controlBarGroupLabel.matches($0.scope, mode: .exactStrict)
+        })
+        let original = documents[index]
+        let group = original.current.root
+        let toolbar = AXSnapshot.Node(
+            role: "AXToolbar",
+            subrole: group.subrole,
+            description: group.description,
+            help: group.help,
+            identifier: group.identifier,
+            valueRange: group.valueRange,
+            children: group.children
+        )
+        let current = AXSnapshot.Document(
+            logicVersion: "13.0",
+            locale: original.current.locale,
+            scope: original.current.scope,
+            capturedFrom: original.current.capturedFrom,
+            root: toolbar
+        )
+        documents[index] = AtlasQualification.Pair(
+            scope: original.scope,
+            baseline: original.baseline,
+            current: current
+        )
+
+        let result = try retained(documents)
+        #expect(result.qualificationCase.status == .passed)
+        #expect(result.qualificationCase.verified)
+        #expect(result.qualificationCase.reason == nil)
+        #expect(QualificationRunner.evidenceShapeIsValid(result.evidence))
+    }
+
     @Test(arguments: [QualificationLocale.enUS, .koKR])
     func requiredSelectedScopesCannotBeReplacedByAWholeWindow(locale: QualificationLocale) throws {
         let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -307,15 +343,4 @@ struct Issue290AtlasEvidenceTests {
             binarySHA256: String(repeating: "a", count: 64), traceID: "unarmed") == nil)
     }
 
-    @Test func atlasEvidenceDoesNotEarnLiveOperationCredit() throws {
-        let result = try retained()
-        #expect(!PromotionGate.operationIsLiveCredited(result.qualificationCase))
-        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(result.qualificationCase)) as? [String: Any])
-        object["readback"] = ["source": "controlled-test", "request_id": "control", "verified": true,
-            "sha256": String(repeating: "a", count: 64)]
-        let withReadback = try JSONDecoder().decode(QualificationCase.self,
-            from: JSONSerialization.data(withJSONObject: object))
-        #expect(try #require(withReadback.readback).verified)
-        #expect(!PromotionGate.operationIsLiveCredited(withReadback))
-    }
 }

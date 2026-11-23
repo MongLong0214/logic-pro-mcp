@@ -329,11 +329,13 @@ extension TrackDispatcher {
         if let observed = beforePosition?.positionReadback?.observedComponents,
            !observed.isEmpty, observed.count < TransportPositionComponent.allCases.count {
             // Selecting a menu item is this operation's first write, and it bypasses ChannelRouter.
-            guard OperationTraceContext.claimDeadlineEffect("position_display_switch") else {
+            guard await recordWriteBoundary(
+                traceID,
+                deadlineStage: "position_display_switch"
+            ) else {
                 return recordSequenceDeadlineBoundaryRefusal("position_display_switch")
             }
             preparationWriteAttempted = true
-            await recordWriteBoundary(traceID)
             switch selectFullPositionDisplay() {
             case .switched(let lease):
                 displayModeLease = lease

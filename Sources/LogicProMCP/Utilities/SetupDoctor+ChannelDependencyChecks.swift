@@ -153,6 +153,22 @@ extension SetupDoctor {
         )
     }
 
+    static func runtimeEndpointOwnershipCheck() -> Check {
+        check(
+            id: "channels.runtime_endpoint_ownership",
+            domain: "channels",
+            status: .skipped,
+            summary: "Runtime MIDI endpoint ownership is verified only by the running MCP server.",
+            evidence: [
+                "runtime_server_started": "false",
+                "live_verification": "logic://system/health",
+            ],
+            remediationType: .none,
+            optional: true,
+            skipReason: .runtimeServerNotStarted
+        )
+    }
+
     private static func manualValidationChannelsRequired(for profile: DoctorProfile) -> [ManualValidationChannel] {
         switch profile {
         case .core, .mixer, .auto:

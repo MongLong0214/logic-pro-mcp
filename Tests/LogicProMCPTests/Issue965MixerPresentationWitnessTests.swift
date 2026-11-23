@@ -650,6 +650,60 @@ struct Issue965MixerPresentationWitnessTests {
         #expect(state.laterReads == 0, "legacy ID discovery must share the checked, bounded walk")
     }
 
+    @Test func defaultPollerMixerDiscoveryStopsBeforeLaterAXReads() {
+        let fixture = Fixture()
+        let state = StopRead()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueHandler: { element, attribute in
+                state.observe(stop: CFEqual(element, fixture.owner)
+                    && attribute == kAXRoleAttribute as String)
+                return nil
+            }, setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+
+        let result = AccessibilityChannel.defaultGetMixerStates(
+            runtime: runtime, stoppingWhen: { state.isStopped }
+        )
+
+        #expect(result.states == nil && result.yielded)
+        #expect(state.laterReads == 0,
+                "the poller must not continue legacy whole-window discovery after its stop signal")
+    }
+
+    @Test func defaultPollerFindsShallowMixerBeforeDescendingEarlierUnrelatedTree() {
+        let fixture = Fixture()
+        let deepBranch = (0..<4).map { fixture.builder.element(966_300 + $0) }
+        for node in deepBranch {
+            fixture.builder.setRole(node, kAXGroupRole as String)
+            fixture.builder.setAttribute(node, kAXDescriptionAttribute as String, "Tracks")
+        }
+        for (parent, child) in zip(deepBranch, deepBranch.dropFirst()) {
+            fixture.builder.setChildren(parent, [child])
+        }
+        fixture.builder.setChildren(deepBranch.last!, [])
+        fixture.builder.setChildren(fixture.window, [deepBranch[0], fixture.owner])
+
+        let deepReads = Counter()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueHandler: { element, _ in
+                if CFEqual(element, deepBranch.last!) { _ = deepReads.next() }
+                return nil
+            }, setAttributeHandler: nil, performActionHandler: nil,
+            executeAppleScript: { _ in .error("fixture forbids AppleScript") }
+        )
+
+        let result = AccessibilityChannel.defaultGetMixerStates(
+            runtime: runtime, stoppingWhen: { false }
+        )
+
+        #expect(result.states?.count == 1 && !result.yielded)
+        #expect(deepReads.count == 0,
+                "a shallow positive Mixer must win before descending an earlier unrelated tree")
+    }
+
     @Test func unnamedInnerWrapperRetainsItsPhysicalOwnerBinding() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let fixture = Fixture()

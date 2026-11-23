@@ -15,29 +15,26 @@ source_members=(
   Scripts/logic_ui_labels.py
 )
 if [ "${1:-}" = --list-members ]; then
-  printf '%s\n' LogicProMCP "${source_members[@]}"
+  printf '%s\n' LogicProMCP ${source_members[@]+"${source_members[@]}"}
   exit 0
 fi
 
-release_version="${GITHUB_REF_NAME:-${LOGIC_PRO_MCP_RELEASE_VERSION:-local-dev}}"
+release_version="${LOGIC_PRO_MCP_RELEASE_VERSION:-}"
+source_sha="${LOGIC_PRO_MCP_RELEASE_SOURCE_SHA:-}"
+if ! [[ "$release_version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$ ]]; then
+  echo "::error::LOGIC_PRO_MCP_RELEASE_VERSION must be strict vMAJOR.MINOR.PATCH[-prerelease]"
+  exit 1
+fi
+if ! [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "::error::LOGIC_PRO_MCP_RELEASE_SOURCE_SHA must be a lowercase 40-character commit SHA"
+  exit 1
+fi
 
 binary_path="${LOGIC_PRO_MCP_PACKAGE_BINARY:-LogicProMCP}"
 binary_dir=$(cd "$(dirname "$binary_path")" && pwd -P)
 binary_name=$(basename "$binary_path")
 binary_file="$binary_dir/$binary_name"
 root_binary="$(pwd -P)/LogicProMCP"
-
-if [ "${RELEASE_MODE:-}" = "notarized" ]; then
-  team_id="${APPLE_NOTARY_TEAM_ID:-}"
-  signing="notarized"
-  if [ -z "$team_id" ]; then
-    echo "::error::APPLE_NOTARY_TEAM_ID is required when RELEASE_MODE=notarized"
-    exit 1
-  fi
-else
-  team_id="ADHOC"
-  signing="adhoc"
-fi
 
 if [ "$binary_name" != "LogicProMCP" ]; then
   echo "::error::Release binary basename must be LogicProMCP (got $binary_name)"
@@ -50,6 +47,7 @@ if [ ! -x "$binary_file" ]; then
 fi
 
 rm -f LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt RELEASE-METADATA.json
+rm -f release-artifacts.sha256
 
 lipo_out=$(lipo -info "$binary_file" 2>/dev/null || true)
 if [ -z "$lipo_out" ]; then
@@ -73,15 +71,15 @@ else
   arch_json="[$arch_list]"
 fi
 
-python3 - "$release_version" "$team_id" "$signing" "$arch_json" > RELEASE-METADATA.json <<'PY'
+python3 - "$release_version" "$source_sha" "$arch_json" > RELEASE-METADATA.json <<'PY'
 import json
 import sys
 
-version, team_id, signing, arch_json = sys.argv[1:]
+version, source_sha, arch_json = sys.argv[1:]
 metadata = {
     "version": version,
-    "team_id": team_id,
-    "signing": signing,
+    "source_sha": source_sha,
+    "signing": "unsigned",
     "architectures": json.loads(arch_json),
 }
 print(json.dumps(metadata, separators=(",", ":")))
@@ -98,7 +96,7 @@ fi
 # unauthenticated filesystem metadata alongside those exact source bytes.
 COPYFILE_DISABLE=1 tar czf LogicProMCP-macOS-universal.tar.gz \
   -C "$binary_dir" LogicProMCP \
-  -C "$PWD" "${source_members[@]}"
+  -C "$PWD" ${source_members[@]+"${source_members[@]}"}
 
 cp LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz
 shasum -a 256 LogicProMCP-macOS-universal.tar.gz > SHA256SUMS.txt
