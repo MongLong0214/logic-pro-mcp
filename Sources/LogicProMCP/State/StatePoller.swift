@@ -545,7 +545,10 @@ actor StatePoller {
             // check and `runCoalescedCycle`'s — still holds.
             if !cycleInProgress, !runtime.mutationInFlight(),
                !Self.backgroundTickYields(to: runtime.keyboardFocus()) {
-                _ = await runCoalescedCycle(yieldingToTextEditing: true)
+                // #1565: the periodic transport read reuses its located control bar.
+                _ = await AXLogicProElements.PeriodicRead.$active.withValue(true) {
+                    await runCoalescedCycle(yieldingToTextEditing: true)
+                }
             }
             // #1565: the cycle walks Logic's window through AX on Logic's main thread. Back off
             // when no client is using the server, and never spend more than about a third of the
