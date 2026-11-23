@@ -155,7 +155,8 @@ private func requestRuntime(
     _ recorder: RequestRecorder,
     principal: TCCResponsibility.Principal?,
     spawnOutcome: TCCResponsibility.SpawnOutcome = .exited(0),
-    granted: Bool = false
+    granted: Bool = false,
+    postEventGranted: Bool? = nil
 ) -> PermissionRequestCommand.Runtime {
     PermissionRequestCommand.Runtime(
         principal: { principal },
@@ -165,7 +166,7 @@ private func requestRuntime(
             return spawnOutcome
         },
         requestAccessibility: { recorder.accessibilityRequests += 1; return granted },
-        requestPostEvent: { recorder.postEventRequests += 1; return granted }
+        requestPostEvent: { recorder.postEventRequests += 1; return postEventGranted ?? granted }
     )
 }
 
@@ -209,6 +210,18 @@ private func requestRuntime(
     )
     #expect(code == 0)
     #expect(recorder.spawned.isEmpty)
+}
+
+@Test func test1596RequestFailsWhenOnlyOneOfTheTwoIsGranted() {
+    for (accessibility, postEvent) in [(true, false), (false, true)] {
+        let recorder = RequestRecorder()
+        let code = PermissionRequestCommand.run(
+            arguments: ["LogicProMCP", "--request-permissions"],
+            runtime: requestRuntime(recorder, principal: ownPrincipal, granted: accessibility, postEventGranted: postEvent),
+            writeStderr: { recorder.stderr += $0 }
+        )
+        #expect(code == 1)
+    }
 }
 
 @Test func test1596DisclaimedCopyThatIsNotItsOwnPrincipalRefuses() {

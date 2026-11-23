@@ -72,7 +72,7 @@ Homebrew installs each version under a new `Cellar/<version>` path, and the rele
 
 ### Claude Desktop: Accessibility or PostEvent not granted (macOS 26 and 27)
 
-When the `TCC principal:` line says `this LogicProMCP binary itself`, or the unified log shows `kTCCServicePostEvent` evaluated for the LogicProMCP path with `Auth:Denied (Service Policy)`, that binary has no matching Accessibility grant. PostEvent follows the binary's Accessibility grant, so one switch fixes both.
+When the `TCC principal:` line says `this LogicProMCP binary itself` and Accessibility or PostEvent is reported as not granted, or the unified log shows `kTCCServicePostEvent` evaluated for the LogicProMCP path with `Auth:Denied (Service Policy)`, that binary has no matching Accessibility grant (if both are reported granted, leave the entry alone). PostEvent follows the binary's Accessibility grant, so one switch fixes both.
 
 1. Quit Claude Desktop.
 2. In **System Settings -> Privacy & Security -> Accessibility**, select every `LogicProMCP` entry and remove it with **-**. An entry left from an older Cellar path or build stays enabled but never matches.
