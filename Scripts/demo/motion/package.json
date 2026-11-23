@@ -1,0 +1,23 @@
+{
+  "name": "logic-pro-mcp-demo-motion",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Code-driven motion graphics for the Logic Pro MCP launch video (Remotion).",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.250",
+    "@remotion/motion-blur": "4.0.250",
+    "@remotion/transitions": "4.0.250",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.250"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.0",
+    "typescript": "5.7.2"
+  }
+}
