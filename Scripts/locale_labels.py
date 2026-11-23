@@ -1015,7 +1015,7 @@ def derived_problems(name, entry):
 #: projections of it, which describe a release rather than declare which one is current.
 _RESTATEMENT_EXEMPT = ("docs/observations/", "docs/canon/", "docs/locale/ui-labels.json",
                        "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift", ".git/", ".build/",
-                       "artifacts/", "CHANGELOG.md")
+                       "artifacts/", "CHANGELOG.md", "Scripts/demo/")
 
 
 def _tracked_files(repo):
