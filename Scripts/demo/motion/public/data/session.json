@@ -1,0 +1,466 @@
+{
+ "film": {
+  "fps": 60,
+  "seqStart": 0,
+  "take": {
+   "seq": "take",
+   "width": 3840,
+   "height": 2100,
+   "duration": 135.098333,
+   "frames": 8106
+  },
+  "client": {
+   "seq": "client",
+   "width": 1087,
+   "height": 750,
+   "duration": 134.853333,
+   "offset": 0.232,
+   "frames": 4046
+  },
+  "events": [
+   {
+    "t": 12.192,
+    "t_end": 14.015,
+    "ms": 1822.7,
+    "kind": "read",
+    "call": "logic_project.inspect_session",
+    "target": "session",
+    "ok": true,
+    "summary": "5 tracks: Keys, Pad, Bass, Drums, Lead"
+   },
+   {
+    "t": 15.75,
+    "t_end": 15.864,
+    "ms": 113.7,
+    "kind": "read",
+    "call": "read",
+    "target": "transport/state",
+    "ok": true,
+    "summary": "tempo 90 · bar 1.1 · stopped",
+    "metronome": false
+   },
+   {
+    "t": 23.425,
+    "t_end": 24.12,
+    "ms": 695.2,
+    "kind": "tool",
+    "call": "logic_transport.set_tempo",
+    "params": {
+     "tempo": 120
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": null,
+    "track_name": null,
+    "what": "Tempo",
+    "before_after": "90 → 120",
+    "before": 90,
+    "after": 120,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 37.665,
+    "t_end": 37.899,
+    "ms": 233.6,
+    "kind": "tool",
+    "call": "logic_mixer.set_pan",
+    "params": {
+     "index": 0,
+     "value": -0.25
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 0,
+    "track_name": "Keys",
+    "what": "Keys pan",
+    "before_after": "C → L16",
+    "before": 0.007874015748031496,
+    "after": -0.2440944881889764,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 39.538,
+    "t_end": 39.727,
+    "ms": 189.4,
+    "kind": "tool",
+    "call": "logic_mixer.set_pan",
+    "params": {
+     "index": 1,
+     "value": 0.2
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 1,
+    "track_name": "Pad",
+    "what": "Pad pan",
+    "before_after": "C → R12",
+    "before": 0.007874015748031496,
+    "after": 0.1968503937007874,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 39.94,
+    "t_end": 40.168,
+    "ms": 228.0,
+    "kind": "tool",
+    "call": "logic_mixer.set_pan",
+    "params": {
+     "index": 2,
+     "value": -0.05
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 2,
+    "track_name": "Bass",
+    "what": "Bass pan",
+    "before_after": "C → L4",
+    "before": 0.007874015748031496,
+    "after": -0.05511811023622047,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 40.34,
+    "t_end": 41.392,
+    "ms": 1052.3,
+    "kind": "tool",
+    "call": "logic_mixer.set_pan",
+    "params": {
+     "index": 3,
+     "value": 0.1
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 3,
+    "track_name": "Drums",
+    "what": "Drums pan",
+    "before_after": "C → R6",
+    "before": 0.007874015748031496,
+    "after": 0.10236220472440945,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 41.397,
+    "t_end": 41.531,
+    "ms": 133.9,
+    "kind": "tool",
+    "call": "logic_mixer.set_pan",
+    "params": {
+     "index": 4,
+     "value": 0.3
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 4,
+    "track_name": "Lead",
+    "what": "Lead pan",
+    "before_after": "C → R19",
+    "before": 0.007874015748031496,
+    "after": 0.30708661417322836,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 52.047,
+    "t_end": 52.39,
+    "ms": 343.1,
+    "kind": "tool",
+    "call": "logic_transport.play",
+    "params": {},
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": null,
+    "track_name": null,
+    "what": "Transport",
+    "before_after": "stopped → playing",
+    "before": null,
+    "after": null,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 52.395,
+    "t_end": 52.783,
+    "ms": 387.3,
+    "kind": "tool",
+    "call": "logic_mixer.set_volume",
+    "params": {
+     "index": 1,
+     "value": 0.43
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 1,
+    "track_name": "Pad",
+    "what": "Pad fader",
+    "before_after": "0.00 → 0.43",
+    "before": 0,
+    "after": 0.42857142857142855,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 60.215,
+    "t_end": 60.702,
+    "ms": 487.6,
+    "kind": "tool",
+    "call": "logic_mixer.set_volume",
+    "params": {
+     "index": 0,
+     "value": 0.48
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 0,
+    "track_name": "Keys",
+    "what": "Keys fader",
+    "before_after": "0.00 → 0.48",
+    "before": 0,
+    "after": 0.47857142857142854,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 67.524,
+    "t_end": 68.456,
+    "ms": 932.4,
+    "kind": "tool",
+    "call": "logic_mixer.set_volume",
+    "params": {
+     "index": 2,
+     "value": 0.41
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 2,
+    "track_name": "Bass",
+    "what": "Bass fader",
+    "before_after": "0.00 → 0.41",
+    "before": 0,
+    "after": 0.4107142857142857,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 75.293,
+    "t_end": 75.788,
+    "ms": 494.7,
+    "kind": "tool",
+    "call": "logic_mixer.set_volume",
+    "params": {
+     "index": 3,
+     "value": 0.59
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 3,
+    "track_name": "Drums",
+    "what": "Drums fader",
+    "before_after": "0.00 → 0.59",
+    "before": 0,
+    "after": 0.5866666666666667,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 83.021,
+    "t_end": 83.961,
+    "ms": 940.3,
+    "kind": "tool",
+    "call": "logic_mixer.set_volume",
+    "params": {
+     "index": 4,
+     "value": 0.92
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 4,
+    "track_name": "Lead",
+    "what": "Lead fader",
+    "before_after": "0.00 → 0.92",
+    "before": 0,
+    "after": 0.9181818181818182,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 95.515,
+    "t_end": 96.197,
+    "ms": 681.8,
+    "kind": "tool",
+    "call": "logic_mixer.set_pan",
+    "params": {
+     "index": 0,
+     "value": -0.55
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 0,
+    "track_name": "Keys",
+    "what": "Keys pan",
+    "before_after": "L16 → L35",
+    "before": -0.2440944881889764,
+    "after": -0.5433070866141733,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 96.205,
+    "t_end": 96.367,
+    "ms": 162.1,
+    "kind": "tool",
+    "call": "logic_mixer.set_volume",
+    "params": {
+     "index": 3,
+     "value": 0.54
+    },
+    "state": "A",
+    "ok": true,
+    "verified": true,
+    "track": 3,
+    "track_name": "Drums",
+    "what": "Drums fader",
+    "before_after": "0.59 → 0.54",
+    "before": 0.5866666666666667,
+    "after": 0.54,
+    "noop": false,
+    "result": "State A · verified"
+   },
+   {
+    "t": 110.781,
+    "t_end": 110.787,
+    "ms": 6.2,
+    "kind": "read",
+    "call": "read",
+    "target": "mixer",
+    "ok": true,
+    "summary": "0 strips returned · mixer not visible"
+   },
+   {
+    "t": 111.047,
+    "t_end": 111.051,
+    "ms": 4.3,
+    "kind": "read",
+    "call": "read",
+    "target": "tracks",
+    "ok": true,
+    "summary": "Keys 0.48 L35 · Pad 0.43 R12 · Bass 0.41 L4 · Drums 0.54 R6 · Lead 0.92 R19",
+    "cache_age_s": 2.1094549894332886
+   }
+  ],
+  "prompts": [
+   {
+    "text": "What tracks are in this session, and what's the tempo?",
+    "t_start": 2.326,
+    "t_enter": 8.242,
+    "t_idle": 17.489
+   },
+   {
+    "text": "Set the tempo to 120.",
+    "t_start": 19.584,
+    "t_enter": 22.071,
+    "t_idle": 25.251
+   },
+   {
+    "text": "Pan Keys to -0.25, Pad to 0.2, Bass to -0.05, Drums to 0.1 and Lead to 0.3.",
+    "t_start": 27.417,
+    "t_enter": 36.366,
+    "t_idle": 43.082
+   },
+   {
+    "text": "Start playback and bring the Pad fader up to 0.43.",
+    "t_start": 45.25,
+    "t_enter": 49.947,
+    "t_idle": 54.283
+   },
+   {
+    "text": "Bring in the Keys at 0.48.",
+    "t_start": 56.335,
+    "t_enter": 58.847,
+    "t_idle": 62.195
+   },
+   {
+    "text": "Now the Bass at 0.41.",
+    "t_start": 64.298,
+    "t_enter": 66.295,
+    "t_idle": 69.695
+   },
+   {
+    "text": "Drums in at 0.59.",
+    "t_start": 71.759,
+    "t_enter": 73.799,
+    "t_idle": 76.982
+   },
+   {
+    "text": "And the Lead at 0.92.",
+    "t_start": 79.119,
+    "t_enter": 81.776,
+    "t_idle": 85.407
+   },
+   {
+    "text": "Widen the Keys to -0.55 and pull the Drums down to 0.54.",
+    "t_start": 87.515,
+    "t_enter": 93.697,
+    "t_idle": 97.721
+   },
+   {
+    "text": "Read the tracks back and check the mix.",
+    "t_start": 105.053,
+    "t_enter": 109.537,
+    "t_idle": 114.05
+   }
+  ],
+  "musicStart": 52.572,
+  "playAt": 52.047,
+  "stopAt": null,
+  "omitted": [
+   {
+    "prompt": "Stop playback.",
+    "calls": [
+     "logic_transport.stop (C)",
+     "read"
+    ]
+   }
+  ]
+ },
+ "stats": {
+  "calls": 18,
+  "writes": 13,
+  "realWrites": 13,
+  "noopWrites": 0,
+  "verifiedRealWrites": 13,
+  "commands": 14,
+  "commandsVerified": 14,
+  "commandsMedianMs": 437,
+  "medianMs": 488,
+  "maxMs": 1052,
+  "minMs": 134
+ },
+ "meta": {
+  "version": "3.19.0",
+  "logic": "13.0 (7801)",
+  "macos": "26.3",
+  "locale": "en-US",
+  "bpm": 120,
+  "client": "Claude Code",
+  "model": "Sonnet 5.5",
+  "date": "2026-11-21"
+ }
+}
