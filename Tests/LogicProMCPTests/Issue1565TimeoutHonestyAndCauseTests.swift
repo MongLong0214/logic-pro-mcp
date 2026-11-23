@@ -27,18 +27,19 @@ struct Issue1565TimeoutHonestyAndCauseTests {
         }
 
         let body = try #require(json(result))
-        #expect(result.isError == true)
+        #expect(try #require(result.isError))
         #expect(body["state"] as? String == "B")
         #expect(body["state"] as? String != "C")
         #expect(body["reason"] as? String == "effect_unknown_after_timeout")
         #expect(body["error"] as? String == "operation_timeout")
-        #expect(body["success"] as? Bool == false)
-        #expect(body["verified"] as? Bool == false)
-        #expect(body["write_attempted"] as? Bool == true)
-        #expect(body["effect_unknown"] as? Bool == true)
-        #expect(body["safe_to_retry"] as? Bool == false)
-        #expect(body["terminal"] as? Bool == true)
-        #expect((body["recovery_hint"] as? String)?.contains("Re-read") == true)
+        #expect(!(try #require(body["success"] as? Bool)))
+        #expect(!(try #require(body["verified"] as? Bool)))
+        #expect(try #require(body["write_attempted"] as? Bool))
+        #expect(try #require(body["effect_unknown"] as? Bool))
+        #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+        #expect(try #require(body["terminal"] as? Bool))
+        let recovery = try #require(body["recovery_hint"] as? String)
+        #expect(recovery.contains("Re-read"))
     }
 
     @Test("a timeout before any write stays a clean State C")
@@ -56,8 +57,8 @@ struct Issue1565TimeoutHonestyAndCauseTests {
         let body = try #require(json(result))
         #expect(body["state"] as? String == "C")
         #expect(body["error"] as? String == "operation_timeout")
-        #expect(body["write_attempted"] as? Bool == false)
-        #expect(body["effect_unknown"] as? Bool == false)
+        #expect(!(try #require(body["write_attempted"] as? Bool)))
+        #expect(!(try #require(body["effect_unknown"] as? Bool)))
     }
 
     @Test("a timeout on a read is unchanged: State C with no write fields")
@@ -94,7 +95,7 @@ struct Issue1565TimeoutHonestyAndCauseTests {
 
         let body = try #require(json(result))
         #expect(body["state"] as? String == "C")
-        #expect(body["logic_window_on_screen"] as? Bool == false)
+        #expect(!(try #require(body["logic_window_on_screen"] as? Bool)))
         #expect(body["logic_cpu_percent"] as? Double == 97.4)
         let causes = try #require(body["likely_causes"] as? [String])
         #expect(causes == [LogicLivenessProbe.windowOffSpaceMessage, LogicLivenessProbe.saturatedMessage])
@@ -135,7 +136,7 @@ struct Issue1565TimeoutHonestyAndCauseTests {
         let body = try #require(sharedJSONObject(text))
         #expect(body["error"] as? String == "operation_timeout")
         #expect(body["likely_causes"] as? [String] == [LogicLivenessProbe.saturatedMessage])
-        #expect(body["logic_window_on_screen"] as? Bool == true)
+        #expect(try #require(body["logic_window_on_screen"] as? Bool))
     }
 
     @Test("a healthy Logic names no cause")
