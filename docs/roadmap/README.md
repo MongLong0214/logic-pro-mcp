@@ -23,169 +23,237 @@ state. GitHub issue bodies and maintainer comments remain the acceptance authori
 a dated operational readback, not a CI policy surface; currentness is checked when it is edited,
 without adding repository machinery whose only purpose is to police the document.
 
-## State — measured 2026-11-14 03:37 KST at `main` `0d10d5cc`
+## State — read 2026-11-23 11:55 KST at `main` `fefa4a60`
 
 ```
-29 open issues · 1 open pull request (#1561 draft) · latest stable release v3.18.0 · Homebrew installation v3.18.0 · source version 3.19.0 · no v3.19.0 tag or release
+44 open issues · 8 open pull requests (#1590, #1597, #1561 draft, #1607, #1608, #1609, #1619, #1620) · latest stable release v3.19.0 (published 2026-11-18) · Homebrew installation v3.19.0 · source version 3.19.0
 ```
 
-The counts above come from paginated GitHub reads. Issue bodies and maintainer comments remain the
-acceptance authority; neither a local pass, a partial native run, nor an issue-closing action alone is
-completion.
+The counts above come from GitHub reads on the date above. Issue bodies and maintainer comments remain
+the acceptance authority; neither a local pass, a partial native run, nor an issue-closing action
+alone is completion. The ten issues added since 09:02 are #1596 (reported) and #1598 to #1606
+(found while recording the v3.19.0 demo). The previous state block (2026-11-14, 29 issues, v3.19.0 not yet cut) is
+replaced, not appended: its release-gate prose described a cut that has now happened.
 
-Local/runtime readback at measurement time has Logic Pro 13.0 (7801) installed and running, while
-the installed LogicProMCP binary is v3.18.0 (`db6dc302f09f317f7e057621cd6f92b40935ce6cdc6fc14621c39598c6eb3859`)
-and GitHub's latest published release is v3.18.0. The source candidate reports v3.19.0, and README
-and CHANGELOG predeclare it as stable even though no v3.19.0 tag or release exists. That is
-release-preparation drift to reconcile at the actual cut, not evidence that v3.19.0 shipped.
-Logic shows only the Project Selection window and has no user `.logicx` open. Direct process/root AX
-reads succeed, but Logic 13 exposes an empty `AXWindows` list and no `AXMainWindow` in this state.
-The current product therefore reports a stale document/window state and does not positively identify
-the chooser. Two nonmutating qualification runs against the current candidate each produced 21
-passes, 110 truthful `not_qualified` outcomes and 9 failures because `logic://tracks` never became
-readable. Opening a disposable copied fixture also failed to produce an arrange window; the bounded
-open attempt timed out and was not retried. The host is permission-ready, but release/native
-qualification readiness is **not** restored until chooser-shell observation clears the stale cache
-without authorizing project mutation and the copied fixture can be opened safely.
+### What has shipped and what has not
 
-### Current delivery readback
+- **v3.19.0 is published.** The release carries `LogicProMCP`, `LogicProMCP-macOS-arm64.tar.gz`,
+  `LogicProMCP-macOS-universal.tar.gz`, `SHA256SUMS.txt` and `RELEASE-METADATA.json` (source
+  `409af686`, `signing: unsigned`, architectures `x86_64` and `arm64`). It is an unsigned release;
+  the older signature and trust-anchor wording in #284 and #816 describes scope the release does not
+  have, and those issues stay open until their owners reconcile that scope in writing.
+- **Logic Pro 13.0 (7801) is the latest validated version** (`ServerConfig.latestValidatedLogicVersion`).
+  On it, 17 of the 138 registered operations are live-qualified. The other 121 are listed with a
+  reason in `docs/qualification/not-qualified-logic13.json` and nothing on that list is claimed:
+  69 `unknown_param_probe_only`, 21 `readback_not_compared`, 10 `recipe_refused`, 8
+  `semantic_validator_unavailable`, 3 `consent_probe_only`, 3 `recipe_disabled`, and one to two each
+  for `needs_fixture_value_check`, `unsupported_by_contract`, `env_precondition` and
+  `readback_not_independent`. Only a recipe that runs the handler, compares an independent readback
+  and reads the restore moves an operation off that list.
+- **Merged since the 2026-11-14 state:** #1579 (Logic 13 chooser/readiness), #1580 and #1581
+  (exact-artifact handoff and installer permission boundary), #1582 (qualification restores the
+  playhead and asks for required verification), #1583, #1584 and #1589 (native bootstrap and
+  candidate history), #1594 (release unblock) and #1595 (README for v3.19.0). The fixes for #1550
+  (#1560), #1552 (#1558) and the late-mutation boundary of #1565 (#1572) are in v3.19.0.
+- **Merged since 2026-11-20:** #1611 (press a plug-in slot's open control again when the first press
+  opens no editor), #1612 (launch film), #1613 (native job polls for the exact native status), #1616
+  (native qualification is skipped for docs, demo and media only changes) and #1610 (fork pull
+  requests can pass native qualification). #1618 (plug-in chains) is open with #1619, and #1621
+  (`transport.stop` does not stop playback on Logic 13) was filed on 2026-11-23.
+- **Open pull requests.** #1608 and #1609 (read-only sample source preparation, #1609 is the
+  maintainer copy of #1608), #1619 (#1618) and #1620 (remove a call to action from the launch film) are
+  outside the batches below. #1590 declares the Logic release once and runs the Logic 13.0 ko-KR label
+  census; it owns the Logic session until it finishes. Its native plug-in failure was measured: a
+  clean-state A/B gave 9 of 9 passes on both the `main` and #1590 binaries, so the label change is
+  not the cause and a keychain prompt left on screen is the likely one. Its latest run at `5588277c`
+  still fails `build`, `product-validation`, `test-shards (complement)` and `native-logic-e2e`, and
+  those must be read before it merges. #1597 fixes #1596 (the permission check names the process
+  macOS checks, and the installer grants the binary that a disclaiming launcher runs). #1561
+  is a draft that fixes only the sidebar step of #1553 and must not merge as the whole fix.
+- **Filed from the demo recording (2026-11-20):** #1598 to #1605 are Logic 13 first-run defects in
+  track toggles, rename, select, goto, the System Overload alert, the first track read and focus, and
+  #1606 is `mixer.set_volume` latency. The demo saved no raw logs, so each issue's first step is a
+  clean-fixture reproduction.
+- **Known gaps with no issue yet** (drafts are in the pull request that carries this file; filing is
+  the coordinator's call and the issue-creation hook enforces WIP): `create_marker` does not apply
+  its name on Logic 13; the release `candidate-package` job still runs on `macos-15-intel`; the cause
+  of playhead drift after qualification gates is unknown beyond the restore added in #1582; Key
+  Commands is not exposed to Accessibility on Logic 13; and no navigation census covers plug-in
+  windows, popups, the marker and tempo lists, or the project chooser.
 
-- PR #1566 merged exact head `7eec57e1` as `33719d05`. It bounds the Logic 13 refresh cost by
-  yielding before background Mixer work; #668 remains open for an approximately 74 AX-visible-row
-  native recurrence and complete deadline evidence.
-- PR #1572 merged exact head `1aff3a7d` as `7494ecf2`. It prevents a timed-out mutation from being
-  credited after ownership is lost; #1565 remains open for the wider first-AX/read latency problem.
-- PR #1576 merged exact head `5e6d6475` as `10156003`. Pull-request run `43432876703` tested exact
-  merge candidate `e7f1ebdf` (parents `33719d05` and `5e6d6475`); its tree `ccb8c12d` is
-  byte-identical to both the PR head tree and final merge tree. Release-build passed in 15m25s and
-  test-build passed in 1h32m7s, including a 1h29m49s coverage-runtime build; the selected serial
-  shard passed 500/500 in 18m19s and the complement passed 7,277/7,277 in 42m23s. Exact-union
-  product validation passed 7,777/7,777 with zero failures or errors, merged coverage measured
-  83.41% regions and 90.60% lines against 70%/78% floors, and the required build fan-in passed. On the preceding
-  `90ff6a43` candidate, the coverage runtime compiled in 5,962.16s and both serial shards passed
-  500/500 and 7,277/7,277; product validation then rejected only a suite/test separator mismatch.
-  The bounded correction canonicalizes the pair before comparison, passes 16/16 contract tests and
-  exact artifact replay at both counts, and has an independent exact-head review with zero findings.
-  It does not change the timeout, tests, shards or coverage floors. The PR removes Xcode, Apple
-  signing/notarization, redundant policy workflows and policy-only documents while retaining
-  product tests, coverage, native release qualification, checksum/install verification and MCP
-  Registry publication.
-- PR #1560 merged exact head `fb3a6e8a` as `0d10d5cc`; the merge tree `19b9458e` is
-  byte-identical to both the head and hosted merge candidate `8df09030` (parents `7ea626ef` and
-  `fb3a6e8a`). Run `43459192789` built an unsigned Command Line Tools release binary with SHA-256
-  `aa2596f33435a2aa2a77a3b47134cd4e2cb446d953ebb07f9ea18c303ebd1473`, passed the exact
-  7,780-test union (500 selected + 7,280 complement) with zero failures/errors, measured 83.44%
-  region and 90.64% line coverage, and passed the required build fan-in. The first validation
-  attempt failed only while GitHub's artifact service timed out listing artifacts five times;
-  failed-job rerun attempt 2 reused every successful producer and completed exact union/coverage in
-  1m15s. Independent exact-head review approved. Reporter evidence on Logic 13.0 (7801) measured
-  6,306 patches, all resolves at or below 24 ms and concurrent `get_regions` resolves below 4 ms;
-  the original Logic 12.4 long-wait recurrence remains unqualified.
-- Draft PR #1561 is exact head `14649e41`; its original hosted checks pass, but three Logic 13
-  reruns prove List-view stem export still refuses at component selection. Column view uses the
-  existing `AXTextField → AXGroup → AXList/AXSelectedChildren` chain; Logic 13 List view exposes
-  only the measured ancestry `AXTextField → AXCell → AXRow → AXOutline (ListView)`.
-  `AXSelectedRows` still requires exact-owner write/readback and navigation proof. Its current head
-  is not the complete #1553 fix and must not merge as such.
-- The #1552 sample-rate fix is merged and passes native readback on Logic 13; the original Logic
-  12.4 environment has not been rerun and is not claimed.
+### Plan to close every open issue
 
-### CI throughput
+This is a dated operational plan, not a second scheduling authority: #308 and each owning issue
+retain that role. It orders work and sizes it. It closes nothing by itself, and no issue is closed
+to make a count look better. Each closure below names the evidence it needs.
 
-- #1576 reduces the required graph to change classification, concurrent release and coverage-runtime
-  builds, two isolated serial test shards, merged product/coverage validation and one required
-  `build` fan-in. The current broad `docs/*|*.md` classifier is not a safe blanket fast path:
-  existing tests directly consume README, setup, API, troubleshooting, contribution and ticket
-  documents. The evidence-backed skip boundary is an ordinary mode-100644 modification of
-  `docs/roadmap/README.md` alone. Additions, deletions, renames, symlinks, mixed or empty diffs,
-  diff errors, identity mismatches and changes to consumed documents must select full validation
-  or fail closed.
-- The two shards each retain `--no-parallel`, exact-once inventory/union checks, writable isolated
-  profile output, merged-coverage equivalence and failure/timeout propagation. The audit found real
-  cross-suite environment-variable and host-resource conflicts, so unconstrained in-process test
-  parallelism would reduce reliability. The current hard floors remain 70% region and 78% line;
-  90% is a target rather than a release threshold.
-- #1560 establishes the two-shard timings on the current 7,780-test inventory: selected xUnit
-  689.495s and complement xUnit 3,006.683s. The complement's exact 84
-  `Issue965HeldSelectionAssociationTests/canonical*` cases consumed 1,176.709s. Moving only those
-  cases produces dry-run manifests of 584 and 7,196 tests with zero additions outside that prefix,
-  removals, overlap or gaps, and projects 1,866.204s versus 1,829.974s. That lowers the measured
-  critical xUnit time by 1,140.478s (about 19 minutes) without changing the 7,780-test union,
-  isolation, assertions, failure propagation or coverage merge. The rebalance remains
-  unimplemented and needs its own exact-head hosted validation. Native Logic qualification remains
-  serial and process-isolated.
-- No runner purchase, account-setting change, cached-success substitution, skipped test, weaker
-  assertion or reduced coverage threshold is part of the current plan.
+Rules the plan keeps: one open pull request at a time (close before opening), similar issues in one
+pull request, the cheapest gate first, and one Logic session at a time. A pull request cycle on
+arm64 is about 1.5 to 2 hours with CI and native checks, plus about 20 minutes for review, so the
+plan counts 2.2 hours per pull request. Logic sessions overlap the CI wait of the previous pull
+request, so a batch's wall time is its pull-request chain, not the sum of both.
 
-### v3.19.0 release gate and Logic 13 compatibility
+| order | batch | closes | pull requests | Logic hours | wall hours |
+|---|---|---|---|---|---|
+| 0 | Close-out of what v3.19.0 already fixed, and the permission fix | #1552, #1550, #1585, #1596 | 2 (this file, #1597) plus comments | 0 | 3.7 |
+| 1 | Logic 13 first-run reliability | #1565, #668, #1598 to #1605 | 6 | 16 | 20 |
+| 1b | Direct-control write latency | #1606 | 2 | 4 | 6 |
+| 2 | One Logic sweep: unmeasured walls, colour source and the #862 route search | none (settles #970, feeds #862, #1516, #1588, #884) | 1 | 8 | 8.5 |
+| 3 | Export browser List view | #1553 | 1 (replaces #1561) | 1 | 3.5 |
+| 4 | Region rename and Chord Track | #1588 | 3 | 5 | 12 |
+| 5 | Pan mode read | #1571 | 1 | 1 | 3.2 |
+| 6 | Plug-in parameter reads | #1417, #1430, #299 | 4 | 6 | 11 |
+| 7 | Background key commands | #1516 | 5 | 8 | 14 |
+| 8 | MCU plug-in edit: bind a strip to its channel | #862 | 3 | 6 | 12 |
+| 9 | Same-bytes qualification, publication scope and verifier adoption | #284, #1028, #816, #1586, #1403 | 3 | 12 | 14 |
+| 10 | Session repair | #291, #967, #969, #971 | 8 | 28 | 50 |
+| 11 | Editors and providers | #884, #302, #303, #304, #305 | 8 | 24 | 46 |
+| 12 | Deferred, revisit after batch 11 | none (#955, #306, #1546, #308 stay open; #970 joins them if batch 2 finds no route) | 0 | 0 | 0 |
 
-The v3.19.0 source boundary is now `main` `0d10d5cc`, with #1576 and #1560 both merged. No final
-release candidate exists until one universal Command Line Tools artifact from that boundary (or a
-later explicitly reviewed blocker correction) is staged and bound for native qualification.
-Earlier candidate hashes and native results remain historical evidence only.
+Batches 0 to 9 close 28 issues in about 108 wall hours. Batches 10 and 11 close 9 more in about 96
+hours and each of those epics first needs a reachable provider. Nothing is closed as not-planned,
+backlog or wall: if a measurement finds no route, the issue stays open with the measurement recorded
+and moves to batch 12, deferred. Close-outs are allowed only for issues already fixed with evidence
+(batch 0), and only after the reporter confirms or the stated wait expires.
 
-| release decision | exact requirement before the cut |
-|---|---|
-| Candidate | #1576 and #1560 are merged on `main` `0d10d5cc`; exact-head hosted CI, independent review and merge-tree identity pass. Before freezing release bytes, fix the Logic 13 chooser/readiness blocker without widening project-mutation authority, then stage exactly one artifact. |
-| Artifact identity | Stage one final Command Line Tools-built universal artifact before publication, bind it to source SHA/version/archive and executable hashes, and make native qualification consume those exact bytes without rebuilding. Hashes before and after qualification must match; substitution, wrong source/version, absent/failed qualification and interruption must stop before publication. |
-| Latest Logic | On installed Logic Pro 13.0 (7801), run the every-operation independent-readback and release fault-env-refusal tests in separate processes against the exact staged artifact. Retain the debug-only fault-injection rejection as a separate negative control against its deliberate debug executable, then run the full unfiltered suite. Do not mislabel the debug negative as release-byte evidence. Explicit `notQualified` classifications may remain truthful; failed or missing required evidence may not. |
-| Distribution | Verify SHA-256 identity and installation of that unchanged unsigned artifact on Intel and ARM hosted runners, publish only after those checks pass, then retrieve and compare the public GitHub assets before MCP Registry publication. Apple signing, notarization, Gatekeeper, Xcode, private keys and a second promotion CLI are not release requirements. |
-| Recovery | Preserve the existing project, permission state and evidence. Any failed live mutation must retain owned restoration/readback; a failure prevents the tag. |
-| Deferred claims | #1553/#1561, #1565/#668, #1516, #1571, Creator Studio #1546 and the remaining ADR backlog stay open unless their own acceptance is independently complete. They are not closed or claimed merely because v3.19.0 ships. |
+Batch 12 holds #955 (plug-in backlog), #306 (third-party plug-ins), #1546 (Creator Studio, waiting on an
+external host) and #308 (the permanent scheduling entry). They stay open with their reasons, are
+listed at the end of this file, and are revisited after batch 11. #970 is settled by measuring in
+batch 2 and stays open; it joins batch 12 only if no colour source is found.
 
-Existing native evidence is reused only when the relevant product blobs, Logic build, locale,
-fixture and covered acceptance are unchanged. It is never promoted to exact-binary evidence after
-package or build inputs change.
+Order follows user impact and visibility first (batches 1, 1b, 4, 7), then what unblocks others
+(batch 2 decides batches 4, 7, 8 and 11), then cost. Batch 0 and the offline half of batches 3, 4, 5
+and 6 need no Logic session, so they run while the locale campaign holds Logic.
 
-The current tag workflow rebuilds after local qualification, so it proves published bytes equal the
-hosted package but does not yet prove they equal the natively qualified bytes. The minimal handoff
-above is a release blocker for an exact-binary v3.19.0 claim. It does not satisfy the older,
-broader signature/trust-anchor wording still present in #284/#816; those issues remain open until
-their owners reconcile that superseded scope rather than silently treating an unsigned release as
-whole-issue completion.
+| total | wall hours | calendar, continuous autonomous work at about 16 productive hours a day |
+|---|---|---|
+| batches 0 to 9 (28 issues) | about 108 | 7 days; 9 days with the 30% risk allowance |
+| batches 10 and 11 (9 issues) | about 96 | 6 days; 8 days with the allowance |
+| batch 12 (5 issues left open) | 0 | revisited after batch 11 |
+| everything closable (37 issues) | about 204 | 13 days; about 17 days with the allowance |
 
-### Open-issue execution map
+The previous forecast was 2 to 5 working days for v3.19.0 and the release took 4 days from that
+state, so the sizing is calibrated to this repository. It excludes reporter latency (batch 0, 1, 3
+and 6 each wait on a reporter answer or fixture for part of their closure), a CI failure that needs a
+second cycle, and a Logic update. A newly exposed native defect adds a repair cycle.
 
-Every one of the 29 issues open at measurement time appears in the table below.
+### Open-issue classification
 
-- Release and publication: #284, #816 and #1028; #1550's bounded product fix is merged while its Logic 12.4 recurrence remains open.
-- Latest-Logic compatibility: #668, #1552, #1553 and #1565.
-- Next product lane after the release boundary: #1516, #1571, #291 and #1403.
-- Dependency, contribution and backlog: #299, #302-#306, #308, #862, #884, #955, #967,
-  #969-#971, #1417, #1430 and #1546.
+`Real` means the defect or missing feature is still present at `main` `fefa4a60` on Logic 13.0, from
+the code, the changelog and the qualification list; `Logic` says whether the closing work needs a
+Logic session.
 
-No acceptance is downgraded and no issue is closed to make the count or a date look better.
+| issue | area | state on Logic 13.0 and v3.19.0 | depends on | size | Logic | stars |
+|---|---|---|---|---|---|---|
+| #1621 | transport | Real, filed 2026-11-23. `transport.stop` ends State C `readback_mismatch` and playback restarts from the start | none | M | yes | high |
+| #1606 | performance | Real, unmeasured at clean state. 0.25 to 1.3 s per `set_volume` write against the 100x-human-speed goal; split the time first | batch 1 | M | yes | high |
+| #1618 | plug-ins | Open, fix in #1619. `insert_plugin` appends to the next free slot and covers every measured stock Audio FX | none | M | yes | low |
+| #1605 | focus | Observation. Focus was on track contents at preflight; the demo automation may have caused it | batch 1 | S | yes | low |
+| #1604 | focus | Real. The `unsafe_focus_for_synthetic_key` refusal does not say how to clear it | none | S | yes | medium |
+| #1603 | tracks | Real. First `logic://tracks` read in a new process is empty with `no_live_track_read_yet` | #1565 | M | yes | high |
+| #1602 | transport, mixer | Real. After a System Overload alert transport refuses but mixer writes report success | none | M | yes | high |
+| #1601 | navigation | Real. goto_bar and goto_position move the playhead but report State B, in 2 to 10 s | none | M | yes | high |
+| #1600 | tracks | Real. `tracks.select` ends State B and the selection does not change | none | M | yes | high |
+| #1599 | tracks | Real. `tracks.rename` reports an error or unverified success and does not rename | none | M | yes | high |
+| #1598 | tracks | Real. Mute and solo on an unselected track return `channels_exhausted` | none | M | yes | high |
+| #1596 | permissions | Real, fix in #1597. A disclaiming launcher makes macOS check the binary, not the client | none | S | no | high |
+| #1588 | tracks, regions | Real. Neither region rename nor Chord Track write exists | Chord Track shape from batch 2 | L | yes | high |
+| #1586 | process | Mostly met. The request-owned `inspect_session` producer is in v3.19.0; the rest is #1028's scope | #1028 (batch 9) | S | no | none |
+| #1585 | setup, AX | Likely fixed. Doctor treats 13.0 as validated since v3.19.0; `AXWindow: 0` was the census counting descendants only | reporter retest on v3.19.0 | S | no | medium |
+| #1571 | mixer | Real. Pan mode is not read; no source for spread exists, so `null` with a reason is a valid outcome | canon index refresh | M | read-only | low |
+| #1565 | AX latency | Real, partly fixed. Late-mutation boundary (#1572) and chooser readiness (#1579) are in; intermittent first-read timeout and en-US remain | batch 1 | L | yes | high |
+| #1553 | export | Real. #1561 fixes the sidebar only; List view needs the `AXCell`/`AXRow` chain | none | M | one run | low |
+| #1552 | resources | Fixed in v3.19.0 (#1558); Logic 13 readback passes; only a Logic 12.4 rerun is missing | none | S | no | none |
+| #1550 | tracks | Fixed in v3.19.0 (#1560); Logic 13 numbers are in the issue; only a 12.4 rerun is missing | none | S | no | low |
+| #1546 | setup | Deferred (batch 12): needs a Creator Studio host the maintainer lacks; a draft pull request was invited | outside contributor | S | external | medium |
+| #1516 | key commands | Real. Four prerequisite pull requests merged; Learn, source-aware check, readiness and a qualified region command remain | Key Commands reachability from batch 2 | L | yes | high |
+| #1430 | plug-ins | Real. No fixture holds the five plug-ins | fixture, #1417 | L | yes | low |
+| #1417 | plug-ins | Partly fixed. Cleanup settled in #1518; mono Gain and Sample Delay unread | none | M | yes | low |
+| #1403 | process | Open. #1576 removed the policy machinery and #1463 the manual fallback; the unattended-path integration items remain | batch 9 | M | no | none |
+| #1028 | verifier | Real, infrastructure shipped. Ten-locale acceptance is the locale campaign | #1590 | L | yes | low |
+| #971 | session repair | Real. Integration, so last | #291, #967, #969 | L | yes | low |
+| #970 | colour | The saved-project route holds no track colour; a Logic readback is the last open route and batch 2 settles it. Stays open either way | batch 2 | S | one run | low |
+| #969 | organization | Real. Ordering, grouping and layout (L2 to L4) open | none | L | yes | medium |
+| #967 | bus and aux | Real. Creation and reuse open | #291 | L | yes | low |
+| #955 | plug-in backlog | Deferred (batch 12): generic snapshots and batch compensation open | #299 | L | yes | low |
+| #884 | automation | Real. Only a current-playhead value is readable; no point source | batch 2 | L | yes | high |
+| #862 | MCU plug-in edit | Solvable. A strip index cannot yet bind to a channel; batch 2 searches the routes and batch 8 builds the bound write | batch 2 | L | yes | medium |
+| #816 | publication | Scope superseded by the unsigned release; assets and metadata are published; written reconciliation with #284 first | #284 | M | no | low |
+| #668 | refresh | Fix merged (#1566); needs a run on a project with about 74 visible rows | #1565 | M | yes | low |
+| #308 | tracker | Deferred (batch 12): permanent by design | all | S | no | none |
+| #306 | third-party plug-ins | Deferred (batch 12): prove one exact plug-in first | #299 | L | yes | low |
+| #305 | Flex Pitch | Not started; no producer reaches the model | provider | L | yes | low |
+| #304 | tempo | Read resource shipped; write and Smart Tempo open | none | L | yes | medium |
+| #303 | MIDI transforms | Blocked behind #302 | #302 | L | yes | low |
+| #302 | MIDI readback | Provider path open; Event List shape known | none | L | yes | low |
+| #299 | Compressor | Needs one more parameter, then closes | none | M | yes | low |
+| #291 | routing | Real. R3 (sends, input, removal) in part; ten-locale acceptance open | none | L | yes | low |
+| #284 | qualification | Real. Same-bytes pass on en-US and ko-KR for the core profile is unmet | #1590 | L | yes | low |
 
-### Execution order, capacity and forecast
+### Closure evidence per close-out issue
 
-This is a dated operational forecast from the measured blockers above, not a second scheduling
-authority. #308 and each owning issue retain the authority stated at the top of this file.
+- **#1552 and #1550:** CHANGELOG 3.19.0 lists both fixes (#1552 at the saved-project preference, #1550
+  at the cache-only resolve). The reporter's Logic 13 results are in each issue and were accepted by
+  the maintainer. Closing needs one sentence of scope: Logic 12.4 is not retested, and either issue
+  reopens with a 12.4 reproduction on v3.19.0.
+- **#1585:** the maintainer's reply states the census counts descendants of the window, and
+  `latestValidatedLogicVersion` is 13.0 in the shipped source, so the version warning that put
+  capability groups in `not_ready` is gone. Ask the reporter for `LogicProMCP doctor --json --profile
+  core --client terminal` on v3.19.0; close on a clean answer or after seven days without one.
 
-The merge critical path is `Logic 13 chooser/readiness correction → exact-artifact handoff → freeze
-one candidate → native qualification → unchanged-byte publication/readback`. Use one integration/release owner, at
-most two active implementation slices and one exclusive native Logic session. Independent read-only
-review may run alongside them; a second writer may proceed only on files and acceptance that do not
-overlap the release lane.
+Closing waits for the reporter's confirmation or the stated wait (seven days after the request).
+#1586 and #1403 are not close-outs: they close with batch 9, when #1028 holds an acceptance row for
+the pilot and the unattended-path items have evidence. v3.19.0 is the release that routes the
+request-owned `inspect_session` producer, and the downstream caller comment on #1586 can be answered
+with that.
 
-| cluster | dependency order and parallel lane |
-|---|---|
-| Release — #284, #816, #1028 | Stage and bind the artifact, qualify scoped native acceptance, then publish and retrieve unchanged bytes. The complete #1028 programme is not a v3.19 prerequisite. |
-| Logic compatibility — #1550, #1552, #1553, #1565, #668 | Preserve merged #1560 and accepted #1552 evidence. Repair chooser-shell readiness first, then #1561 independently. Share one AX/native owner for #1565/#668 and keep Logic 12.4 as a separate evidence gap. |
-| User features — #1516, #1571 | Develop MIDI Learn/readiness and additive read-only pan-mode contracts independently after the release source freeze. Unknown spread remains explicit rather than inferred. |
-| Session repair — #291, #967, #971, #969, #970 | Finish required graph/scalar routes before lifecycle creation/inverse and aggregate scenarios. Layout and colour provider discovery need not block every routing increment. |
-| Plug-ins — #299, #955, #306, #862, #1417, #1430 | Read-only captures and one exact parameter slice can proceed independently. MCU writer claims wait for exact strip binding; #1417 waits for its Logic 12.4 cleanup reproduction. |
-| MIDI/editors — #302, #303, #304, #305, #884 | Establish complete owned read sources before exact-note writers. Tempo, Flex Pitch and automation-point discovery remain separate provider investigations. |
-| Contribution/process — #1546, #1403, #308 | Creator needs an external supported host/contribution. Exercise #1403 through the existing automation path; do not add another coordinator. #308 remains the scheduling index. |
+### #862 route search (batch 2) and bound write (batch 8)
 
-The 2026-11-08 target for resolving every open issue passed unmet. The document keeps each issue
-open rather than manufacturing closure and replaces that missed date with evidence-based gates.
-With the source integration complete and the authorized native host and fixtures still available,
-the engineering forecast for v3.19.0 remains 2–5 working days: the bounded chooser/readiness repair,
-artifact handoff, one final native campaign and distribution readback. A newly exposed native
-defect adds a repair cycle, so this is not a guaranteed date. The next 1–2 weeks then target
-#1553, the bounded #1565/#668 recurrence, #1571 and one complete #1516 background workflow. The
-remaining provider-dependent backlog is forecast in 2–6 week slices only after each initial
-investigation produces a reachable provider or a measured wall.
+#862 is solvable and is a real batch. Its blocker is that Logic re-banks when a channel is selected,
+so a strip index has no stable meaning. The Logic sweep in batch 2 tests each route below on one
+disposable project with more than eight tracks, read-only except for the track selections the route
+needs, restoring the starting selection. A route is accepted only if its acceptance check passes on
+three different bank positions. The bound channel must read back as the named target before any write.
+
+- **R1, scribble-strip names.** Capture the LCD text messages from the MCU feedback stream for all eight
+  strips. Select track T by Accessibility, then read the strip that carries T's name. Acceptance: the
+  strip text equals the leading characters of T's Accessibility name, and its position in the window plus
+  the bank offset equals T's index; two tracks whose names collide in the truncated text must be refused.
+- **R2, timecode and assignment display.** Capture the display controller messages while banking and
+  while selecting. Acceptance: record whether any value tracks the bank offset; the route holds only if
+  that value changes by the bank size on a bank shift and matches the selected track's index.
+- **R3, channel-select LED echo.** Select T by Accessibility and read the select-LED echo for the eight
+  strips. Acceptance: exactly one LED lit at the position expected from T's index, none lit when T is
+  outside the window, and the window moves when T is selected from outside it.
+- **R4, bind by name.** Use R1's text as the key and refuse unless exactly one strip matches the full
+  Accessibility name. Acceptance: a fixture with two same-prefix names refuses before any write; a unique
+  name binds.
+- **R5, pin the bank.** Switch to Channel Strip View or a flip mode, then select five other tracks.
+  Acceptance: the bank offset (by R1 or R3) is unchanged after every selection; restore the mode and
+  read it back.
+- **R6, Controller Assignments or Control Surface setup.** Inspect the setup window for a setting that
+  turns off follow-selection banking. Acceptance: with the setting changed the bank stays put across five
+  selections, and the original setting reads back after restore. It is a persistent preference, so it
+  needs consent in the product (as `setup_midi_key_commands` does) and is the last resort.
+- **R7, other protocols.** Check whether a HUI device or Logic Remote can be added and whether either
+  reports channel identity. Acceptance: one bound trace per protocol, or a recorded refusal naming the
+  missing identity.
+- **R8, address by plug-in page.** Select the target by Accessibility, enter the MCU plug-in page and
+  compare the page's plug-in and parameter names with the target's. Acceptance: names equal the
+  target's, one parameter write lands, and the same instance reads it back through Accessibility.
+
+Batch 8 builds the first route that passes: a binding receipt (project, track, channel index, and at
+least one MCU-side source agreeing with Accessibility) that every write must present and that refuses
+on disagreement, then one verified plug-in write through it, then restore and locale runs. If no
+route passes, #862 stays open with the measurements recorded and moves to batch 12.
+
+### Order and parallel lanes
+
+The merge critical path is `#1590 → #1597 → #1561 replacement → batch 1 → batch 1b → batch 2 → batches 3 to 8 → batch 9`.
+Use one integration owner, at most two active implementation slices and one exclusive Logic session.
+While #1590's campaign holds Logic, only offline work proceeds: batch 0, and the offline halves of
+batches 3 to 6 (deterministic tests, parsers, contracts) and the recorded-trace tests of batch 8. Release cadence: cut v3.19.1 after batches
+1 and 3 (reliability and export), and v3.20.0 after batches 4, 5 and 7 (the user-visible features).
 
 Reuse focused review and native evidence only while relevant blobs/dependencies, Logic build,
 locale, fixture and acceptance are unchanged. Batch accepted components into one native candidate
@@ -419,6 +487,12 @@ Also open, outside the ADR set:
 | #1565 | OPEN | The reporter measured en-US 25 s timeouts across transport, health, refresh, track creation and project creation, and a timed-out `project.new` landed roughly 90 seconds later. PR #1572 merged exact head `1aff3a7d` as `7494ecf2`, so a timed-out mutation now retains settlement ownership and cannot be credited after the deadline without independent observation. The remaining broad latency is measured by the unpushed diagnostic slice `5de8b4e9`: refresh 3.929 s, with Mixer 2.163 s the largest section, tracks 0.875 s, markers 0.437 s and transport 0.270 s on the inspected Logic 13 project. This diagnostic does not close the issue; it still needs an accepted product correction and exact-candidate native qualification without repeating destructive `project.new`. |
 | #1568 | closed | PR #1574 merged exact head `de509595` normally as `b7053947` after deterministic focused/affected tests, independent review, native two-process acceptance twice and all exact-head hosted gates passed. The passive child owned no endpoints, routed demand made the serving child acquire the demanded MIDI group, the passive child's late demand received the terminal ownership conflict, MCU stayed honestly deferred, and both owned processes exited cleanly through stdin close. The merge parents and ten expected product/test paths were read back from `origin/main`; Doctor remains truthful that setup checks do not themselves prove runtime ownership. |
 | #1571 | OPEN | Preserve the existing `pan` and `panReadback` fields and add optional read-only mode fields from the already-owned unique pan control: `balance`, `stereo_pan`, `unrecognized`, or explicit unknown. Report spread only when an exact owned read source exists; otherwise return null with a machine-readable reason rather than guessing from labels or geometry. Logic 13 inspection found only the generic balance-style pan identity and no independently identifiable spread control. Implementation must keep legacy decoding and nil omission, round-trip the new fields, propagate them through Mixer fixtures, and authorize no mutation. |
+| #1585 | OPEN | Reported on Logic Pro 13.0 with v3.18.0: `--probe-locator-census AXWindow` returned 0 candidates and doctor reported `degraded`. The census counts descendants of the resolved main window, so 0 is not a locator failure, and the version warning that held capability groups in `not_ready` is gone because `latestValidatedLogicVersion` is 13.0 in v3.19.0. Waiting on the reporter's `doctor --json` from v3.19.0; the same-stack timeout report is #1565. |
+| #1586 | OPEN | Enhancement asking that completion of a feature requires positive success in the existing verifier, with the reporter's downstream comment that the released caller did not route the request-owned `inspect_session` producer. v3.19.0 carries that producer. The remaining scope is #1028's, so this closes as absorbed once #1028 holds one acceptance row for the pilot. |
+| #1596 | OPEN | Reported on macOS 27.2: PostEvent denied for a Claude-launched server. Fix in PR #1597. |
+| #1598 to #1605 | OPEN | Logic 13 first-run defects from the demo recording; batch 1, clean-fixture reproduction first. |
+| #1606 | OPEN | `mixer.set_volume` latency; batch 1b. |
+| #1588 | OPEN | Feature request to write chords on the Chord Track and to rename regions by explicit reference. The maintainer's plan is region rename first, then a Chord Track shape check on Logic 13 in every supported language, publishing the result if a write cannot be read back. No registry operation covers either today. |
 
 ### Three reopen reasons, checked rather than inferred
 
@@ -607,3 +681,16 @@ completion. Issue state here is a transcription of GitHub at the measured date, 
 on" column is transcribed from each issue's own recorded findings. Where this file and an issue
 disagree, **the issue is right and this file is the one that is wrong** — the same relationship its
 predecessor declared toward a file nobody could read.
+
+## Deferred
+
+These stay open on the owner's ruling, with their reasons. None is closed as not-planned, backlog or
+wall. They are revisited after batch 11.
+
+| issue | why deferred |
+|---|---|
+| #955 | Plug-in backlog (generic snapshots, batch compensation, automatic EQ). Needs #299's next parameter first. |
+| #306 | Third-party host parameters. Needs one exact plug-in proved before any generic expansion. |
+| #1546 | Creator Studio support. Needs a Creator Studio host and an outside contribution; the maintainer machine has none. |
+| #308 | The ADR programme's scheduling entry. Open permanently by design. |
+| #970 | Only if batch 2 finds no colour source. Stays open with the readings recorded. |
