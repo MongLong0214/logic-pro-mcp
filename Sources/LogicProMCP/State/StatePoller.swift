@@ -511,9 +511,11 @@ actor StatePoller {
     }
 
     private func pollLoop(axChannel: AccessibilityChannel, cache: StateCache) async {
-        let intervalNs = ServerConfig.statePollingIntervalNs
+        let baseIntervalNs = ServerConfig.statePollingIntervalNs
+        var intervalNs = baseIntervalNs
 
         while !Task.isCancelled {
+            let cycleStart = ContinuousClock.now
             // Through the same gate as `refreshNow` -- the scheduled cycle is what a nudge most
             // often collides with, since at the measured 12.6s median on a 74-track project the
             // loop is mid-cycle roughly 80% of the time -- but NEVER as a queued waiter.
@@ -545,6 +547,15 @@ actor StatePoller {
                !Self.backgroundTickYields(to: runtime.keyboardFocus()) {
                 _ = await runCoalescedCycle(yieldingToTextEditing: true)
             }
+            // #1565: the cycle walks Logic's window through AX on Logic's main thread. Back off
+            // when no client is using the server, and never spend more than about a third of the
+            // time inside a cycle, so an idle server cannot keep a slow Logic busy.
+            let cycleNs = Self.nanoseconds(cycleStart.duration(to: .now))
+            intervalNs = Self.nextPollDelayNs(
+                base: baseIntervalNs,
+                idleSeconds: await cache.timeSinceLastToolAccess(),
+                lastCycleNs: cycleNs
+            )
 
             do {
                 // Route through runtime.sleep so tests can drive this loop at
@@ -557,6 +568,30 @@ actor StatePoller {
         }
 
         Log.info("AX Supplementary Poller loop exited", subsystem: "poller")
+    }
+
+    /// No tool call or resource read for this long counts as idle.
+    static let idleAfterSeconds: TimeInterval = 30
+    /// Poll interval while idle.
+    static let idleIntervalNs: UInt64 = 10_000_000_000
+    /// Longest wait the back-off ever asks for.
+    static let maxIntervalNs: UInt64 = 30_000_000_000
+
+    /// How long to sleep before the next background cycle (#1565). Never shorter than `base`;
+    /// `idleIntervalNs` once the server has been idle; and at least twice the last cycle's own
+    /// duration, so a slow cycle (a large project, or Logic's Browser keeping its main thread busy)
+    /// leaves Logic idle for at least two thirds of the time.
+    static func nextPollDelayNs(base: UInt64, idleSeconds: TimeInterval, lastCycleNs: UInt64) -> UInt64 {
+        var delay = base
+        if idleSeconds >= idleAfterSeconds { delay = max(delay, idleIntervalNs) }
+        delay = max(delay, lastCycleNs.multipliedReportingOverflow(by: 2).partialValue)
+        return min(delay, max(maxIntervalNs, base))
+    }
+
+    private static func nanoseconds(_ duration: Duration) -> UInt64 {
+        let parts = duration.components
+        guard parts.seconds >= 0 else { return 0 }
+        return UInt64(parts.seconds) * 1_000_000_000 + UInt64(max(0, parts.attoseconds) / 1_000_000_000)
     }
 
     /// #1079 — whether the background loop gives up its tick for what Logic's keyboard focus is.

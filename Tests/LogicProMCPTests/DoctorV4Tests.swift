@@ -855,3 +855,35 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(!encoded.contains(homePath))
     #expect(!encoded.contains("token=super-secret"))
 }
+
+// #1565: doctor names the two usual causes of "every live operation times out", with the fix.
+@Test func doctorWarnsWhenLogicWindowIsOffSpaceAndMainThreadSaturated() throws {
+    var runtime = doctorV4Runtime()
+    runtime.logicLiveness = { LogicLiveness(windowOnScreen: false, cpuPercent: 96) }
+    let report = doctorV4Report(runtime: runtime)
+    let check = try #require(report.checks.first { $0.id == "logic.responsiveness" })
+    #expect(check.status == .warn)
+    #expect(check.summary.contains(LogicLivenessProbe.windowOffSpaceMessage))
+    #expect(check.summary.contains(LogicLivenessProbe.saturatedMessage))
+    #expect(check.evidence["window_on_screen"] == "false")
+    #expect(check.evidence["main_thread_saturated"] == "true")
+}
+
+@Test func doctorWarnsOnlyForTheCauseThatIsMeasured() throws {
+    var saturated = doctorV4Runtime()
+    saturated.logicLiveness = { LogicLiveness(windowOnScreen: true, cpuPercent: 92) }
+    let saturatedCheck = try #require(doctorV4Report(runtime: saturated).checks.first { $0.id == "logic.responsiveness" })
+    #expect(saturatedCheck.status == .warn)
+    #expect(saturatedCheck.summary.contains(LogicLivenessProbe.saturatedMessage))
+    #expect(!saturatedCheck.summary.contains(LogicLivenessProbe.windowOffSpaceMessage))
+
+    var healthy = doctorV4Runtime()
+    healthy.logicLiveness = { LogicLiveness(windowOnScreen: true, cpuPercent: 8) }
+    #expect(try #require(doctorV4Report(runtime: healthy).checks.first { $0.id == "logic.responsiveness" }).status == .pass)
+
+    // Not probed (or Logic not running) is no evidence, so no warning.
+    #expect(try #require(doctorV4Report().checks.first { $0.id == "logic.responsiveness" }).status == .pass)
+    var notRunning = doctorV4Runtime(logicRunning: false, visibleWindow: false)
+    notRunning.logicLiveness = { LogicLiveness(windowOnScreen: false, cpuPercent: 99) }
+    #expect(try #require(doctorV4Report(runtime: notRunning).checks.first { $0.id == "logic.responsiveness" }).status == .pass)
+}
