@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Qualify the exact release-runtime artifact from one same-repository PR run on the trusted Logic
+# Qualify the exact release-runtime artifact from one PR run on the trusted Logic
 # host, then post an exact-SHA commit status that the required `build` job consumes. Invoke this
 # entrypoint only from a clean checkout of protected `origin/main`; the candidate checkout is a
-# separate argument. Fork code is refused before anything from the candidate is executed.
+# separate argument. Same-repository and fork pull requests are both accepted: the candidate runs
+# with neither the status token nor stdin, and only this trusted wrapper can publish the status.
+# Fork PRs: a maintainer runs this only after reviewing the exact head; candidate code runs on this host with the invoking user's local access.
 set -euo pipefail
 
 SHA="${1:-}"
@@ -170,8 +172,8 @@ pull_request = pull_requests[0]
 head_sha = (pull_request.get("head") or {}).get("sha")
 base_sha = (pull_request.get("base") or {}).get("sha")
 expected_repo_url = f"https://api.github.com/repos/{expected_repo}"
-if (pull_request.get("head") or {}).get("repo", {}).get("url") != expected_repo_url:
-    raise SystemExit("fork pull requests cannot execute on the trusted Logic host")
+# The head repository may be a fork; only the base repository, base ref, merge SHA, run attempt
+# and artifact bind the candidate.
 if (pull_request.get("base") or {}).get("repo", {}).get("url") != expected_repo_url:
     raise SystemExit("pull request base repository identity mismatch")
 if (pull_request.get("base") or {}).get("ref") != "main":
@@ -196,7 +198,50 @@ with open(sys.argv[5], "w", encoding="utf-8") as output:
 PY
 }
 
+# A fork pull request run has an empty `pull_requests` array. Resolve its identity through the
+# trusted API: exactly one open PR for the run head SHA whose base is this repository's main.
+resolve_run_pull_request() {
+  local run_file="$1" head_query
+  head_query="$(python3 - "$run_file" <<'PY'
+import json, sys, urllib.parse
+run = json.load(open(sys.argv[1], encoding="utf-8"))
+if not run.get("pull_requests") and run.get("event") == "pull_request":
+    owner = ((run.get("head_repository") or {}).get("owner") or {}).get("login")
+    branch = run.get("head_branch")
+    if not owner or not branch or not run.get("head_sha"):
+        raise SystemExit("CI run lacks a head repository owner, branch or SHA")
+    print("state=open&base=main&per_page=100&head=" + urllib.parse.quote(f"{owner}:{branch}", safe=""))
+PY
+)"
+  [ -n "$head_query" ] || return 0
+  trusted_api GET "repos/$REPO/pulls?$head_query" > "$work/pulls.json"
+  python3 - "$run_file" "$work/pulls.json" "$REPO" <<'PY'
+import json, sys
+run = json.load(open(sys.argv[1], encoding="utf-8"))
+pulls = json.load(open(sys.argv[2], encoding="utf-8"))
+repo = sys.argv[3]
+head_repo = (run.get("head_repository") or {}).get("full_name")
+if not isinstance(pulls, list) or not head_repo:
+    raise SystemExit("pull request lookup did not return a list for a known head repository")
+matches = [
+    pull for pull in pulls
+    if pull.get("state") == "open"
+    and (pull.get("head") or {}).get("sha") == run.get("head_sha")
+    and ((pull.get("head") or {}).get("repo") or {}).get("full_name") == head_repo
+    and ((pull.get("base") or {}).get("repo") or {}).get("full_name") == repo
+    and (pull.get("base") or {}).get("ref") == "main"
+]
+if len(matches) != 1:
+    raise SystemExit(
+        f"native CI qualification requires exactly one open main pull request for the run head, found {len(matches)}")
+run["pull_requests"] = matches
+with open(sys.argv[1], "w", encoding="utf-8") as output:
+    json.dump(run, output)
+PY
+}
+
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run.json"
+resolve_run_pull_request "$work/run.json"
 validate_run "$work/run.json" "$work/run-attempt.txt"
 
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
@@ -296,6 +341,7 @@ test -z "$(git -C "$TRUSTED_ROOT" status --porcelain)"
 test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$SHA"
 test -z "$(git -C "$CANDIDATE_ROOT" status --porcelain)"
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
+resolve_run_pull_request "$work/run-success.json"
 validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt"
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts-success.json"
