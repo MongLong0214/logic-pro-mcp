@@ -2389,7 +2389,7 @@ struct QualificationRunnerTests {
         let observed = try #require(result.operationResults[spec.id.rawValue])
         #expect(result.mutationRestoreRecords.isEmpty)
         #expect(observed.mutationRestore == nil)
-        #expect(observed.mutationRestoreRefusal?.contains("position") == true,
+        #expect(try #require(observed.mutationRestoreRefusal).contains("position"),
                 "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let requests = try String(
             contentsOf: fixture.directory.appendingPathComponent("requests"), encoding: .utf8)
@@ -2436,7 +2436,7 @@ struct QualificationRunnerTests {
         let observed = try #require(result.operationResults[spec.id.rawValue])
         #expect(result.mutationRestoreRecords.isEmpty)
         #expect(observed.mutationRestore == nil)
-        #expect(observed.mutationRestoreRefusal?.contains("position") == true,
+        #expect(try #require(observed.mutationRestoreRefusal).contains("position"),
                 "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let requests = try String(
             contentsOf: fixture.directory.appendingPathComponent("requests"), encoding: .utf8)
@@ -2466,7 +2466,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(result.mutationRestoreRecords.isEmpty)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true,
+        #expect(try #require(observed.mutationRestoreRefusal).contains("playhead"),
                 "\(observed.mutationRestoreRefusal ?? "no refusal")")
     }
 
@@ -2522,7 +2522,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("playhead"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
     }
 
     /// An error reply that does not prove the submission was confirmed stays a failed restore even
@@ -2541,7 +2541,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("playhead"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
     }
 
     // MARK: Display mode: Logic's default shows bar and beat only
@@ -2612,7 +2612,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         for write in ["play", "stop", "pause", "goto_position", "goto_bar"] {
             #expect(!events.contains(write), "nothing is written before Beats is confirmed: \(events)")
@@ -2638,7 +2638,7 @@ struct QualificationRunnerTests {
         let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
-        #expect(observed.mutationRestoreRefusal?.contains("position") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("position"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         for write in ["play", "stop", "pause", "goto_position", "goto_bar"] {
             #expect(!events.contains(write), "no position-changing call before the origin is known: \(events)")
@@ -2686,7 +2686,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         #expect(QualificationPositionDisplayFake.containsInOrder(
             ["mode_switch", command, "goto_position", "transport_read", "mode_restore"], in: events),
@@ -2711,7 +2711,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("playhead"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
     }
 
     /// v-1. A control bar already in Beats is not switched, so there is nothing to give back; the
@@ -2731,7 +2731,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         #expect(!events.contains("mode_switch") && !events.contains("mode_restore"),
                 "this call never switched, so it never writes the mode: \(events)")
@@ -2752,7 +2752,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         for change in ["mode_switch", "mode_restore", "play", "stop", "pause", "goto_position", "goto_bar"] {
             #expect(!events.contains(change), "nothing is changed before the original mode is known: \(events)")
@@ -2773,7 +2773,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("moving") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("moving"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         for change in ["mode_switch", "mode_restore", "play", "stop", "pause", "goto_position", "goto_bar"] {
             #expect(!events.contains(change), "nothing is changed before the start is known to be stationary: \(events)")
@@ -2832,7 +2832,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         #expect(!events.contains("mode_switch") && !events.contains("mode_restore"), "\(events)")
         #expect(fake.mode == QualificationPositionDisplayFake.beats)
@@ -2856,7 +2856,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("display mode") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         for change in ["mode_switch", "mode_restore", "play", "stop", "pause", "goto_position", "goto_bar"] {
             #expect(!events.contains(change), "nothing is changed once the original is not what it was: \(events)")
@@ -2886,7 +2886,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(records == 0)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("moving") == true, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(try #require(observed.mutationRestoreRefusal).contains("moving"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let recipe = try recipeRequests(fixture)
         for change in ["play", "stop", "pause", "goto_position", "goto_bar"] {
             #expect(!recipe.contains { $0.contains("\"command\":\"\(change)\"") },
@@ -2957,7 +2957,7 @@ struct QualificationRunnerTests {
     /// would leave Logic's default Beats & Project in place and refuse every cycle.)
     @Test func theShippedDriveSuppliesTheProductionPositionDisplay() {
         let transport = QualificationRunner.Runtime.shippedTransport(uiObserver: unchangedUIForTests)
-        #expect(transport.positionDisplay?.isProduction == true)
+        #expect(try #require(transport.positionDisplay).isProduction)
     }
 
     /// The parser every recipe shares, on what the resource can publish (StateReaders.swift
@@ -3023,7 +3023,7 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(result.mutationRestoreRecords.isEmpty)
         #expect(observed.status != .passed)
-        #expect(observed.mutationRestoreRefusal?.contains("playhead") == true,
+        #expect(try #require(observed.mutationRestoreRefusal).contains("playhead"),
                 "\(observed.mutationRestoreRefusal ?? "no refusal")")
     }
 
