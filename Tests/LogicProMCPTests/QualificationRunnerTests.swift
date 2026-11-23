@@ -2955,7 +2955,7 @@ struct QualificationRunnerTests {
     /// The shipped `--qualify` drive builds its transport with the production position display, so
     /// the display handling above is what the live gate runs. (A drive whose display was dropped
     /// would leave Logic's default Beats & Project in place and refuse every cycle.)
-    @Test func theShippedDriveSuppliesTheProductionPositionDisplay() {
+    @Test func theShippedDriveSuppliesTheProductionPositionDisplay() throws {
         let transport = QualificationRunner.Runtime.shippedTransport(uiObserver: unchangedUIForTests)
         #expect(try #require(transport.positionDisplay).isProduction)
     }
