@@ -21,6 +21,18 @@ env:
   # implementation-qualified name while `swift test list` includes the module prefix.
   TEST_SHARD_SELECTOR: '\.(QualificationRunnerTests|Issue965FreshPopulationAcquisitionTests|Issue538TrackCreationObservationTests|Issue968ExactTrackNameAdapterTests|QualificationFaultInjectionTests|MIDIReadbackCallSiteLintTests|Issue538ModalWitnessTests)/'
 
+# Every macOS job below runs on `macos-15`, an arm64 image: the architecture the product ships
+# to and the native Logic host qualifies. The compile and the test run are architecture specific
+# (a coverage profile is only meaningful against the binary that produced it, and the
+# release-runtime artifact is the exact file native qualification runs), so the four jobs that
+# share them must share one label. The `lipo -archs` assertions below fail the job if the label
+# ever stops being arm64 instead of letting the evidence change silently.
+# Measured on this repository's CI history, 2026-11-03 .. 2026-11-17: the identical coverage
+# test-build compile step took a median of 37 minutes on the arm label (3 runs) and 85 minutes
+# on the Intel one (33 runs), and a test-build job hit its 130-minute limit while compiling.
+# Queue stalls and "not acquired" aborts occurred on both labels, overlapping in time on
+# 2026-11-08 and 2026-11-11, so neither label is a cure for them and no label fallback is wired;
+# the shorter job is what makes a lost attempt cheaper.
 jobs:
   change-scope:
     name: change-scope
@@ -29,6 +41,7 @@ jobs:
     outputs:
       mode: ${{ steps.scope.outputs.mode }}
       full-validation: ${{ steps.scope.outputs.full-validation }}
+      native-required: ${{ steps.scope.outputs.native-required }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -50,7 +63,17 @@ jobs:
             mode=docs-only
           fi
           if [ "$mode" = full ]; then full_validation=true; else full_validation=false; fi
+          # Native Logic qualification covers the release binary built from Sources, so it is
+          # required only when a change touches Sources/, Tests/, Package.swift or Package.resolved.
+          # An empty diff or a symlink/submodule entry still requires it.
+          native_required=true
+          if [ -s "$changes" ] &&
+             ! LC_ALL=C grep -Ev '^:(100644|100755|000000) (100644|100755|000000) [0-9a-f]{40} [0-9a-f]{40} [A-Z][[:space:]][^[:space:]]+$' "$changes" > /dev/null &&
+             ! LC_ALL=C grep -Eq '^:[^[:space:]]+ [^[:space:]]+ [0-9a-f]{40} [0-9a-f]{40} [A-Z][[:space:]](Sources/|Tests/|Package[.]swift$|Package[.]resolved$)' "$changes"; then
+            native_required=false
+          fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "native-required=$native_required" >> "$GITHUB_OUTPUT"
           echo "full-validation=$full_validation" >> "$GITHUB_OUTPUT"
 
   # Canon and locale validation is intentionally independent of change-scope. A documentation
@@ -111,7 +134,7 @@ jobs:
   release-build:
     name: release-build
     needs: change-scope
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -142,6 +165,7 @@ jobs:
           swift build -c release
           git diff --exit-code Package.resolved
           test -x .build/release/LogicProMCP
+          test "$(lipo -archs .build/release/LogicProMCP)" = arm64
           mkdir -p "$RUNNER_TEMP/release-runtime"
           cp .build/release/LogicProMCP "$RUNNER_TEMP/release-runtime/LogicProMCP"
           git rev-parse HEAD > "$RUNNER_TEMP/release-runtime/candidate-sha.txt"
@@ -159,7 +183,7 @@ jobs:
     name: test-build
     needs: change-scope
     if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 130
     env:
       DEVELOPER_DIR: /Library/Developer/CommandLineTools
@@ -252,6 +276,7 @@ jobs:
           test_bundle=".build/$triple_debug/LogicProMCPPackageTests.xctest"
           test_binary="$test_bundle/Contents/MacOS/LogicProMCPPackageTests"
           test -x "$test_binary"
+          test "$(lipo -archs "$test_binary")" = arm64
           test -x ".build/$triple_debug/LogicProMCP"
           tar -czf "$artifact/runtime.tar.gz" \
             .build/debug "$test_bundle" ".build/$triple_debug/LogicProMCP"
@@ -270,7 +295,7 @@ jobs:
     name: test-shards (${{ matrix.shard }})
     needs: [change-scope, release-build, test-build]
     if: ${{ needs.change-scope.outputs.full-validation == 'true' && needs.release-build.result == 'success' && needs.test-build.result == 'success' }}
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -373,7 +398,7 @@ jobs:
     name: product-validation
     needs: [change-scope, release-build, test-build, test-shards]
     if: always()
-    runs-on: ${{ needs.change-scope.outputs.full-validation == 'true' && 'macos-15-intel' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.change-scope.outputs.full-validation == 'true' && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 20
     outputs:
       outcome: ${{ steps.product.outcome }}
@@ -484,18 +509,20 @@ jobs:
   # hosted-runner skip or source-only substitute can produce success.
   native-logic-e2e:
     name: native-logic-e2e
-    needs: [release-build, product-validation]
+    needs: [change-scope, release-build, product-validation]
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 190
     permissions:
       actions: read
       contents: read
       statuses: read
     steps:
       - name: Require successful exact-artifact native Logic qualification
+        if: ${{ needs.change-scope.outputs.native-required != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          NATIVE_WAIT_MINUTES: ${{ vars.NATIVE_WAIT_MINUTES || '180' }}
           EXPECTED_ATTEMPT: ${{ github.run_attempt }}
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_TARGET: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
@@ -506,16 +533,21 @@ jobs:
           set -euo pipefail
           test "$RELEASE_BUILD" = success
           test "$PRODUCT_VALIDATION" = success
-          gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/status?per_page=100" \
-            > "$RUNNER_TEMP/combined-status.json"
-          gh api --paginate --slurp \
-            "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/statuses?per_page=100" \
-            > "$RUNNER_TEMP/status-pages.json"
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
-            > "$RUNNER_TEMP/artifacts.json"
-          python3 - "$RUNNER_TEMP/combined-status.json" "$RUNNER_TEMP/status-pages.json" \
-            "$RUNNER_TEMP/artifacts.json" \
-            "$EXPECTED_SHA" "$EXPECTED_TARGET" "$EXPECTED_ATTEMPT" "$RUN_ID" <<'PY'
+          # Exit 3 from the consumer means "no native status yet": keep this job (and so
+          # the run) active until the maintainer's Scripts/ci-native-qualify.sh posts it.
+          deadline=$((SECONDS + NATIVE_WAIT_MINUTES * 60))
+          while true; do
+            gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/status?per_page=100" \
+              > "$RUNNER_TEMP/combined-status.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/statuses?per_page=100" \
+              > "$RUNNER_TEMP/status-pages.json"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
+              > "$RUNNER_TEMP/artifacts.json"
+            set +e
+            python3 - "$RUNNER_TEMP/combined-status.json" "$RUNNER_TEMP/status-pages.json" \
+              "$RUNNER_TEMP/artifacts.json" \
+              "$EXPECTED_SHA" "$EXPECTED_TARGET" "$EXPECTED_ATTEMPT" "$RUN_ID" <<'PY'
           import json, re, sys
           status_response = json.load(open(sys.argv[1], encoding="utf-8"))
           status_pages = json.load(open(sys.argv[2], encoding="utf-8"))
@@ -544,9 +576,10 @@ jobs:
               raise SystemExit("native receipt exceeds GitHub's commit-status description limit")
           exact = [row for row in rows if row.get("context") == "logic-native-e2e"]
           if not exact:
-              raise SystemExit(
-                  "missing exact native status; run Scripts/ci-native-qualify.sh "
-                  f"for candidate {expected_sha} and run {run_id} on the trusted Logic host")
+              print("missing exact native status; run Scripts/ci-native-qualify.sh "
+                    f"for candidate {expected_sha} and run {run_id} on the trusted Logic host",
+                    file=sys.stderr)
+              raise SystemExit(3)
           latest = exact[0]
           if latest.get("target_url") != expected_target:
               raise SystemExit("native status belongs to another CI run attempt")
@@ -559,6 +592,16 @@ jobs:
               raise SystemExit("native status was not published by the trusted repository owner")
           print("Current run-attempt artifact passed native Logic qualification")
           PY
+            rc=$?
+            set -e
+            test "$rc" -eq 0 && exit 0
+            test "$rc" -eq 3 || exit "$rc"
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "timed out after $NATIVE_WAIT_MINUTES minutes without a native status" >&2
+              exit 1
+            fi
+            sleep 60
+          done
 
   build:
     name: build

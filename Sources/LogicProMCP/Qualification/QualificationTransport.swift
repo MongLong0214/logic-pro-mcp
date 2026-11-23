@@ -1857,7 +1857,7 @@ struct QualificationTransport: Sendable {
             }
             for spec in request.operations {
                 // The UI as this operation found it. Read before anything is sent.
-                let uiBefore = uiObserver()
+                let uiBefore = QualificationUIInvariants.settledBaseline(observe: uiObserver, sleep: uiSettleSleep)
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
                 var responseFailure: String? = readProbePreparationFailures[spec.id]

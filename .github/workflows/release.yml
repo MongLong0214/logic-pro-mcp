@@ -39,6 +39,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
       - name: Bind dispatch to exact main candidate
         env:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}

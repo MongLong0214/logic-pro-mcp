@@ -93,6 +93,9 @@ struct QualificationUIObservation: Equatable, Sendable {
     let axWindows: [QualificationAXWindowFacts]
     /// False when the AXWindows list itself did not read: an empty `axWindows` is then unknown.
     let axWindowsRead: Bool
+    /// False when the window-server list was never taken (Logic not found, or no list returned):
+    /// the empty `windows` is then unknown, and no window delta can be judged against it.
+    let windowListRead: Bool
     let focus: QualificationFocusIdentity?
     /// The AXError of the focus read. Anything but 0 is a violation: a read that did not happen is
     /// not "no focus".
@@ -107,10 +110,12 @@ struct QualificationUIObservation: Equatable, Sendable {
         windows: [Int: QualificationWindowFacts] = [:],
         axWindows: [QualificationAXWindowFacts] = [],
         axWindowsRead: Bool = true,
+        windowListRead: Bool = true,
         focus: QualificationFocusIdentity? = nil,
         focusStatus: Int32 = 0,
         unreadable: [String] = []
     ) {
+        self.windowListRead = windowListRead
         self.menuLayerWindows = menuLayerWindows
         self.modalLayerWindows = modalLayerWindows
         self.windows = windows
@@ -188,12 +193,16 @@ enum QualificationUIInvariants {
         // A tooltip appears and disappears with the pointer, not with the operation (measured on
         // Logic 13: layer 103, AXRole AXHelpTag, 32x19). It is excused ONLY when its AX role READ as
         // AXHelpTag; its window-server twin is the unnamed window with exactly that AX frame.
-        for number in Set(after.windows.keys).subtracting(before.windows.keys).sorted() {
+        // A window list that was never read is unknown, not empty: every on-screen window would
+        // otherwise be reported as newly opened (measured: the main window, native run 9e6d22b7-r2).
+        // The unreadable read itself is reported below and still fails the operation.
+        let windowDeltaJudgeable = before.windowListRead && after.windowListRead
+        for number in (windowDeltaJudgeable ? Set(after.windows.keys).subtracting(before.windows.keys).sorted() : []) {
             if after.windows[number].map(after.isReadHelpTagTwin) == true { continue }
             let summary = after.windows[number]?.summary ?? "?"
             found.append("ui_invariant: window_left_open(window \(number), \(summary))")
         }
-        for number in Set(before.windows.keys).subtracting(after.windows.keys).sorted() {
+        for number in (windowDeltaJudgeable ? Set(before.windows.keys).subtracting(after.windows.keys).sorted() : []) {
             if before.windows[number].map(before.isReadHelpTagTwin) == true { continue }
             let summary = before.windows[number]?.summary ?? "?"
             found.append("ui_invariant: window_closed(window \(number), \(summary))")
@@ -225,6 +234,28 @@ enum QualificationUIInvariants {
                 "ui_invariant: focus_moved(\(before.focus?.summary ?? "none") -> \(after.focus?.summary ?? "none"))")
         }
         return found
+    }
+
+    // MARK: baseline
+
+    /// The baseline is read before anything is sent, so re-reading it cannot hide an effect of the
+    /// operation. Only a window-server list that was never taken (Logic not found by the lookup) is
+    /// retried, up to `limit`; the last reading is returned as is and, if still unreadable, still
+    /// fails the operation as `ui_invariant_unreadable(baseline: ...)`.
+    static func settledBaseline(
+        observe: () -> QualificationUIObservation?,
+        sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) },
+        interval: TimeInterval = settleInterval,
+        limit: TimeInterval = settleLimit
+    ) -> QualificationUIObservation? {
+        var waited: TimeInterval = 0
+        var reading = observe()
+        while let current = reading, !current.windowListRead, waited < limit {
+            sleep(interval)
+            waited += interval
+            reading = observe()
+        }
+        return reading
     }
 
     // MARK: settle
@@ -273,12 +304,12 @@ enum QualificationUIInvariants {
     ) -> QualificationUIObservation {
         guard let pid = runningPID() else {
             return QualificationUIObservation(
-                axWindowsRead: false, focusStatus: Int32(AXError.cannotComplete.rawValue),
+                axWindowsRead: false, windowListRead: false, focusStatus: Int32(AXError.cannotComplete.rawValue),
                 unreadable: ["Logic application not found by the running-application lookup"])
         }
         guard let cg = windowList() else {
             return QualificationUIObservation(
-                axWindowsRead: false, focusStatus: Int32(AXError.cannotComplete.rawValue),
+                axWindowsRead: false, windowListRead: false, focusStatus: Int32(AXError.cannotComplete.rawValue),
                 unreadable: ["CGWindowListCopyWindowInfo returned no list"])
         }
         return observeLogic(pid: pid, cgWindows: cg, runtime: runtime)
