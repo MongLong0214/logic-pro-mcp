@@ -23,10 +23,10 @@ state. GitHub issue bodies and maintainer comments remain the acceptance authori
 a dated operational readback, not a CI policy surface; currentness is checked when it is edited,
 without adding repository machinery whose only purpose is to police the document.
 
-## State — read 2026-11-20 15:48 KST at `main` `e881eb2d`
+## State — read 2026-11-23 11:55 KST at `main` `fefa4a60`
 
 ```
-42 open issues · 3 open pull requests (#1590, #1597, #1561 draft) · latest stable release v3.19.0 (published 2026-11-18) · Homebrew installation v3.19.0 · source version 3.19.0
+44 open issues · 8 open pull requests (#1590, #1597, #1561 draft, #1607, #1608, #1609, #1619, #1620) · latest stable release v3.19.0 (published 2026-11-18) · Homebrew installation v3.19.0 · source version 3.19.0
 ```
 
 The counts above come from GitHub reads on the date above. Issue bodies and maintainer comments remain
@@ -55,7 +55,14 @@ replaced, not appended: its release-gate prose described a cut that has now happ
   playhead and asks for required verification), #1583, #1584 and #1589 (native bootstrap and
   candidate history), #1594 (release unblock) and #1595 (README for v3.19.0). The fixes for #1550
   (#1560), #1552 (#1558) and the late-mutation boundary of #1565 (#1572) are in v3.19.0.
-- **Open pull requests.** #1590 declares the Logic release once and runs the Logic 13.0 ko-KR label
+- **Merged since 2026-11-20:** #1611 (press a plug-in slot's open control again when the first press
+  opens no editor), #1612 (launch film), #1613 (native job polls for the exact native status), #1616
+  (native qualification is skipped for docs, demo and media only changes) and #1610 (fork pull
+  requests can pass native qualification). #1618 (plug-in chains) is open with #1619, and #1621
+  (`transport.stop` does not stop playback on Logic 13) was filed on 2026-11-23.
+- **Open pull requests.** #1608 and #1609 (read-only sample source preparation, #1609 is the
+  maintainer copy of #1608), #1619 (#1618) and #1620 (remove a call to action from the launch film) are
+  outside the batches below. #1590 declares the Logic release once and runs the Logic 13.0 ko-KR label
   census; it owns the Logic session until it finishes. Its native plug-in failure was measured: a
   clean-state A/B gave 9 of 9 passes on both the `main` and #1590 binaries, so the label change is
   not the cause and a keychain prompt left on screen is the likely one. Its latest run at `5588277c`
@@ -132,13 +139,15 @@ second cycle, and a Logic update. A newly exposed native defect adds a repair cy
 
 ### Open-issue classification
 
-`Real` means the defect or missing feature is still present at `main` `e881eb2d` on Logic 13.0, from
+`Real` means the defect or missing feature is still present at `main` `fefa4a60` on Logic 13.0, from
 the code, the changelog and the qualification list; `Logic` says whether the closing work needs a
 Logic session.
 
 | issue | area | state on Logic 13.0 and v3.19.0 | depends on | size | Logic | stars |
 |---|---|---|---|---|---|---|
+| #1621 | transport | Real, filed 2026-11-23. `transport.stop` ends State C `readback_mismatch` and playback restarts from the start | none | M | yes | high |
 | #1606 | performance | Real, unmeasured at clean state. 0.25 to 1.3 s per `set_volume` write against the 100x-human-speed goal; split the time first | batch 1 | M | yes | high |
+| #1618 | plug-ins | Open, fix in #1619. `insert_plugin` appends to the next free slot and covers every measured stock Audio FX | none | M | yes | low |
 | #1605 | focus | Observation. Focus was on track contents at preflight; the demo automation may have caused it | batch 1 | S | yes | low |
 | #1604 | focus | Real. The `unsafe_focus_for_synthetic_key` refusal does not say how to clear it | none | S | yes | medium |
 | #1603 | tracks | Real. First `logic://tracks` read in a new process is empty with `no_live_track_read_yet` | #1565 | M | yes | high |
