@@ -554,7 +554,7 @@ struct Issue105GotoNoteTests {
             cache: StateCache()
         )
 
-        #expect(result.isError == true)
+        #expect(try #require(result.isError))
         let envelope = try #require(obj(result))
         #expect(try #require(envelope["state"] as? String) == "B")
         #expect(try #require(envelope["reason"] as? String) == "readback_unavailable")
