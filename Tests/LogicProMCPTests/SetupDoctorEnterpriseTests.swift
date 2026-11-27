@@ -392,7 +392,7 @@ private struct FrozenV1Report: Codable {
 @Test func test_t2_launch_context_reports_binding_without_rerun_instruction() throws {
     let c = try #require(check(makeReport(), "permissions.launch_context"))
     #expect(c.status == .pass)
-    #expect(c.summary == "This report measures TCC permissions for the responsible process terminal; permission results are bound to that launch context.")
+    #expect(c.summary == "The responsible process could not be measured, so permission results are shown without an identity; the identity is unresolved (launch context hint: terminal).")
     #expect(c.remediation.type == .none)
     #expect(c.remediation.value == "")
 }
@@ -480,7 +480,7 @@ private struct FrozenV1Report: Codable {
 @Test func test_t3_headline_render_nonpass() {
     let report = makeReport(permission: granted(systemEvents: .notGranted))
     let out = SetupDoctor.renderHuman(report, mode: .default, useColor: false)
-    #expect(report.headline == "Terminal outcome [permissions.automation_system_events]: Automation permission for System Events is not granted for the responsible process that launched this server; this is a launcher-permission gap, and Logic Pro automation is separate.")
+    #expect(report.headline == "Terminal outcome [permissions.automation_system_events]: Automation permission for System Events is not granted for the responsible process (identity unresolved); Logic Pro automation is separate.")
     #expect(report.fixPlan == [])
     #expect(out.contains(report.headline))
     #expect(!(out.contains("Next action")))

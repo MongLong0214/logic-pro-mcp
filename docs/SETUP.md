@@ -60,7 +60,7 @@ Claude Desktop can launch the same configured MCP server separately for chat and
 Open **System Settings -> Privacy & Security**:
 
 1. **Accessibility**: enable the process macOS evaluates for the server:
-   - **Claude Desktop**: the `LogicProMCP` binary itself, not Claude. Claude Desktop launches MCP servers with TCC responsibility disclaimed. Run `LogicProMCP --request-permissions` in Terminal and turn on the `LogicProMCP` entry it adds, then reopen Claude Desktop. Remove older `LogicProMCP` entries first, and repeat after each `brew upgrade`: the Cellar path and ad-hoc signature change with every version.
+   - **Claude Desktop**: the `LogicProMCP` binary itself, not Claude. Claude Desktop launches MCP servers with TCC responsibility disclaimed. Find the executable Claude Desktop is configured to run (the `command` of the LogicProMCP entry in its MCP configuration), then request for that exact path: `"<that command>" --request-permissions` in Terminal (or `LogicProMCP --request-permissions "<that command>"`). Turn on the entry it adds, leave entries that are already enabled alone, and reopen Claude Desktop. See [Troubleshooting](TROUBLESHOOTING.md#claude-desktop-accessibility-or-postevent-not-granted-macos-26-and-27) for the full procedure. A Homebrew upgrade installs a new Cellar path, so repeat the request after each `brew upgrade`.
    - **Claude Code, Terminal, iTerm, Cursor, VS Code**: the app that launches `LogicProMCP`.
 2. **Automation**: allow that same process to control **Logic Pro** and **System Events**.
 

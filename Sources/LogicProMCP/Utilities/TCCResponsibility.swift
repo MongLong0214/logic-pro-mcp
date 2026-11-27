@@ -11,23 +11,59 @@ import Darwin
 /// start stdio servers that way through a `disclaimer` helper, so a server they launch is
 /// evaluated as the LogicProMCP binary at its own path, not as the client app.
 enum TCCResponsibility {
+    /// The responsible process, identified only by a label that is safe to show to anyone.
+    /// The executable's directory is never part of it: it can hold a client or project name,
+    /// and every public surface (MCP result, CLI, doctor, support bundle) prints this value.
+    /// The real path stays inside the spawn code (`PermissionRequestCommand`).
     struct Principal: Equatable, Sendable {
         let pid: pid_t
-        /// Executable path of the responsible process, with the home directory shortened to `~`.
-        /// nil when the path could not be read.
-        let path: String?
+        /// Public-safe identifier: executable basename, a fixed install-kind label, and the
+        /// bundle identifier when the executable is inside an app bundle. nil when the path
+        /// could not be read.
+        let label: String?
         /// True when this process is its own responsible process.
         let isSelf: Bool
 
-        var displayPath: String { path ?? "unknown path" }
+        var displayName: String { label ?? "unidentified process" }
 
         /// One line naming the principal, without a setup instruction: the permission report
         /// states what was measured and does not ask for a manual continuation.
         var summaryLine: String {
             isSelf
-                ? "TCC principal: this LogicProMCP binary itself (\(displayPath)); grants held by the app that launched it do not apply"
-                : "TCC principal: \(displayPath) (the responsible process that launched this server)"
+                ? "TCC principal: this LogicProMCP binary itself (\(displayName)); grants held by the app that launched it do not apply"
+                : "TCC principal: \(displayName) (the responsible process that launched this server)"
         }
+    }
+
+    /// Fixed install-kind vocabulary. Anything unrecognised is "other install", never the path.
+    static func installKind(of path: String) -> String {
+        if path.contains("/Cellar/") || path.hasPrefix("/opt/homebrew/") || path.hasPrefix("/usr/local/") {
+            return "homebrew"
+        }
+        if path.contains("/.build/") { return "source build" }
+        if path.contains(".app/Contents/") { return "app bundle" }
+        return "other install"
+    }
+
+    /// The public-safe identifier for an executable path (see `Principal.label`).
+    static func publicLabel(forExecutablePath path: String, bundleIdentifier: (String) -> String? = TCCResponsibility.bundleIdentifier(forExecutablePath:)) -> String {
+        let raw = (path as NSString).lastPathComponent
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._- ")
+        let name = raw.isEmpty || raw.count > 64 || raw.unicodeScalars.contains(where: { !allowed.contains($0) })
+            ? "unnamed executable"
+            : raw
+        var detail = installKind(of: path)
+        if let bundle = bundleIdentifier(path), !bundle.isEmpty, bundle.count <= 128,
+           bundle.unicodeScalars.allSatisfy({ allowed.contains($0) && $0 != " " }) {
+            detail += ", \(bundle)"
+        }
+        return "\(name) (\(detail))"
+    }
+
+    static func bundleIdentifier(forExecutablePath path: String) -> String? {
+        guard let range = path.range(of: ".app/Contents/") else { return nil }
+        let appPath = String(path[..<path.index(range.lowerBound, offsetBy: 4)])
+        return Bundle(path: appPath)?.bundleIdentifier
     }
 
     private typealias ResponsibleForPID = @convention(c) (pid_t) -> pid_t
@@ -63,7 +99,7 @@ enum TCCResponsibility {
             selfPID: getpid(),
             responsiblePID: responsiblePID(for:),
             pathForPID: executablePath(of:),
-            homeDirectory: FileManager.default.homeDirectoryForCurrentUser.path
+            labelForPath: { publicLabel(forExecutablePath: $0) }
         )
     }
 
@@ -73,20 +109,14 @@ enum TCCResponsibility {
         selfPID: pid_t,
         responsiblePID: (pid_t) -> pid_t?,
         pathForPID: (pid_t) -> String?,
-        homeDirectory: String?
+        labelForPath: (String) -> String = { publicLabel(forExecutablePath: $0, bundleIdentifier: { _ in nil }) }
     ) -> Principal? {
         guard let responsible = responsiblePID(selfPID) else { return nil }
         return Principal(
             pid: responsible,
-            path: pathForPID(responsible).map { redactHome($0, homeDirectory: homeDirectory) },
+            label: pathForPID(responsible).map(labelForPath),
             isSelf: responsible == selfPID
         )
-    }
-
-    static func redactHome(_ path: String, homeDirectory: String?) -> String {
-        guard let home = homeDirectory, home.count > 1 else { return path }
-        if path == home { return "~" }
-        return path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
     }
 
     enum SpawnOutcome: Equatable, Sendable {
@@ -99,7 +129,11 @@ enum TCCResponsibility {
     /// Run `executable` as its own responsible process, inheriting stdin/stdout/stderr, and
     /// wait for it. This is the same arrangement a disclaiming MCP client uses for servers, so a
     /// permission request made by the child is recorded for the child's binary.
-    static func runDisclaimed(executable: String, arguments: [String]) -> SpawnOutcome {
+    static func runDisclaimed(
+        executable: String,
+        arguments: [String],
+        extraEnvironment: [String: String] = [:]
+    ) -> SpawnOutcome {
         guard let setDisclaim = symbol("responsibility_spawnattrs_setdisclaim", as: SetDisclaim.self) else {
             return .disclaimUnavailable
         }
@@ -111,8 +145,12 @@ enum TCCResponsibility {
 
         let argv = ([executable] + arguments).map { strdup($0) } + [nil]
         defer { argv.forEach { free($0) } }
+        var environment = ProcessInfo.processInfo.environment
+        extraEnvironment.forEach { environment[$0.key] = $0.value }
+        let envp = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer { envp.forEach { free($0) } }
         var pid: pid_t = 0
-        let spawnStatus = posix_spawn(&pid, executable, nil, &attributes, argv, environ)
+        let spawnStatus = posix_spawn(&pid, executable, nil, &attributes, argv, envp)
         guard spawnStatus == 0 else { return .spawnFailed(spawnStatus) }
 
         var status: Int32 = 0

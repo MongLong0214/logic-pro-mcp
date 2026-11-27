@@ -66,20 +66,22 @@ macOS checks Accessibility, PostEvent and Automation against the server's *respo
 - **Claude Desktop** starts every stdio MCP server through its `disclaimer` helper with TCC responsibility disclaimed. The principal is the **LogicProMCP binary at its real path**, for example `/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicProMCP`. A grant on Claude does not apply to the server.
 - **Claude Code in a terminal, Terminal, iTerm, Cursor, VS Code**: the server inherits the launcher, so the grant belongs to that app.
 
-`LogicProMCP --check-permissions`, `logic_system permissions` and `doctor` report the measured principal: the `TCC principal:` line, and `tcc_principal` / `tcc_principal_is_self` in the evidence of `permissions.launch_context`. Run the check from the client that actually launches the server (for Claude Desktop, ask Claude to run `logic_system permissions`); a Terminal run measures Terminal.
+`LogicProMCP --check-permissions`, `logic_system permissions` and `doctor` report the measured principal by a public label only (executable name, install kind such as `homebrew`, `source build` or `app bundle`, and the bundle identifier when there is one; never a directory): the `TCC principal:` line, and `tcc_principal` / `tcc_principal_is_self` in the evidence of `permissions.launch_context`. Run the check from the client that actually launches the server (for Claude Desktop, ask Claude to run `logic_system permissions`); a Terminal run measures Terminal.
 
 Homebrew installs each version under a new `Cellar/<version>` path, and the release binary carries only an ad-hoc signature. A grant for one version therefore does not carry over to the next, and the old entry stays in the list looking enabled.
 
 ### Claude Desktop: Accessibility or PostEvent not granted (macOS 26 and 27)
 
-When the `TCC principal:` line says `this LogicProMCP binary itself` and Accessibility or PostEvent is reported as not granted, or the unified log shows `kTCCServicePostEvent` evaluated for the LogicProMCP path with `Auth:Denied (Service Policy)`, that binary has no matching Accessibility grant (if both are reported granted, leave the entry alone). PostEvent follows the binary's Accessibility grant, so one switch fixes both.
+When the `TCC principal:` line says `this LogicProMCP binary itself` and Accessibility or PostEvent is reported as not granted, the binary Claude Desktop launches has no matching Accessibility grant (if both are reported granted, leave the entry alone). PostEvent follows that binary's Accessibility grant on the macOS versions tested here, so one switch is expected to fix both; step 4 confirms it.
 
-1. Quit Claude Desktop.
-2. In **System Settings -> Privacy & Security -> Accessibility**, select every `LogicProMCP` entry and remove it with **-**. An entry left from an older Cellar path or build stays enabled but never matches.
-3. Run `LogicProMCP --request-permissions` in Terminal. It requests from a disclaimed copy of the binary, so macOS lists the binary rather than Terminal. Turn the new `LogicProMCP` entry on. Alternatively, add it with **+**: press Cmd-Shift-G and paste the real path from `realpath "$(which LogicProMCP)"`.
-4. Reopen Claude Desktop and run `logic_system permissions` again.
+Several LogicProMCP copies can exist at once (Homebrew, a source build, a downloaded release). Only the copy Claude Desktop is configured to run matters, and a working grant on another copy must stay in place.
 
-Repeat steps 2-4 after each `brew upgrade logic-pro-mcp`.
+1. Find the executable the affected client runs: the `command` of the LogicProMCP entry in that client's MCP configuration (for Claude Desktop, `claude_desktop_config.json`). Do not use `which LogicProMCP`: Terminal may resolve a different copy than the client launches.
+2. Quit the client. In **System Settings -> Privacy & Security -> Accessibility**, leave entries that are enabled and working. Remove an entry only when you know it belongs to a binary that no client launches any more, such as an old Cellar version.
+3. Request for that exact path from Terminal: `"<command from step 1>" --request-permissions`, or `LogicProMCP --request-permissions "<command from step 1>"`. The command prints `Requesting for: <name> (<install kind>)`, so you can confirm it acted on the intended copy; it never prints the directory. It requests from a disclaimed copy of that binary, so macOS lists the binary rather than Terminal, and it refuses, requesting nothing, if it cannot start that copy. Turn the new `LogicProMCP` entry on. Alternatively, add the step 1 binary with **+**: press Cmd-Shift-G and paste its path.
+4. Reopen the client and verify from that same client: ask it to run `logic_system permissions`. The `TCC principal` line must name the install kind you targeted and show Accessibility and PostEvent granted. A Terminal run measures Terminal and does not verify the client.
+
+Repeat steps 3-4 after each `brew upgrade logic-pro-mcp`: the new Cellar path is a different binary.
 
 ### Accessibility denied
 

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+- Permission reporting now names the macOS privacy (TCC) principal it measured, and `LogicProMCP --request-permissions [<path to the LogicProMCP executable>]` is a new person-run command that asks for Accessibility and PostEvent for that binary itself (#1596). Claude Desktop starts MCP servers with TCC responsibility disclaimed, so a grant on Claude does not apply to the server. `logic_system permissions` gains `tcc_principal` and `tcc_principal_is_self` (`null` when unmeasured), `--check-permissions` adds a `TCC principal:` line, and doctor's Accessibility, PostEvent, System Events and launch-context checks attribute results to the measured principal only, treating the launch context as a client hint. The principal is a public label (executable name, install kind, bundle identifier), never a directory path. The request always runs from a disclaimed copy and refuses, requesting nothing, when it cannot start one; the internal child flag refuses unless it carries the parent's one-shot provenance. The checks themselves still never prompt. Not verified on macOS 27 or on an installed binary.
 - Stem export now identifies the destination volume sidebar by its unique exact volume-name row
   instead of requiring it to be the export panel's only outline (#1553), so List-view browser
   outlines without that row are ignored. Duplicate matches, unreadable censuses, failed selection

@@ -54,7 +54,7 @@ extension SetupDoctor {
             id: "permissions.automation_system_events",
             domain: "permissions",
             status: checkStatus,
-            summary: systemEventsSummary(for: status.systemEventsAutomationState),
+            summary: systemEventsSummary(for: status.systemEventsAutomationState, principal: status.principal),
             evidence: ["state": status.systemEventsAutomationState.rawValue],
             remediationType: .none
         )
@@ -80,27 +80,32 @@ extension SetupDoctor {
         permissionStatus: PermissionChecker.PermissionStatus? = nil
     ) -> Check {
         let context = runtime.launchContext()
-        let principal = permissionStatus?.principal
+        // #1596: attribution comes only from the measured principal. The launch context is a hint
+        // about the client found in the parent chain; it never names who the grants belong to.
+        let hint = "launch context hint: \(context.context)"
         let summary: String
-        if let principal, principal.isSelf {
-            // #1596: the launch context names the app in the parent chain, but TCC is not
-            // evaluating that app. A launcher that disclaims responsibility (some MCP clients do,
-            // for every stdio server) leaves this binary as its own principal.
-            summary = "TCC evaluates this LogicProMCP binary itself (\(principal.displayPath)), not the launch context \(context.context); grants held by the launching app do not apply to this server."
-        } else if context.context == "unknown" {
-            summary = "This report could not identify the responsible process; permission results remain bound to the unresolved launch context."
+        if let principal = permissionStatus?.principal {
+            summary = principal.isSelf
+                ? "Permission results were measured for this LogicProMCP binary itself (\(principal.displayName)); grants held by the launching app do not apply to this server (\(hint))."
+                : "Permission results were measured for the responsible process \(principal.displayName) (\(hint))."
+        } else if permissionStatus != nil {
+            summary = "The responsible process could not be measured, so permission results are shown without an identity; the identity is unresolved (\(hint))."
         } else {
-            summary = "This report measures TCC permissions for the responsible process \(context.context); permission results are bound to that launch context."
+            summary = "Permission results are not attributed to a process here (\(hint))."
+        }
+        var launchEvidence = principalEvidence(
+            permissionStatus,
+            ["launch_context": context.context, "responsible_hint": context.responsibleHint]
+        )
+        if let permissionStatus, permissionStatus.principal == nil {
+            launchEvidence["tcc_principal"] = "unresolved"
         }
         return check(
             id: "permissions.launch_context",
             domain: "permissions",
             status: .pass,
             summary: summary,
-            evidence: principalEvidence(
-                permissionStatus,
-                ["launch_context": context.context, "responsible_hint": context.responsibleHint]
-            ),
+            evidence: launchEvidence,
             remediationType: .none
         )
     }
@@ -111,8 +116,8 @@ extension SetupDoctor {
     static func principalClause(_ status: PermissionChecker.PermissionStatus) -> String {
         guard let principal = status.principal else { return "" }
         return principal.isSelf
-            ? " for this LogicProMCP binary (\(principal.displayPath))"
-            : " for \(principal.displayPath)"
+            ? " for this LogicProMCP binary (\(principal.displayName))"
+            : " for \(principal.displayName)"
     }
 
 
@@ -122,7 +127,7 @@ extension SetupDoctor {
     ) -> [String: String] {
         guard let principal = status?.principal else { return evidence }
         var merged = evidence
-        merged["tcc_principal"] = principal.displayPath
+        merged["tcc_principal"] = principal.displayName
         merged["tcc_principal_is_self"] = principal.isSelf ? "true" : "false"
         return merged
     }
@@ -183,12 +188,23 @@ extension SetupDoctor {
     }
 
 
-    static func systemEventsSummary(for state: PermissionChecker.CheckState) -> String {
+    static func systemEventsSummary(
+        for state: PermissionChecker.CheckState,
+        principal: TCCResponsibility.Principal? = nil
+    ) -> String {
         switch state {
         case .granted:
             return "Automation permission for System Events is granted."
         case .notGranted:
-            return "Automation permission for System Events is not granted for the responsible process that launched this server; this is a launcher-permission gap, and Logic Pro automation is separate."
+            let subject: String
+            if let principal {
+                subject = principal.isSelf
+                    ? "this LogicProMCP binary (\(principal.displayName))"
+                    : principal.displayName
+            } else {
+                subject = "the responsible process (identity unresolved)"
+            }
+            return "Automation permission for System Events is not granted for \(subject); Logic Pro automation is separate."
         case .notVerifiable:
             return "Automation permission for System Events could not be verified."
         }
