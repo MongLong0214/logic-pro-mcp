@@ -172,7 +172,7 @@ class BuildScript(unittest.TestCase):
         self.addCleanup(self.bin.cleanup)
         self.count = os.path.join(self.bin.name, "count")
         self.env = {**os.environ, "COUNT": self.count, "RUNNER_OS": "macOS",
-                    "RUNNER_ARCH": "ARM64", "ImageVersion": "20260101.1"}
+                    "RUNNER_ARCH": "ARM64"}
 
     def fake_swift(self, version):
         path = os.path.join(self.bin.name, "swift")
@@ -180,6 +180,12 @@ class BuildScript(unittest.TestCase):
             handle.write(f"#!/bin/sh\necho '{version}'\n")
         os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR)
         self.env["PATH"] = self.bin.name + os.pathsep + os.environ["PATH"]
+
+    def fake_xcrun(self, sdk):
+        path = os.path.join(self.bin.name, "xcrun")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(f"#!/bin/sh\necho '{sdk}'\n")
+        os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR)
 
     def run_script(self, *args):
         return subprocess.run(["bash", BUILD, *args], cwd=self.tree.root, env=self.env,
@@ -195,16 +201,21 @@ class BuildScript(unittest.TestCase):
         # Fails while .build/poison exists, and counts every attempt.
         return ["sh", "-c", 'echo x >> "$COUNT"; test ! -e .build/poison']
 
-    def test_the_key_changes_with_the_toolchain_the_flags_and_the_image(self):
+    def test_the_key_changes_with_the_toolchain_the_flags_and_the_sdk_but_not_the_image(self):
         self.fake_swift("Apple Swift version 6.2.4")
         base = self.run_script("key", "swift", "build", "--build-tests").stdout
-        self.assertTrue(base.startswith("swift-build-macOS-ARM64-20260101.1-swift"), base)
+        self.assertTrue(base.startswith("swift-build-macOS-ARM64-swift"), base)
         self.assertEqual(base, self.run_script("key", "swift", "build", "--build-tests").stdout)
         self.assertNotEqual(base, self.run_script(
             "key", "swift", "build", "--build-tests", "--enable-code-coverage").stdout)
         self.env["ImageVersion"] = "20260102.1"
-        self.assertNotEqual(base, self.run_script("key", "swift", "build", "--build-tests").stdout)
-        self.env["ImageVersion"] = "20260101.1"
+        self.assertEqual(base, self.run_script("key", "swift", "build", "--build-tests").stdout)
+        self.fake_xcrun("26.2")
+        with_sdk = self.run_script("key", "swift", "build", "--build-tests").stdout
+        self.assertNotEqual(base, with_sdk)
+        self.fake_xcrun("26.4")
+        self.assertNotEqual(with_sdk, self.run_script("key", "swift", "build", "--build-tests").stdout)
+        self.fake_xcrun("26.2")
         self.fake_swift("Apple Swift version 6.2.5")
         self.assertNotEqual(base, self.run_script("key", "swift", "build", "--build-tests").stdout)
 
@@ -265,8 +276,9 @@ class WorkflowWiring(unittest.TestCase):
                 "restore-keys: |\n            ${{ steps.build-cache.outputs.prefix }}-"
                 "${{ hashFiles('Package.resolved', 'Package.swift') }}-\n", text)
         script = read("Scripts/ci-incremental-build.sh")
-        for needle in ("swift --version", "ImageVersion", "RUNNER_OS", "RUNNER_ARCH", '"$*"'):
+        for needle in ("swift --version", "--show-sdk-version", "--show-sdk-build-version", "CLTools_Executables", "RUNNER_OS", "RUNNER_ARCH", '"$*"'):
             self.assertIn(needle, script)
+        self.assertNotIn("${ImageVersion", script)
 
     def test_test_build_restores_but_never_saves_and_release_build_has_no_build_cache(self):
         self.assertIn("uses: actions/cache/restore@", self.test_build)
