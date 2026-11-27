@@ -1353,7 +1353,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 taskOverride: output, ownedSendChange: ownedChange) else { return false }
         let checked = await AXMixerStripBinding.$current.withValue(source.pair.strip) {
             await AXMixerStripBinding.$outputAssociation.withValue(source.pair) {
-                await AccessibilityChannel.getOutputObservation(runtime: source.pair.track.runtime)
+                await AccessibilityChannel.getOutputObservation(runtime: source.pair.track.runtime, timing: .forRepairRead(source.pair.track.runtime))
             }
         }
         guard checked.assignment == output.desired,
@@ -1392,7 +1392,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 taskOverride: output, ownedSendRemoval: removed) else { return false }
         let checked = await AXMixerStripBinding.$current.withValue(source.pair.strip) {
             await AXMixerStripBinding.$outputAssociation.withValue(source.pair) {
-                await AccessibilityChannel.getOutputObservation(runtime: source.pair.track.runtime)
+                await AccessibilityChannel.getOutputObservation(runtime: source.pair.track.runtime, timing: .forRepairRead(source.pair.track.runtime))
             }
         }
         guard checked.assignment == output.desired,
@@ -1778,7 +1778,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 } else {
                     let read = await AXMixerStripBinding.$current.withValue(pair.strip) {
                         await AXMixerStripBinding.$outputAssociation.withValue(pair) {
-                            await AccessibilityChannel.getOutputObservation(runtime: runtime, sendOrdinal: task.ordinal,
+                            await AccessibilityChannel.getOutputObservation(runtime: runtime, sendOrdinal: task.ordinal, timing: .forRepairRead(runtime),
                                 requiringOriginalSendControl: current,
                                 readingOriginalScope: renewal.observation,
                                 observingPopupFocus: { inputFocus.retainRoutingPopupFocus($0) })
@@ -1827,7 +1827,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let read = await AXMixerStripBinding.$current.withValue(pair.strip) {
             await AXMixerStripBinding.$outputAssociation.withValue(pair) {
                 await AccessibilityChannel.getOutputObservation(runtime: pair.track.runtime,
-                    sendOrdinal: task.ordinal, requiringOriginalSendControl: current)
+                    sendOrdinal: task.ordinal, timing: .forRepairRead(pair.track.runtime), requiringOriginalSendControl: current)
             }
         }
         guard read.result.isSuccess, read.assignment == task.before,
@@ -2915,7 +2915,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             guard await recoverOutputPeerReadability(pair: pair, assignment: assignment) else { return false }
         }
         let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
-            await AccessibilityChannel.getOutputObservation(runtime: runtime)
+            await AccessibilityChannel.getOutputObservation(runtime: runtime, timing: .forRepairRead(runtime))
         }
         return checked.assignment == assignment
             && outputFootprintHeld(pair: pair, assignment: assignment)
@@ -2966,7 +2966,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         stage = "checked_output_and_footprint"
         let reading = await AXMixerStripBinding.$current.withValue(pair.strip) {
-            await AccessibilityChannel.getOutputObservation(runtime: runtime)
+            await AccessibilityChannel.getOutputObservation(runtime: runtime, timing: .forRepairRead(runtime))
         }
         guard let assignment = reading.assignment,
               assignment == task.before || (outputAttempted && assignment == task.desired) else { return nil }
@@ -2987,7 +2987,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             // cannot authenticate the checkmark sampled before that excursion.
             stage = "checked_output_after_recovery"
             let recoveredReading = await AXMixerStripBinding.$current.withValue(pair.strip) {
-                await AccessibilityChannel.getOutputObservation(runtime: runtime)
+                await AccessibilityChannel.getOutputObservation(runtime: runtime, timing: .forRepairRead(runtime))
             }
             guard recoveredReading.assignment == assignment,
                   outputFootprintHeld(pair: pair, assignment: assignment) else { return nil }
@@ -3089,7 +3089,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 // checkmark cannot cross it; reacquire that one leaf only after
                 // the original viewport and protected peers are readable again.
                 let recovered = await AXMixerStripBinding.$current.withValue(checkedPair.strip) {
-                    await AccessibilityChannel.getOutputObservation(runtime: checkedPair.track.runtime)
+                    await AccessibilityChannel.getOutputObservation(runtime: checkedPair.track.runtime, timing: .forRepairRead(checkedPair.track.runtime))
                 }
                 guard recovered.assignment == retained.assignment,
                       outputFootprintHeld(pair: checkedPair,
@@ -3116,7 +3116,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             // outputs before a retained inverse may cross its write boundary.
             let checked = await AXMixerStripBinding.$current.withValue(retained.effect.current.strip) {
                 await AccessibilityChannel.getOutputObservation(
-                    runtime: retained.effect.current.track.runtime)
+                    runtime: retained.effect.current.track.runtime, timing: .forRepairRead(retained.effect.current.track.runtime))
             }
             guard checked.assignment == retained.assignment,
                   outputFootprintHeld(pair: retained.effect.current,
@@ -3210,7 +3210,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         if !forwardBusReceiptChecksOutput {
             let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
                 await AXMixerStripBinding.$outputAssociation.withValue(pair) {
-                    await AccessibilityChannel.getOutputObservation(runtime: runtime)
+                    await AccessibilityChannel.getOutputObservation(runtime: runtime, timing: .forRepairRead(runtime))
                 }
             }
             guard checked.assignment == assignment else { return false }
@@ -3881,7 +3881,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         guard await current() else { return refused() }
         let read = await AXMixerStripBinding.$current.withValue(task.pair.strip) {
             await AXMixerStripBinding.$outputAssociation.withValue(task.pair) {
-                await AccessibilityChannel.getOutputObservation(runtime: task.pair.track.runtime, sendOrdinal: task.ordinal,
+                await AccessibilityChannel.getOutputObservation(runtime: task.pair.track.runtime, sendOrdinal: task.ordinal, timing: .forRepairRead(task.pair.track.runtime),
                     requiringOriginalSendControl: task.control)
             }
         }
@@ -4066,5 +4066,14 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             dialogPresent: dependencies.dialogPresent, sagaJournal: dependencies.sagaJournal,
             mutationGate: dependencies.mutationGate, sagaRefreshAfterWrite: {},
             sagaLifecycleDeadline: dependencies.sagaLifecycleDeadline, approvedSessionRepair: approval)
+    }
+}
+
+extension AccessibilityChannel.OutputAssignmentTiming {
+    /// A runtime with no live frontmost probe is a synthetic fixture: its fake AX tree offers no
+    /// CoreGraphics popup that could ever appear, so the live popup wait is only dead time.
+    /// Production always supplies `observeFrontmost` and keeps `.live`.
+    static func forRepairRead(_ runtime: AXLogicProElements.Runtime) -> Self {
+        runtime.observeFrontmost == nil ? .immediate : .live
     }
 }
