@@ -21,8 +21,15 @@ case "${1:-}" in
     test "$#" -gt 0
     toolchain="$(swift --version 2>&1 | sha)"
     flags="$(printf '%s\n' "$*" | sha)"
-    # ImageVersion is set on GitHub-hosted runners; it names the exact runner image.
-    echo "swift-build-${RUNNER_OS:-$(uname -s)}-${RUNNER_ARCH:-$(uname -m)}-${ImageVersion:-local}-swift${toolchain}-flags${flags}"
+    # The runner image version is deliberately not part of the key: images roll out unevenly and
+    # an image bump that leaves the compiler and SDK alone would only turn a warm cache cold.
+    # What decides whether compiled output is reusable is the compiler, the SDK and the CLT.
+    sdk="$({
+      xcrun --show-sdk-version 2>&1 || true
+      xcrun --show-sdk-build-version 2>&1 || true
+      pkgutil --pkg-info=com.apple.pkg.CLTools_Executables 2>&1 | grep '^version:' || true
+    } | sha)"
+    echo "swift-build-${RUNNER_OS:-$(uname -s)}-${RUNNER_ARCH:-$(uname -m)}-swift${toolchain}-sdk${sdk}-flags${flags}"
     ;;
   build)
     shift
