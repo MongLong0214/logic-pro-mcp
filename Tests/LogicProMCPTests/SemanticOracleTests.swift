@@ -1698,7 +1698,7 @@ struct SemanticOracleMutationTests {
         // insertable stock allowlist.
         let mixerInsert = try #require(SemanticOracleTable.byOperationID[.mixerInsertPlugin])
         let unknownPlugin: Bool = mixerInsert.evaluate(
-            responseData: Data(#"{"success":true,"verified":true,"state":"A","track":0,"slot":1,"plugin_name":"Space Designer","observed_plugin_name":"Space Designer","verify_source":"ax_plugin_slot"}"#.utf8),
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","track":0,"slot":1,"plugin_name":"Alchemy","observed_plugin_name":"Alchemy","verify_source":"ax_plugin_slot"}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!unknownPlugin, "mixer.insert_plugin accepted a plugin outside the stock allowlist")
     }
