@@ -535,6 +535,18 @@ extension AXLogicProElements {
             guard permitted() else { return false }
             willWrite?()
             if AXHelpers.setAttribute(headersGroup, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax) {
+                // Measured on Logic 13.0 (7801): this setter returns success and the selection does
+                // not move (the rail, the row's AXSelected and AXPress on the row or its radio button
+                // all return 0 and change nothing). Only a settled exclusive selection counts as done.
+                if waitForExclusiveSelection(of: index, runtime: runtime) { return true }
+                // The rail write was acknowledged without effect. The main Mixer's own
+                // AXSelectedChildren is the one setter measured to move the selection.
+                if permitted(), selectViaMixerStrip(header: header, index: index, runtime: runtime,
+                                                    willWrite: willWrite) {
+                    return true
+                }
+                // Keep the legacy answer for an acknowledged write: the caller's read-back
+                // reports the real selection (State B), it is not claimed here.
                 return true
             }
         }
@@ -589,6 +601,43 @@ extension AXLogicProElements {
         // `track.select` also routes to the MCU channel — so failing closed here
         // preserves function without a coordinate fallback.
         return false
+    }
+
+    /// True when `index` is the only selected track header, polled for up to ~600 ms.
+    private static func waitForExclusiveSelection(of index: Int, runtime: Runtime) -> Bool {
+        for attempt in 0..<7 {
+            if attempt > 0 { usleep(100_000) }
+            let headers = allTrackHeaders(runtime: runtime)
+            guard index >= 0, index < headers.count else { return false }
+            let values = headers.map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
+            if values.filter({ $0 == true }).count == 1, values[index] == true,
+               values.allSatisfy({ $0 != nil }) { return true }
+        }
+        return false
+    }
+
+    /// Select a track by writing the main Mixer's `AXSelectedChildren` with that track's strip.
+    /// The strip is matched to the header by the track's own name (project data, not a UI label)
+    /// and only when exactly one strip and one header carry it; an ambiguous or missing match
+    /// refuses. The result is judged by the header rail read-back, never by the setter's return.
+    private static func selectViaMixerStrip(
+        header: AXUIElement, index: Int, runtime: Runtime, willWrite: (() -> Void)?
+    ) -> Bool {
+        guard let mixer = getMixerArea(runtime: runtime),
+              AXHelpers.isAttributeSettable(mixer, kAXSelectedChildrenAttribute, runtime: runtime.ax) == true,
+              let enumeration = mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime.ax) else { return false }
+        let name = AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax).name
+        guard !name.isEmpty else { return false }
+        let headers = allTrackHeaders(runtime: runtime)
+        let sameNamedHeaders = headers.enumerated().filter {
+            AXValueExtractors.extractTrackState(from: $0.element, index: $0.offset, runtime: runtime.ax).name == name
+        }
+        let strips = enumeration.strips.filter { AXHelpers.getDescription($0, runtime: runtime.ax) == name }
+        guard sameNamedHeaders.count == 1, strips.count == 1 else { return false }
+        willWrite?()
+        guard AXHelpers.setAttribute(mixer, kAXSelectedChildrenAttribute, [strips[0]] as CFArray,
+                                     runtime: runtime.ax) else { return false }
+        return waitForExclusiveSelection(of: index, runtime: runtime)
     }
 
     /// Enumerate all track header rows.
