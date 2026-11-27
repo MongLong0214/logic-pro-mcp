@@ -10,7 +10,7 @@
 # test process must not contaminate the release binary's live ownership check.
 # A missing process or permission still stops before testing; no live success is
 # inferred. The general suite is not re-run here: hosted CI runs every test of the same
-# candidate (test-shards selected and complement), and only the live tests need this Mac.
+# candidate (the union of every test-shards shard), and only the live tests need this Mac.
 #
 # Release entrypoints consume staged final artifacts; this runner does not publish.
 # The release contract tests cover the build-before-live ordering without replacing the runtime.

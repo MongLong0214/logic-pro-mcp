@@ -186,6 +186,62 @@ MACOS_JOBS = ("release-build", "test-build", "test-shards", "product-validation"
 MACOS_LABEL = "macos-15"
 
 
+def shard_problems(workflow):
+    """The N-way shard split: every shard runs, every test is in exactly one, coverage is merged."""
+    problems = []
+    declared = re.findall(r"^  TEST_SHARD_COUNT: '(\d+)'$", workflow, re.M)
+    if len(declared) != 1 or int(declared[0]) < 2:
+        return ["TEST_SHARD_COUNT is not declared once as a number of at least 2"]
+    count = int(declared[0])
+    shards = job_body(workflow, "test-shards") or ""
+    expected = ", ".join(str(index) for index in range(count))
+    if re.findall(r"^        shard: \[([^\]]*)\]$", shards, re.M) != [expected]:
+        problems.append(f"test-shards does not run exactly shards {expected}")
+    if "include:" in shards:
+        problems.append("test-shards matrix carries hand-written include entries")
+    if not re.search(rf"^      max-parallel: {count}$", shards, re.M):
+        problems.append(f"test-shards does not run all {count} shards at once")
+    build = job_body(workflow, "test-build") or ""
+    if '--shards "$TEST_SHARD_COUNT"' not in build or "ci-test-shard-manifest.py partition" not in build:
+        problems.append("test-build does not deal the inventory into TEST_SHARD_COUNT shards")
+    if "TEST_SHARD_SELECTOR" in workflow:
+        problems.append("a hand-written suite selector is back")
+    for needle, message in (
+        ('test "$SHARD" -lt "$TEST_SHARD_COUNT"', "a shard does not refuse an index outside the count"),
+        ('--filter "$(cat "$runtime/shard-$SHARD.filter")"', "a shard does not run its own filter"),
+        ('--expected "$runtime/shard-$SHARD.txt"', "a shard does not verify its xUnit output against its own manifest"),
+        ('cp "$(cat "$RUNNER_TEMP/profiles-$SHARD.txt")" "$out/shard-$SHARD.profdata"', "a shard does not keep its coverage profile"),
+    ):
+        if needle not in shards:
+            problems.append(message)
+    if re.search(r"--skip(?![-\w])", shards):
+        problems.append("a shard selects by exclusion instead of by its own manifest")
+    validation = job_body(workflow, "product-validation") or ""
+    ordered = [validation.find(needle) for needle in (
+        "ci-test-shard-manifest.py verify-union", "llvm-profdata merge -sparse",
+        "bash Scripts/ci-coverage-gate.sh")]
+    if min(ordered) < 0 or ordered != sorted(ordered):
+        problems.append("product-validation does not verify the union, then merge, then gate")
+    for needle, message in (
+        ('for ((shard = 0; shard < TEST_SHARD_COUNT; shard++)); do',
+         "product-validation does not collect every shard"),
+        ('union_args+=(--shard "$(cat "$RUNNER_TEMP/actual-$shard-paths.txt")")',
+         "product-validation does not union each shard's executed tests"),
+        ('profiles+=("$(cat "$RUNNER_TEMP/profile-$shard-paths.txt")")',
+         "product-validation does not merge each shard's profile"),
+        ('"${union_args[@]}"', "product-validation does not verify every shard in the union"),
+        ('"${profiles[@]}" \\\n            -o ".build/$triple_debug/codecov/default.profdata"',
+         "product-validation does not merge every profile into the one the gate reads"),
+        ("-name 'actual-shard-*.txt' | grep -c .)\" = \"$TEST_SHARD_COUNT\"",
+         "product-validation does not require exactly one result per shard"),
+        ("-name 'shard-*.profdata' | grep -c .)\" = \"$TEST_SHARD_COUNT\"",
+         "product-validation does not require exactly one profile per shard"),
+    ):
+        if needle not in validation:
+            problems.append(message)
+    return problems
+
+
 def runner_problems(workflow):
     """Runner labels and job structure of the macOS path, as measured and chosen in ci.yml."""
     problems = []
@@ -211,11 +267,7 @@ def runner_problems(workflow):
     build = job_body(workflow, "test-build") or ""
     if 'test "$(lipo -archs "$test_binary")" = arm64' not in build:
         problems.append("test-build does not assert the coverage test binary is arm64")
-    shards = job_body(workflow, "test-shards") or ""
-    if not re.search(r"^      max-parallel: 2$", shards, re.M):
-        problems.append("test-shards no longer caps its simultaneous macOS allocations at 2")
-    if re.findall(r"^          - shard: (\w+)$", shards, re.M) != ["selected", "complement"]:
-        problems.append("test-shards no longer runs exactly the selected and complement shards")
+    problems.extend(shard_problems(workflow))
     for dependency in ("release-build", "test-build", "test-shards"):
         needs = re.search(r"^    needs:\s*(.*)$", job_body(workflow, "product-validation") or "", re.M)
         if not needs or dependency not in needs.group(1):
@@ -827,8 +879,8 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         for needle, replacement in (
             ('          test "$(lipo -archs .build/release/LogicProMCP)" = arm64\n', ""),
             ('          test "$(lipo -archs "$test_binary")" = arm64\n', ""),
-            ("      max-parallel: 2\n", ""),
-            ("          - shard: complement\n            mode: skip\n", ""),
+            ("      max-parallel: 4\n", ""),
+            ("        shard: [0, 1, 2, 3]\n", "        shard: [0, 1, 2]\n"),
             ("needs: [change-scope, release-build, test-build, test-shards]",
              "needs: [change-scope, release-build, test-build]"),
         ):
@@ -836,6 +888,45 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                 mutant = workflow.replace(needle, replacement, 1)
                 self.assertNotEqual(mutant, workflow)
                 self.assertTrue(runner_problems(mutant))
+
+    def test_shard_split_is_exact_and_merged_in_the_real_workflow(self):
+        workflow = read(".github/workflows/ci.yml")
+        self.assertEqual(shard_problems(workflow), [])
+        self.assertEqual(re.findall(r"^  TEST_SHARD_COUNT: '(\d+)'$", workflow, re.M), ["4"])
+
+    def test_every_way_of_dropping_a_shard_from_the_union_or_the_merge_is_detected(self):
+        workflow = read(".github/workflows/ci.yml")
+        for name, needle, replacement in (
+            ("count raised without a matrix entry", "TEST_SHARD_COUNT: '4'", "TEST_SHARD_COUNT: '5'"),
+            ("matrix entry dropped", "shard: [0, 1, 2, 3]", "shard: [0, 1, 2]"),
+            ("matrix entry added", "shard: [0, 1, 2, 3]", "shard: [0, 1, 2, 3, 4]"),
+            ("matrix hand-written", "        shard: [0, 1, 2, 3]\n",
+             "        include:\n          - shard: 0\n"),
+            ("throttled", "max-parallel: 4", "max-parallel: 2"),
+            ("inventory not dealt by count", '--shards "$TEST_SHARD_COUNT"', "--shards 2"),
+            ("selector back", "  TEST_SHARD_COUNT: '4'\n",
+             "  TEST_SHARD_COUNT: '4'\n  TEST_SHARD_SELECTOR: 'x'\n"),
+            ("shard runs a different filter", '"$(cat "$runtime/shard-$SHARD.filter")"', '"x"'),
+            ("shard skips by exclusion", '--filter "$(cat "$runtime/shard-$SHARD.filter")"',
+             '--skip "$(cat "$runtime/shard-$SHARD.filter")"'),
+            ("shard checks no manifest", '--expected "$runtime/shard-$SHARD.txt"',
+             '--expected "$runtime/shard-0.txt"'),
+            ("shard index unchecked", '          test "$SHARD" -lt "$TEST_SHARD_COUNT"\n', ""),
+            ("union ignores shards", '"${union_args[@]}"', '--shard "$RUNNER_TEMP/none"'),
+            ("union drops each result", 'union_args+=(--shard "$(cat "$RUNNER_TEMP/actual-$shard-paths.txt")")',
+             "union_args+=()"),
+            ("merge drops all but one profile", '"${profiles[@]}" \\\n',
+             '"${profiles[0]}" \\\n'),
+            ("merge drops each profile", 'profiles+=("$(cat "$RUNNER_TEMP/profile-$shard-paths.txt")")',
+             "profiles+=()"),
+            ("loop stops early", "shard < TEST_SHARD_COUNT; shard++", "shard < 1; shard++"),
+            ("result count not required", "-name 'actual-shard-*.txt' | grep -c .)\" = \"$TEST_SHARD_COUNT\"",
+             "-name 'actual-shard-*.txt' | grep -c .)\" -ge 1"),
+        ):
+            with self.subTest(name=name):
+                mutant = workflow.replace(needle, replacement, 1)
+                self.assertNotEqual(mutant, workflow)
+                self.assertTrue(shard_problems(mutant))
 
     def test_the_universal_release_is_still_installed_on_both_architectures(self):
         release = read(".github/workflows/release.yml")
