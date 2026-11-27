@@ -75,7 +75,7 @@ class GuardBehaviour(unittest.TestCase):
         # `ratchet.py` is the shared merge-base comparison the guard imports by path; a
         # fixture without it does not run a weaker guard, it runs no guard at all.
         for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py",
-                     "ratchet.py"):
+                     "ratchet.py", "locale_release.py", "canon_groups.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name),
                          os.path.join(self.root, "Scripts", name))
         shutil.copytree(os.path.join(REPO, "docs", "canon"),
@@ -763,14 +763,33 @@ class GuardBehaviour(unittest.TestCase):
         self.assertIn("carries no `artifacts` block", result.stderr)
 
     # -- rule 8: one Logic, not two --------------------------------------------------------------
-    def test_an_index_pinning_a_different_logic_than_the_ledger_fails(self):
-        os.makedirs(os.path.join(self.root, "docs", "observations"), exist_ok=True)
-        with open(os.path.join(self.root, "docs", "observations", "LOGIC-BUILD.json"),
-                  "w", encoding="utf-8") as handle:
-            json.dump({"app": "Logic Pro", "version": "99.9", "build": "1"}, handle)
+    def declare(self, version, build):
+        swift = os.path.join(self.root, "Sources", "LogicProMCP", "Accessibility")
+        os.makedirs(swift, exist_ok=True)
+        with open(os.path.join(swift, "AXLocalePolicy.swift"), "w", encoding="utf-8") as handle:
+            handle.write(f'enum AXLocalePolicy {{\n    static let currentLogicVersion = "{version}"\n'
+                         f'    static let currentLogicBuild = "{build}"\n}}\n')
+
+    def test_an_index_pinning_a_newer_logic_than_the_declaration_fails(self):
+        self.declare("1.0", "1")
         result = self.run_guard()
         self.assertEqual(result.returncode, 1)
         self.assertIn("must describe the same application", result.stderr)
+
+    def test_an_index_trailing_the_declaration_is_counted_by_the_ratchet_not_refused_here(self):
+        self.declare("99.9", "99999")
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_two_declarations_of_the_current_logic_fail(self):
+        self.declare("99.9", "99999")
+        swift = os.path.join(self.root, "Sources", "LogicProMCP", "Accessibility",
+                             "AXLocalePolicy.swift")
+        with open(swift, "a", encoding="utf-8") as handle:
+            handle.write('    static let currentLogicVersion = "98.0"\n')
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("exactly one", result.stderr)
 
     # -- rule 3 again, now that absence must search everything -----------------------------------
     def test_an_absence_that_skips_a_pinned_corpus_fails(self):
@@ -886,7 +905,7 @@ class ARecordMayDeclareTheAxisInapplicable(unittest.TestCase):
         # `ratchet.py` is the shared merge-base comparison the guard imports by path; a
         # fixture without it does not run a weaker guard, it runs no guard at all.
         for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py",
-                     "ratchet.py"):
+                     "ratchet.py", "locale_release.py", "canon_groups.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name),
                          os.path.join(self.root, "Scripts", name))
         shutil.copytree(os.path.join(REPO, "docs", "canon"),
@@ -1099,6 +1118,35 @@ class ABindingIsNotSatisfiedByAComment(unittest.TestCase):
     def test_a_file_type_with_no_known_comment_syntax_is_read_whole(self):
         """JSON has no comments, so stripping nothing is the honest answer for it."""
         self.assertEqual(self.guard._without_comments("{\"a\": 1}", "x.json"), "{\"a\": 1}")
+
+
+class ARecordBindingReadsEscapedCharacters(unittest.TestCase):
+    """A `record` binding searches the record's fields as serialized JSON, where `"` and `\\` are
+    escaped. A de-DE census quoted QuickHelp text with a straight closing quote verbatim in its
+    observations and was refused as decorative. Mutant: drop the escaped needles and the first
+    case goes red."""
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("canon_guard_escapes", GUARD)
+        self.guard = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.guard)
+
+    def _bind(self, value, strings):
+        citation = {"ref": "logic-canon://quickhelp/de#value", "value": value, "used_for": "probe",
+                    "binding": {"kind": "record"}}
+        failures = []
+        self.guard.check_binding("probe", citation,
+                                 {"observations": [{"what": "the strings", "strings": strings}]},
+                                 failures)
+        return failures
+
+    def test_a_value_with_a_quote_and_a_backslash_in_the_record_passes(self):
+        value = 'Wähle „Spur-Header-Komponenten" aus dem Kontextmenü \\ jetzt. '
+        self.assertEqual(self._bind(value, ["other", value]), [])
+
+    def test_the_same_value_absent_from_the_record_is_still_refused(self):
+        value = 'Wähle „Spur-Header-Komponenten" aus dem Kontextmenü.'
+        self.assertTrue(self._bind(value, ["Wähle „Spur-Header-Komponenten“ aus dem Kontextmenü."]))
 
 
 class LogicFacingIsSelfMaintaining(unittest.TestCase):

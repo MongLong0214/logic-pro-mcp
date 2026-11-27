@@ -42,6 +42,8 @@ if not records:
     sys.exit(2)
 
 sys.path.insert(0, os.path.join(repo, "Scripts", "observations"))
+sys.path.insert(0, os.path.join(repo, "Scripts"))
+import census_evidence  # census evidence is JSON Lines; this reads it and the older JSON
 from locale_campaign_records import classify  # the same routing the records were filed with
 
 def strings(rows):
@@ -49,14 +51,14 @@ def strings(rows):
 
 fresh_by = {}
 for row in fresh["census"]:
-    s = classify(row)
+    s = classify(row, want)
     if s:
         fresh_by.setdefault(s, []).append(row)
 
 disagree = 0
 for surface, rec in sorted(records.items()):
-    ev = json.load(open(os.path.join(obs, rec["evidence"][0]), encoding="utf-8"))
-    then = strings(r for r in ev["census"] if classify(r) == surface)
+    ev = census_evidence.load(os.path.join(obs, rec["evidence"][0]))
+    then = strings(r for r in ev["census"] if classify(r, want) == surface)
     now = strings(fresh_by.get(surface, []))
     gone, new = sorted(then - now), sorted(now - then)
     if gone or new:

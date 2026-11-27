@@ -17,6 +17,16 @@ import os
 import re
 import sys
 
+def _read_census(path):
+    """A census document from `path`: JSON Lines (current) or the older pretty-printed JSON."""
+    spec = importlib.util.spec_from_file_location(
+        "census_evidence_for_tool", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                 "census_evidence.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load(path)
+
+
 ROLE_HINTS = [
     # (name suffix / fragment, allowed AX roles)
     ("MenuBar",        {"AXMenuBarItem"}),
@@ -37,6 +47,21 @@ ROLE_HINTS = [
 # substring would back `automationModeOff` = "끔" with the menu item "사이클 끔", which is a
 # different command — exactly the false provenance the guard was rebuilt to refuse.
 CONTAINS_SHAPES = ("HelpKeyword", "Keyword", "Hint", "Suffix", "Prefix", "Context")
+
+
+def _records():
+    """`locale_campaign_records`, loaded once: the routing a census was filed with decides its citations."""
+    if "records" not in _RECORDS:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale_campaign_records.py")
+        spec = importlib.util.spec_from_file_location("locale_campaign_records_for_propose", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        _RECORDS["records"] = module
+    return _RECORDS["records"]
+
+
+_RECORDS = {}
 
 
 def _guard():
@@ -157,6 +182,121 @@ def roles_for(name):
     return None   # unknown shape — see `apply`, which refuses to write for these
 
 
+def derive_roles(entry, rows):
+    """`(roles, basis)` the census rows say this label's element has, or None when they say nothing.
+
+    For a label whose NAME gives no role (`roles_for` is None) a person used to type `roles`, and that
+    is a guess. The census holds the answer: the AX role of every element whose WHOLE text equals one
+    of the label's strings (up to case and surrounding space). A substring hit is not evidence of which
+    element the label addresses -- `play` is a substring of a hundred rows -- so only equality counts.
+
+    The main window outranks the menus. A string that is the whole text of a window element is that
+    element; the same word on a menu item is the shared-string collision this tool exists to refuse
+    (`Mixer` is a View-menu row and a Control Bar button). Menu rows decide only when no window element
+    carries the string whole, and `basis` says which it was so a person can see how it was decided.
+    """
+    wanted = {w.casefold().strip() for w in [entry.get("canonical")] + list(entry.get("variants") or []) if w}
+    window, menus = set(), set()
+    for row in rows:
+        if not in_scope(entry, row):
+            continue
+        if any(text.casefold().strip() in wanted for _attr, text in strings_of(row)):
+            (menus if row["surface"] == "arrange.menus" else window).add(row["role"])
+    if window:
+        return sorted(window), "window"
+    if menus:
+        return sorted(menus), "menus"
+    return None
+
+
+def declare_roles(labels_path, census, locale, sighted=None):
+    """Declare `roles` for every label that has none and whose name cannot say, from this census.
+
+    Returns `(declared, undeclared)`: `{label: {"roles", "basis", "census_locale"}}` written to the
+    ledger, and `{label: reason}` for labels no element carries whole. Nothing is overwritten: a label
+    that already declares roles keeps them, because a declaration can only ever be WIDENED by a later
+    reading that a person reviews.
+    """
+    doc = json.load(open(labels_path, encoding="utf-8"))
+    declared, undeclared = {}, {}
+    rows = census["census"]
+    for name, entry in sorted(doc["labels"].items()):
+        if entry.get("roles") or roles_for(name) is not None or label_mode(name, entry) is None:
+            continue
+        if sighted is not None and name not in sighted:
+            continue
+        found = derive_roles(entry, rows)
+        if found is None:
+            undeclared[name] = ("no element in this census carries any of its strings as its whole text; "
+                                "a substring hit does not say which element the label addresses")
+            continue
+        entry["roles"] = found[0]
+        declared[name] = {"roles": found[0], "basis": found[1], "census_locale": locale}
+    if declared:
+        open(labels_path, "w", encoding="utf-8").write(_GUARD._module().render(doc))
+    return declared, undeclared
+
+
+def narrow_roles(labels_path, census, locale):
+    """Narrow a CONTAINMENT label's roles to the elements whose whole text is the label, when that disagrees.
+
+    `apply` used to widen a label's `roles` with the role of whatever element a census happened to hit,
+    and a containment label hits menu items: `sliderPanHint` (the pan slider's label) carried
+    `AXMenuItem` because the ja-JP Edit menu has `同じパンナータイプの…` and the Record menu has
+    `クイックパンチインを許可`, both containing `パン`. A role that only a substring ever reached is not
+    the element the label addresses; the elements that carry the string WHOLE are.
+
+    Narrowing happens only when a MAIN-WINDOW element carries one of the label's strings whole, only for a
+    `contains` label, and never to an empty set. The readings that rested on a dropped role are removed
+    (their provenance blocks and any coverage citation), so the next apply writes them again from the
+    right element instead of leaving a claim about the wrong one. Returns `{label: {...}}` of what moved.
+    """
+    doc = json.load(open(labels_path, encoding="utf-8"))
+    moved = {}
+    # `census` is one census or a list of them. A role is kept if ANY locale's main window carries a
+    # string of the label whole under it: a translation can make a word a menu title in one language and
+    # a button in another, and a role dropped on one locale's census would silently delete the readings
+    # another locale's run had made on it -- so what one run narrows depended on which run came first.
+    censuses = census if isinstance(census, list) else [census]
+    for name, entry in sorted(doc["labels"].items()):
+        roles = entry.get("roles") or []
+        if len(roles) < 2 or label_mode(name, entry) != "contains":
+            continue
+        window_roles = set()
+        for one in censuses:
+            found = derive_roles(entry, one["census"])
+            if found and found[1] == "window":
+                window_roles |= set(found[0])
+        if not window_roles:
+            continue
+        found = (sorted(window_roles), "window")
+        keep = [r for r in roles if r in found[0]]
+        drop = [r for r in roles if r not in found[0]]
+        if not keep or not drop:
+            continue
+        entry["roles"] = keep
+        removed = []
+        for variant, block in list((entry.get("provenance") or {}).items()):
+            if block.get("role") in drop:
+                removed.append(f"{block.get('locale')}:{variant}")
+                del entry["provenance"][variant]
+        if not entry.get("provenance"):
+            entry.pop("provenance", None)
+        for loc, role in list((entry.get("coverage_roles") or {}).items()):
+            if role in drop:
+                removed.append(f"{loc}:coverage")
+                entry["coverage"][loc] = "unmeasured"
+                for key in ("coverage_records", "coverage_roles", "coverage_attributes", "coverage_paths",
+                            "coverage_identifiers", "coverage_logic_version", "coverage_logic_build",
+                            "coverage_record_sha256", "coverage_currency", "coverage_absent"):
+                    (entry.get(key) or {}).pop(loc, None)
+        moved[name] = {"was": roles, "now": keep, "dropped": drop, "readings_removed": sorted(removed),
+                       "census_locale": locale}
+    if moved:
+        open(labels_path, "w", encoding="utf-8").write(_GUARD._module().render(doc))
+    return moved
+
+
 def matches(name, wanted, text, entry=None):
     # A label with no agreed mode matches nothing — see `label_mode`.
     """Whether this string counts as seen — under the SAME mode the block will declare.
@@ -182,7 +322,7 @@ def strings_of(row):
 
 
 def main(census_path, labels_path):
-    census = json.load(open(census_path, encoding="utf-8"))
+    census = _read_census(census_path)
     labels = json.load(open(labels_path, encoding="utf-8"))["labels"]
     host = census["host"]
     locale = host["locale"]
@@ -192,6 +332,14 @@ def main(census_path, labels_path):
     for name, entry in sorted(labels.items()):
         wanted = [entry["canonical"]] + list(entry.get("variants") or [])
         allowed = roles_for(name)
+        # A label that DECLARES its roles is read only on those. The name-shape hint is silent for a
+        # `...Hint` or `...Keyword`, which used to mean "any element", so a short word that is also a
+        # prefix of an unrelated menu item matched it: ja-JP `パン` (pan) is the start of
+        # `クイックパンチインを許可` (Allow Quick Punch-In), and the pan slider's label was read off that
+        # Record-menu item instead of the slider. A declared role set is the author's statement of what
+        # element the label addresses; ignoring it let a role the label never meant widen its evidence.
+        if allowed is None and entry.get("roles"):
+            allowed = set(entry["roles"])
         hits = []
         for row in rows:
             if not in_scope(entry, row):
@@ -211,7 +359,11 @@ def main(census_path, labels_path):
                         # blocks the guard was tightened to refuse.
                         hits.append({"string": w, "attribute": attr, "observed": text,
                                      "role": row["role"], "path": row["path"][:100],
-                                     "surface": row["surface"],
+                                     # The surface the row was FILED under, not the probe's raw one:
+                                     # the record that cites it is named by the former, and a main-window
+                                     # row's raw surface (`arrange.window`) names no record at all, so
+                                     # every window sighting was dropped before it could be cited.
+                                     "surface": _records().classify(row, locale) or row["surface"],
                                      "match": label_mode(name, entry)})
         if hits:
             proposals[name] = hits
@@ -372,7 +524,11 @@ def apply(labels_path, census, proposals, records_by_surface):
                 n_prov += 1
             elif h["string"] == entry.get("canonical"):
                 cov = entry.setdefault("coverage", {})
-                if cov.get(locale) == "unmeasured":
+                if cov.get(locale) in ("unmeasured", "derived"):
+                    # `derived` too: Apple's corpus holding the string is the REASON a cell was never
+                    # asked, not a reason to ignore a reading of it. Only `unmeasured` was promoted, so
+                    # a canonical the census SAW stayed `derived` on every locale and `plan_changes`
+                    # reported it NEW run after run without anything ever being written.
                     cov[locale] = "measured"
                     # The record AND the role. A record alone backs any element that shows the
                     # string, which is the shared-string hole: `editMenuBar` and
@@ -415,7 +571,7 @@ def apply(labels_path, census, proposals, records_by_surface):
 if __name__ == "__main__":
     locale, host, proposals, unmatched = main(sys.argv[1], sys.argv[2])
     if "--apply" in sys.argv:
-        census = json.load(open(sys.argv[1], encoding="utf-8"))
+        census = _read_census(sys.argv[1])
         obs = os.path.join(os.path.dirname(os.path.dirname(sys.argv[2])), "observations")
         by_surface = {}
         for p in sorted(glob.glob(os.path.join(obs, f"*-{locale}-*-census.json"))):

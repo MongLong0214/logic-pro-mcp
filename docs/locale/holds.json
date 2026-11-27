@@ -1,0 +1,225 @@
+{
+ "holds": {
+  "de-DE": {
+   "new_variant": {"allMIDITracksAsMIDIFileMenuItem": {"base": "All MIDI Tracks as MIDI File…", "reason": "the live string 'Alle MIDI-Spuren als MIDI-Datei …' is not a value of the label's own canon row(s) in de-DE: ['Alle MIDI-Spuren als MIDI-Datei\\xa0…']", "target": "Alle MIDI-Spuren als MIDI-Datei …"}, "automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "Trimmen"}, "headerPanHint": {"base": "pan", "reason": "the live string 'Balance' is not a value of the label's own canon row(s) in de-DE: ['Pan']", "target": "Balance"}, "libraryPanelLabel": {"base": "Library", "reason": "the live string 'Mediathek' is not a value of the label's own canon row(s) in de-DE: ['Bibliothek']", "target": "Mediathek"}, "pluginEditorBypassControl": {"base": "bypass", "reason": "the live string 'Umgehen' is not a value of the label's own canon row(s) in de-DE: ['Bypass']", "target": "Umgehen"}, "sliderPanHint": {"base": "pan", "reason": "the live string 'Balance' is not a value of the label's own canon row(s) in de-DE: ['Pan']", "target": "Balance"}, "sliderVolumeHint": {"base": "Volume", "reason": "the live string 'Lautstärke' is not a value of the label's own canon row(s) in de-DE: ['Volume']", "target": "Lautstärke"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "sliderSendHint": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "controlSurfaceInstallMenuItem|Installieren …": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-de-DE-control-surface-setup-install-item-census", "string": "Installieren …", "was": "12.3"},
+    "pluginEditorBypassControl|bypass": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-25-977-de-DE-plugin-editor-is-not-a-blocking-modal", "string": "bypass", "was": "12.3"},
+    "stemExportProgressWindowTitle|Logic Pro": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-de-DE-stem-export-progress-window-title-census", "string": "Logic Pro", "was": "12.3"}
+   }
+  },
+  "en-US": {
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "projectPickerWindow": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "regionKindDrummer": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "sliderSendHint": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "transportForwardControl": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "eventListColumnChannel|Ch": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Ch", "was": "12.3"},
+    "eventListColumnLengthInfo|Length/Info": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Length/Info", "was": "12.3"},
+    "eventListColumnLength|Length": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Length", "was": "12.3"},
+    "eventListColumnL|L": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "L", "was": "12.3"},
+    "eventListColumnM|M": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "M", "was": "12.3"},
+    "eventListColumnName|Name": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Name", "was": "12.3"},
+    "eventListColumnNumber|Num": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Num", "was": "12.3"},
+    "eventListColumnPosition|Position": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Position", "was": "12.3"},
+    "eventListColumnStatus|Status": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Status", "was": "12.3"},
+    "eventListColumnTrack|Trk": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Trk", "was": "12.3"},
+    "eventListColumnValue|Val": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-08-en-US-event-list-column-titles", "string": "Val", "was": "12.3"},
+    "trackContentGeneric|콘텐츠": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-05-en-US-arrange-regions-census", "string": "콘텐츠", "was": "12.3"}
+   }
+  },
+  "es-ES": {
+   "new_variant": {"automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "Acortar"}, "beatSliderLabel": {"base": "beat", "reason": "the live string 'tiempo' is not a value of the label's own canon row(s) in es-ES: ['Tiempo']", "target": "tiempo"}, "headerPanHint": {"base": "pan", "reason": "the live string 'panorámica' is not a value of the label's own canon row(s) in es-ES: ['Pan']", "target": "panorámica"}, "mixerStripNameField": {"base": "name", "reason": "the live string 'nombre' is not a value of the label's own canon row(s) in es-ES: ['Nombre']", "target": "nombre"}, "newProjectMenuItem": {"base": "New", "reason": "the live string 'Nueva' is not a value of the label's own canon row(s) in es-ES: ['Nuevo']", "target": "Nueva"}, "sliderPanHint": {"base": "pan", "reason": "the live string 'panorámica' is not a value of the label's own canon row(s) in es-ES: ['Pan']", "target": "panorámica"}, "subdivisionSliderLabel": {"base": "Division", "reason": "the live string 'División' is not a value of the label's own canon row(s) in es-ES: ['división']", "target": "División"}, "tickSliderLabel": {"base": "Tick", "reason": "the live string 'Tic' is not a value of the label's own canon row(s) in es-ES: ['tic']", "target": "Tic"}, "trackTypeInstrument": {"base": "Instrument", "reason": "the live string 'Instrumento' is not a value of the label's own canon row(s) in es-ES: ['instrumento']", "target": "Instrumento"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "transportRecordArmExclusion": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "controlSurfaceInstallMenuItem|Instalar…": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-es-ES-control-surface-setup-install-item-census", "string": "Instalar…", "was": "12.3"},
+    "pluginMenuAudioUnits|Audio Units": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-es-ES-plugin-menu-audio-units-item-census", "string": "Audio Units", "was": "12.3"}
+   }
+  },
+  "fr-FR": {
+   "new_variant": {"automationModeOff": {"base": "Off", "reason": "the live string 'Désactivé' is not a value of the label's own canon row(s) in fr-FR: ['Non']", "target": "Désactivé"}, "automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "Ajuster"}, "beatSliderLabel": {"base": "beat", "reason": "the live string 'temps' is not a value of the label's own canon row(s) in fr-FR: ['Temps']", "target": "temps"}, "mixerStripNameField": {"base": "name", "reason": "the live string 'nom' is not a value of the label's own canon row(s) in fr-FR: ['Nom']", "target": "nom"}, "tickSliderLabel": {"base": "Tick", "reason": "the live string 'Coche' is not a value of the label's own canon row(s) in fr-FR: ['coche']", "target": "Coche"}, "trackRecordButton": {"base": "Record", "reason": "the live string 'Enregistrer' is not a value of the label's own canon row(s) in fr-FR: ['Enregistrement']", "target": "Enregistrer"}, "transportStopControl": {"base": "Stop", "reason": "the live string 'Arrêter' is not a value of the label's own canon row(s) in fr-FR: ['Stop']", "target": "Arrêter"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "transportRecordArmExclusion": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "controlSurfaceInstallMenuItem|Installer…": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-fr-FR-control-surface-setup-install-item-census", "string": "Installer…", "was": "12.3"}
+   }
+  },
+  "it-IT": {
+   "new_variant": {"automationModeOff": {"base": "Off", "reason": "the live string 'Non attivo' is not a value of the label's own canon row(s) in it-IT: ['Non attiva']", "target": "Non attivo"}, "automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "Taglia"}, "beatSliderLabel": {"base": "beat", "reason": "the live string 'battito' is not a value of the label's own canon row(s) in it-IT: ['Battito']", "target": "battito"}, "bounceMenuItem": {"base": "Bounce", "reason": "the live string 'Esegui il bounce' is not a value of the label's own canon row(s) in it-IT: ['Bounce']", "target": "Esegui il bounce"}, "controlBarMixerToggle": {"base": "Mixer", "reason": "the live string 'mixer' is not a value of the label's own canon row(s) in it-IT: ['Mixer']", "target": "mixer"}, "headerPanHint": {"base": "pan", "reason": "the live string 'panning' is not a value of the label's own canon row(s) in it-IT: ['Panning']", "target": "panning"}, "libraryPanelLabel": {"base": "Library", "reason": "the live string 'Libreria' is not a value of the label's own canon row(s) in it-IT: ['libreria']", "target": "Libreria"}, "mixerNamedElement": {"base": "Mixer", "reason": "the live string 'mixer' is not a value of the label's own canon row(s) in it-IT: ['Mixer']", "target": "mixer"}, "mixerStripNameField": {"base": "name", "reason": "the live string 'nome' is not a value of the label's own canon row(s) in it-IT: ['Nome']", "target": "nome"}, "subdivisionSliderLabel": {"base": "Division", "reason": "the live string 'Divisione' is not a value of the label's own canon row(s) in it-IT: ['divisione']", "target": "Divisione"}, "trackTypeInstrument": {"base": "Instrument", "reason": "the live string 'Strumento' is not a value of the label's own canon row(s) in it-IT: ['strumento']", "target": "Strumento"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "transportRecordArmExclusion": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "controlSurfaceInstallMenuItem|Installa…": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-it-IT-control-surface-setup-install-item-census", "string": "Installa…", "was": "12.3"}
+   }
+  },
+  "ja-JP": {
+   "new_variant": {"automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "トリム"}, "tickSliderLabel": {"base": "Tick", "reason": "the live string 'ティック' is not a value of the label's own canon row(s) in ja-JP: ['tick']", "target": "ティック"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "controlSurfaceInstallMenuItem|インストール…": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-ja-JP-control-surface-setup-install-item-census", "string": "インストール…", "was": "12.3"},
+    "trackContentGeneric|콘텐츠": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-05-ja-JP-arrange-regions-census", "string": "콘텐츠", "was": "12.3"}
+   }
+  },
+  "ko-KR": {
+   "new_variant": {"automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "다듬기"}, "headerPanHint": {"base": "pan", "reason": "the live string '패닝' is not a value of the label's own canon row(s) in ko-KR: ['Pan']", "target": "패닝"}, "hideAllPluginWindowsMenuItem": {"base": "All Plug-in Windows", "reason": "the live string '모든 플러그인 윈도우 가리기' is not a value of the label's own canon row(s) in ko-KR: ['모든 플러그인 윈도우']", "target": "모든 플러그인 윈도우 가리기"}, "showStepInputKeyboardMenuItem": {"base": "Step Input Keyboard", "reason": "the live string '스텝 입력 키보드 보기' is not a value of the label's own canon row(s) in ko-KR: ['스텝 입력 키보드']", "target": "스텝 입력 키보드 보기"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "sliderSendHint": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "transportRecordArmExclusion": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "applicationMenuBarItem|Logic Pro": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-05-ko-KR-arrange-menus-census", "string": "Logic Pro", "was": "12.3"},
+    "controlSurfaceAddButton|추가": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface", "string": "추가", "was": "12.3"},
+    "controlSurfaceInstallMenuItem|설치…": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface", "string": "설치…", "was": "12.3"},
+    "controlSurfaceInstallWindowTitle|설치": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface", "string": "설치", "was": "12.3"},
+    "hideAllPluginWindowsMenuItem|모든 플러그인 윈도우": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-05-ko-KR-arrange-menus-census", "string": "모든 플러그인 윈도우", "was": "12.3"},
+    "projectChooserCommitButton|선택": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-15-the-korean-project-chooser-names-itself", "string": "선택", "was": "12.3"},
+    "projectChooserEmptyProjectLabel|비어 있는 프로젝트": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-15-the-korean-project-chooser-names-itself", "string": "비어 있는 프로젝트", "was": "12.3"},
+    "projectChooserWindowTitle|프로젝트 선택": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-15-the-korean-project-chooser-names-itself", "string": "프로젝트 선택", "was": "12.3"},
+    "showStepInputKeyboardMenuItem|스텝 입력 키보드": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-05-ko-KR-arrange-menus-census", "string": "스텝 입력 키보드", "was": "12.3"}
+   }
+  },
+  "pt-BR": {
+   "new_variant": {"automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "Recortar"}, "beatSliderLabel": {"base": "beat", "reason": "the live string 'batida' is not a value of the label's own canon row(s) in pt-BR: ['Batida']", "target": "batida"}, "mixerStripNameField": {"base": "name", "reason": "the live string 'nome' is not a value of the label's own canon row(s) in pt-BR: ['Nome']", "target": "nome"}, "pluginWindowViewSwitcher": {"base": "View", "reason": "the live string 'Visualizar' is not a value of the label's own canon row(s) in pt-BR: ['visualização']", "target": "Visualizar"}, "subdivisionSliderLabel": {"base": "Division", "reason": "the live string 'Divisão' is not a value of the label's own canon row(s) in pt-BR: ['divisão']", "target": "Divisão"}, "trackRecordButton": {"base": "Record", "reason": "the live string 'Gravar' is not a value of the label's own canon row(s) in pt-BR: ['Gravação']", "target": "Gravar"}, "trackTypeInstrument": {"base": "Instrument", "reason": "the live string 'Instrumento' is not a value of the label's own canon row(s) in pt-BR: ['instrumento']", "target": "Instrumento"}, "transportPlayControl": {"base": "Play", "reason": "the live string 'Reproduzir' is not a value of the label's own canon row(s) in pt-BR: ['Reproduz', 'reproduzir']", "target": "Reproduzir"}, "transportStopControl": {"base": "Stop", "reason": "the live string 'Parar' is not a value of the label's own canon row(s) in pt-BR: ['Para']", "target": "Parar"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "sliderSendHint": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "transportRecordArmExclusion": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"}
+  },
+  "zh-CN": {
+   "new_variant": {"automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "修剪"}, "subdivisionSliderLabel": {"base": "Division", "reason": "the live string '等份' is not a value of the label's own canon row(s) in zh-CN: ['个等份']", "target": "等份"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "controlSurfaceInstallMenuItem|安装…": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-zh-CN-control-surface-setup-install-item-census", "string": "安装…", "was": "12.3"},
+    "pluginMenuAudioUnits|音频单元": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-zh-CN-plugin-menu-audio-units-item-census", "string": "音频单元", "was": "12.3"}
+   }
+  },
+  "zh-TW": {
+   "new_variant": {"automationModeTrim": {"base": "Trim", "reason": "the label names no canon row (no derivedFrom) to compare against", "target": "裁剪"}, "subdivisionSliderLabel": {"base": "Division", "reason": "the live string '分隔' is not a value of the label's own canon row(s) in zh-TW: ['細分']", "target": "分隔"}, "trackRecordButton": {"base": "Record", "reason": "the live string '錄製' is not a value of the label's own canon row(s) in zh-TW: ['錄音']", "target": "錄製"}, "transportRecordControl": {"base": "Record", "reason": "the live string '錄製' is not a value of the label's own canon row(s) in zh-TW: ['錄音']", "target": "錄製"}},
+   "role_undeclared": {"cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses", "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"},
+   "unconfirmed": {
+    "controlSurfaceInstallMenuItem|安裝⋯": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-26-zh-TW-control-surface-setup-install-item-census", "string": "安裝⋯", "was": "12.3"},
+    "mixerNamedElement|mixer": {"reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent", "record": "2026-09-25-977-zh-TW-mixer-area-by-description", "string": "mixer", "was": "12.3"}
+   }
+  }
+ },
+ "note": "Written by Scripts/observations/locale_holds.py; never by hand. A hold is a reading a campaign declined to apply, and why.",
+ "roles": {
+  "automationModeContext": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "automationModeTrim": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "barSliderLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXSlider"]},
+  "beatSliderLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXSlider"]},
+  "beatsDisplayModeItem": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXSlider"]},
+  "busOutputLabelPrefix": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "controlBarMixerToggle": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox", "AXGroup", "AXLayoutArea"]},
+  "cycleRangeLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "displayModePopupLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXPopUpButton"]},
+  "eventListFilterAdditionalInfo": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "eventListFilterAftertouch": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "eventListFilterController": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "eventListFilterNotes": {"basis": "window", "census_locale": "en-US", "roles": ["AXCell", "AXCheckBox", "AXPopUpButton"]},
+  "eventListFilterPitchBend": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "eventListFilterPolyAftertouch": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "eventListFilterProgramChange": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "eventListFilterSystemExclusive": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "eventListItemCountHelp": {"basis": "window", "census_locale": "en-US", "roles": ["AXStaticText"]},
+  "eventListRegionPathHelp": {"basis": "window", "census_locale": "en-US", "roles": ["AXStaticText"]},
+  "eventListTab": {"basis": "window", "census_locale": "en-US", "roles": ["AXGroup", "AXRadioButton"]},
+  "keySignaturePopupLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXPopUpButton"]},
+  "libraryPanelLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "markerContainerKeywords": {"basis": "window", "census_locale": "en-US", "roles": ["AXRadioButton"]},
+  "markerListNumberOfItemsLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXStaticText"]},
+  "midiImportTempoAlertText": {"basis": "window", "census_locale": "en-US", "roles": ["AXRadioButton", "AXSlider"]},
+  "mixerChannelModeControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton"]},
+  "mixerGainReductionMeterControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton"]},
+  "mixerMenuHideDirection": {"basis": "menus", "census_locale": "ko-KR", "roles": ["AXMenuItem"]},
+  "mixerPresentationAll": {"basis": "window", "census_locale": "en-US", "roles": ["AXRadioButton"]},
+  "mixerPresentationSingle": {"basis": "window", "census_locale": "en-US", "roles": ["AXRadioButton"]},
+  "mixerPresentationTracks": {"basis": "window", "census_locale": "en-US", "roles": ["AXGroup", "AXRadioButton"]},
+  "mixerStripNameField": {"basis": "window", "census_locale": "en-US", "roles": ["AXTextField"]},
+  "mixerTypeFilterAudio": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "mixerTypeFilterAux": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "mixerTypeFilterBus": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "mixerTypeFilterInput": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "mixerTypeFilterInstrument": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "mixerTypeFilterMIDI": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "mixerTypeFilterMasterVCA": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "mixerTypeFilterOutput": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "newTrackSheetDescription": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXSheet"]},
+  "oneFilePerTrackPopupValue": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXPopUpButton"]},
+  "physicalOutputLabelPrefix": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "playheadPositionFieldLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton", "AXGroup"]},
+  "pluginAutomationLabelExact": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXGroup"]},
+  "pluginAutomationLabelSubstring": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "pluginFormatMono": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton"]},
+  "pluginFormatStereo": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton"]},
+  "pluginSlotListControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton"]},
+  "pluginSlotOpenControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton"]},
+  "pluginWindowSmartControlsControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "pluginWindowViewSwitcher": {"basis": "window", "census_locale": "en-US", "roles": ["AXMenuButton"]},
+  "quantizeGridEighthNote": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridEighthTriplet": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridHalfNote": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridQuarterNote": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridQuarterTriplet": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridSixteenthNote": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridSixteenthTriplet": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridSixtyFourthNote": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridThirtySecondNote": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeGridWholeNote": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "quantizeModePopupValue": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXButton"]},
+  "regionKindAudio": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "regionKindDrummer": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXRadioButton"]},
+  "regionKindMidi": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "savePanelFolderRadio": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "savePanelPackageRadio": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXRadioButton"]},
+  "sendOrIOControlLabel": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "settingPopupValue": {"basis": "menus", "census_locale": "ko-KR", "roles": ["AXMenuItem"]},
+  "sliderZoomHint": {"basis": "window", "census_locale": "en-US", "roles": ["AXSlider"]},
+  "stereoOutputLabel": {"basis": "window", "census_locale": "es-ES", "roles": ["AXButton"]},
+  "subdivisionSliderLabel": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "tempoFieldLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXRadioButton", "AXSlider"]},
+  "tempoListNumberOfItemsLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXStaticText"]},
+  "tempoSliderContainsLabel": {"basis": "window", "census_locale": "en-US", "roles": ["AXRadioButton", "AXSlider"]},
+  "tickSliderLabel": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "trackHeadersDescription": {"basis": "window", "census_locale": "en-US", "roles": ["AXGroup"]},
+  "trackRecordEnableCheckbox": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton", "AXCheckBox"]},
+  "trackTypeAudio": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "trackTypeAux": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "trackTypeBus": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "trackTypeDrummer": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXRadioButton"]},
+  "trackTypeExternalMIDI": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "trackTypeInstrument": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "trackTypeMaster": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton", "AXLayoutItem", "AXTextField"]},
+  "transportContainerMetadata": {"basis": "window", "census_locale": "en-US", "roles": ["AXGroup", "AXToolbar"]},
+  "transportCountInControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "transportCycleControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox", "AXHandle"]},
+  "transportForwardControl": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXButton"]},
+  "transportKeywordFalseFriends": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox", "AXGroup", "AXValueIndicator"]},
+  "transportMetronomeControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "transportPlayControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXCheckBox"]},
+  "transportRecordControl": {"basis": "window", "census_locale": "en-US", "roles": ["AXButton", "AXCheckBox"]},
+  "transportRewindControl": {"basis": "window", "census_locale": "it-IT", "roles": ["AXButton"]},
+  "transportStopControl": {"basis": "menus", "census_locale": "en-US", "roles": ["AXMenuItem"]},
+  "unassignedInputSlotLabel": {"basis": "window", "census_locale": "ko-KR", "roles": ["AXCheckBox"]},
+  "verticalZoomSlider": {"basis": "window", "census_locale": "en-US", "roles": ["AXSlider"]}
+ },
+ "roles_narrowed": {
+  "barSliderLabel": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXSlider"], "readings_removed": ["en-US:coverage"], "was": ["AXMenuItem", "AXSlider"]},
+  "beatSliderLabel": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXSlider"], "readings_removed": ["en-US:coverage"], "was": ["AXMenuItem", "AXSlider"]},
+  "cycleRangeLabel": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXCheckBox"], "readings_removed": ["en-US:coverage"], "was": ["AXCheckBox", "AXMenuItem"]},
+  "mixerInspectorContext": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXGroup"], "readings_removed": ["de-DE:Informationen", "en-US:coverage", "es-ES:coverage", "fr-FR:Inspecteur", "it-IT:coverage", "ja-JP:インスペクタ", "ko-KR:인스펙터", "pt-BR:Inspetor", "zh-CN:检查器", "zh-TW:檢閱器"], "was": ["AXGroup", "AXMenuItem"]},
+  "nonInsertButtonText": {"census_locale": "it-IT", "dropped": ["AXMenuButton"], "now": ["AXButton", "AXCheckBox"], "readings_removed": ["fr-FR:group"], "was": ["AXButton", "AXCheckBox", "AXMenuButton"]},
+  "playheadPositionFieldLabel": {"census_locale": "ko-KR", "dropped": ["AXButton", "AXMenuItem"], "now": ["AXGroup"], "readings_removed": ["en-US:playhead position"], "was": ["AXButton", "AXGroup", "AXMenuItem"]},
+  "playheadPositionGroupLabel": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXGroup"], "readings_removed": ["en-US:coverage", "es-ES:Posición del cursor de reproducción", "ja-JP:再生ヘッドの位置", "ko-KR:재생헤드 위치", "pt-BR:Posição do Cursor de Reprodução", "zh-CN:播放头位置", "zh-TW:播放磁頭位置"], "was": ["AXGroup", "AXMenuItem"]},
+  "pluginAutomationLabelSubstring": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXCheckBox"], "readings_removed": ["en-US:coverage"], "was": ["AXCheckBox", "AXMenuItem"]},
+  "pluginBypassControl": {"census_locale": "ko-KR", "dropped": ["AXButton", "AXMenuItem"], "now": ["AXCheckBox"], "readings_removed": ["de-DE:Umgehen", "en-US:coverage", "es-ES:desactivar", "it-IT:ignora", "ja-JP:バイパス", "ko-KR:바이패스", "pt-BR:coverage", "zh-CN:旁通", "zh-TW:略過"], "was": ["AXButton", "AXCheckBox", "AXMenuItem"]},
+  "pluginSlotListControl": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXButton"], "readings_removed": ["en-US:coverage"], "was": ["AXButton", "AXMenuItem"]},
+  "pluginSlotOpenControl": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXButton"], "readings_removed": ["en-US:coverage"], "was": ["AXButton", "AXMenuItem"]},
+  "regionHelpKeyword": {"census_locale": "zh-TW", "dropped": ["AXLayoutItem"], "now": ["AXButton"], "readings_removed": ["zh-TW:리전"], "was": ["AXButton", "AXLayoutItem"]},
+  "regionKindDrummer": {"census_locale": "ja-JP", "dropped": ["AXGroup"], "now": ["AXRadioButton"], "readings_removed": ["ko-KR:session player"], "was": ["AXGroup", "AXRadioButton"]},
+  "sendOrIOControlLabel": {"census_locale": "ko-KR", "dropped": ["AXButton", "AXMenuItem"], "now": ["AXCheckBox"], "readings_removed": ["ko-KR:센드", "ko-KR:센드 슬롯", "ko-KR:입력", "ko-KR:입력 슬롯", "ko-KR:출력", "ko-KR:출력 슬롯"], "was": ["AXButton", "AXCheckBox", "AXMenuItem"]},
+  "sliderPanHint": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXSlider"], "readings_removed": ["de-DE:coverage", "en-US:coverage", "it-IT:panning", "ja-JP:パン", "ko-KR:패닝", "zh-CN:声像"], "was": ["AXMenuItem", "AXSlider"]},
+  "sliderVolumeHint": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXSlider"], "readings_removed": ["de-DE:fader", "en-US:coverage", "es-ES:Volumen", "ja-JP:ボリューム", "ko-KR:볼륨", "zh-CN:音量"], "was": ["AXMenuItem", "AXSlider"]},
+  "sliderZoomHint": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXSlider"], "readings_removed": [], "was": ["AXMenuItem", "AXSlider"]},
+  "tempoFieldLabel": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXRadioButton", "AXSlider"], "readings_removed": ["en-US:템포"], "was": ["AXMenuItem", "AXRadioButton", "AXSlider"]},
+  "tempoSliderContainsLabel": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXRadioButton", "AXSlider"], "readings_removed": ["en-US:템포"], "was": ["AXMenuItem", "AXRadioButton", "AXSlider"]},
+  "tempoSliderLabel": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXSlider"], "readings_removed": ["de-DE:coverage", "en-US:coverage", "es-ES:Ritmo", "ja-JP:テンポ", "ko-KR:템포", "pt-BR:Andamento", "zh-CN:速度", "zh-TW:拍速"], "was": ["AXMenuItem", "AXSlider"]},
+  "trackMuteButton": {"census_locale": "pt-BR", "dropped": ["AXMenuButton"], "now": ["AXButton", "AXCheckBox"], "readings_removed": ["it-IT:Muto"], "was": ["AXButton", "AXCheckBox", "AXMenuButton"]},
+  "transportCycleControl": {"census_locale": "ko-KR", "dropped": ["AXHandle", "AXMenuItem"], "now": ["AXCheckBox"], "readings_removed": ["en-US:loop"], "was": ["AXCheckBox", "AXHandle", "AXMenuItem"]},
+  "transportKeywordFalseFriends": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXCheckBox", "AXGroup", "AXValueIndicator"], "readings_removed": ["en-US:live loops grid", "en-US:playhead position", "en-US:session player"], "was": ["AXCheckBox", "AXGroup", "AXMenuItem", "AXValueIndicator"]},
+  "transportMetronomeControl": {"census_locale": "ko-KR", "dropped": ["AXGroup", "AXMenuItem"], "now": ["AXCheckBox"], "readings_removed": ["en-US:Metronom", "en-US:click"], "was": ["AXCheckBox", "AXGroup", "AXMenuItem"]},
+  "transportPlayControl": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXCheckBox"], "readings_removed": ["en-US:coverage"], "was": ["AXCheckBox", "AXMenuItem"]},
+  "transportRecordControl": {"census_locale": "ko-KR", "dropped": ["AXMenuItem"], "now": ["AXButton", "AXCheckBox"], "readings_removed": ["en-US:coverage"], "was": ["AXButton", "AXCheckBox", "AXMenuItem"]}
+ },
+ "schema": 1
+}

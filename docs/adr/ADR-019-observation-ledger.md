@@ -302,6 +302,64 @@ that adds a gap while raising its own ceiling passes. Under `CI` that is now an 
 RESOLVES but predates the ledger is a different thing — the commit introducing the file — and is
 allowed once, named as `bootstrap`, because refusing it would make that commit unmergeable.
 
+### D9 — The Logic release is declared once, and every reading is bound to the record that read it
+
+The ledger recorded what was read and where, never which Logic, so a Logic update left every reading
+standing as `measured`. Four rules, each enforced by `Scripts/locale_labels.py --check` and the
+ratchets, each with a mutant in `Scripts/test_locale_version_axis.py`:
+
+1. **One declaration.** `AXLocalePolicy.currentLogicVersion` / `currentLogicBuild` in Swift. The JSON
+   projects it as `logic`; no other file may restate it (`docs/observations/LOGIC-BUILD.json` is gone).
+2. **Bound to a record.** A `measured`/`identifier` cell carries `logic_version`, `logic_build` (from the
+   record's own `host`; `unknown` where it states none) and `record_sha256` over the record and the
+   evidence files it cites. Missing, unreadable, edited, wrong locale/version/build or an `observed`
+   string the record never carried: the cell does not read as `measured`, and CI is red.
+3. **Currency is computed.** `coverage_currency` is `current`, `superseded`, `unknown_version` or
+   `unverified`; `currency` counts every cell per locale (`Scripts/locale_labels.py --report`). `derived`
+   and `unmeasured` are never `current`. A `derived` cell names `<corpus>:<lproj>:<rule>:<string>`
+   (`coverage_derived`) and the Logic its corpus was pinned to (`canon_logic`).
+4. **A per-locale ratchet.** `cells_not_measured_on_current_version.<locale>` in `RATCHETS.json` may only
+   shrink; raising it needs a dated `raised` entry naming the members, in the same diff.
+
+## Runbook: a Logic update
+
+Declare the release, then close the gap one locale at a time. In order:
+
+```
+# 0. what changed, and what installing it costs
+python3 Scripts/logic-build-drift.py
+
+# 1. declare it: edit currentLogicVersion / currentLogicBuild in AXLocalePolicy.swift (the only place)
+python3 Scripts/locale_labels.py --write          # reclassifies every older reading
+python3 Scripts/locale_labels.py --report         # per-locale: current / superseded / derived / ...
+python3 Scripts/check-observation-ratchets.py --rebaseline "Logic <v> (<b>) declared"   # review the diff
+
+# 2. per locale, en-US FIRST (it is the base the others are aligned against).
+#    Switch Logic's UI language yourself and relaunch it on the disposable fixture, as
+#    Scripts/observations/locale-campaign.sh does; the census never switches, quits or presses anything.
+python3 Scripts/observations/label-census.py plan <LOCALE>                # what can and cannot be read
+python3 Scripts/observations/label-census.py run <LOCALE> --write         # file records naming version+build
+python3 Scripts/observations/locale-regenerate.py <LOCALE>                # the diff; writes nothing
+python3 Scripts/observations/locale-regenerate.py <LOCALE> --apply [--accept-changed LABEL ...] [--accept-new LABEL ...]
+
+# 3. the ceiling follows the work; then the same checks CI runs
+python3 Scripts/check-observation-ratchets.py --rebaseline "<locale> re-read on <v>"
+python3 Scripts/locale_labels.py --check
+python3 Scripts/check-locale-labels-json.py
+python3 Scripts/check-observation-ratchets.py
+python3 Scripts/check-observation-records.py
+
+# 4. the derived cells rest on the canon, which is pinned to ITS Logic; re-ingest when you can
+python3 Scripts/logic_canon.py build      # needs the new Logic installed
+```
+
+`locale-regenerate.py` refuses a record with no version or build, or on any release but the declared one.
+A reading whose text changed is shown as `- old / + new` and written only for a label named with
+`--accept-changed`; a variant read before and not found now is `UNCONFIRMED` and left on its old release;
+a new string aligned from en-US is Swift-bound only with `--accept-new`. A label whose element needs a
+sheet, dialog, popup or window (`label-census.py plan` lists them with the reason) has to be read by its
+own record; the census does not open anything to reach it.
+
 ## Phases
 
 | phase | delivers | measurement needed |

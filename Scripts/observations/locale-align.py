@@ -176,8 +176,19 @@ def candidates(base_census, target_census, labels):
     return proposals, ambiguous, containing, stats
 
 
+
+
+def _read_census(path):
+    """A census document from `path`: JSON Lines (current) or the older pretty-printed JSON."""
+    spec = importlib.util.spec_from_file_location(
+        "census_evidence_for_tool", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                 "census_evidence.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load(path)
+
 def _census(path):
-    doc = json.load(open(path, encoding="utf-8"))
+    doc = _read_census(path)
     if "census" not in doc or "host" not in doc:
         raise SystemExit(f"{path}: not a census — expected `host` and `census`")
     return doc

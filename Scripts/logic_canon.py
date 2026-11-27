@@ -75,6 +75,15 @@ import urllib.parse
 from functools import lru_cache
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def _canon_groups():
+    """`Scripts/canon_groups.py`: a record's citations, grouped on disk and read one by one."""
+    import importlib.util as _u
+    spec = _u.spec_from_file_location("canon_groups_for_reader", os.path.join(os.path.dirname(os.path.abspath(__file__)), "canon_groups.py"))
+    module = _u.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 CANON_DIR = os.path.join(REPO, "docs", "canon")
 DEFAULT_APP = "/Applications/Logic Pro.app"
 
@@ -3036,7 +3045,7 @@ def scan_value_citations(repo: str = REPO) -> set:
             continue
         if not isinstance(record, dict):
             continue
-        for citation in record.get("canon") or []:
+        for citation in _canon_groups().expand(record):
             ref_text, value = citation.get("ref"), citation.get("value")
             if not ref_text or value is None:
                 continue
@@ -4079,10 +4088,27 @@ def _cmd_absent(args) -> int:
     return 1
 
 
+def _json_lines(stream) -> list[str]:
+    """Strings from JSON Lines: one JSON string per non-blank line, so a string may carry a line break,
+    a quote or a backslash and still travel through a pipe or a file with no shell quoting at all."""
+    texts = []
+    for number, line in enumerate(stream, 1):
+        if not line.strip():
+            continue
+        value = json.loads(line)
+        if not isinstance(value, str):
+            raise SystemExit(f"--stdin-json line {number}: expected a JSON string, got {type(value).__name__}")
+        if value:
+            texts.append(value)
+    return texts
+
+
 def _cmd_confirm(args) -> int:
     texts = list(args.text)
     if args.stdin:
         texts += [line.rstrip("\n") for line in sys.stdin if line.rstrip("\n")]
+    if getattr(args, "stdin_json", False):
+        texts += _json_lines(sys.stdin)
     rows = confirm(args.app, texts)
     for text in texts:
         verdicts = sorted(f"{source}/{locale}={exact}"
@@ -4298,6 +4324,9 @@ def main(argv=None) -> int:
         "confirm", help="compare strings whose 32-bit prefix matches, and pin the answer (needs Logic)")
     confirm_cmd.add_argument("text", nargs="*")
     confirm_cmd.add_argument("--stdin", action="store_true", help="also read one string per line")
+    confirm_cmd.add_argument("--stdin-json", action="store_true",
+                             help="also read JSON Lines from stdin: one JSON string per line, which can "
+                                  "carry line breaks, quotes and backslashes")
     confirm_cmd.set_defaults(func=_cmd_confirm)
 
     axhelp_cmd = sub.add_parser("axhelp", help="reverse AXHelp readings into QuickHelp keys")

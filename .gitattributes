@@ -1,0 +1,18 @@
+# Raw machine dumps live in Git LFS: a census is every AX element Logic showed, one row per line, and
+# nobody reviews it. LFS checks out the real bytes, so the guards (and the `record_sha256` digests that
+# bind a record to its evidence) still read and hash exactly what was measured. CI checks out with
+# `lfs: true`; Scripts/test_lfs_checkout.py pins that.
+docs/observations/evidence/*.census.jsonl filter=lfs diff=lfs merge=lfs -text
+
+# Machine-maintained files. GitHub collapses these in a diff; they are written by a tool and verified by a
+# guard, never edited by hand. Each is deterministic (sorted keys, stable order) so a re-run is a no-op.
+docs/observations/20*-census.json linguist-generated=true
+docs/observations/RATCHETS.json linguist-generated=true
+docs/locale/ui-labels.json linguist-generated=true
+docs/locale/holds.json linguist-generated=true
+docs/locale/census-areas.json linguist-generated=true
+docs/canon/index/** linguist-generated=true
+docs/canon/ledger/** linguist-generated=true
+docs/canon/MANIFEST.json linguist-generated=true
+Scripts/logic_ui_labels.py linguist-generated=true
+Sources/LogicProMCP/Accessibility/AXLocaleValues.swift linguist-generated=true

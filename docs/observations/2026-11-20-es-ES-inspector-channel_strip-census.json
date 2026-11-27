@@ -1,0 +1,30 @@
+{
+  "id": "2026-11-20-es-ES-inspector-channel_strip-census",
+  "date": "2026-11-20",
+  "schema": 3,
+  "subject": "Every string the inspector.channel_strip surface exposes to AX in es-ES",
+  "question": "What labels does Logic show on inspector.channel_strip in es-ES, and on which elements?",
+  "verdict": "works",
+  "issues": [768, 778],
+  "surface": "inspector.channel_strip",
+  "host": {"app": "Logic Pro", "build": "7801", "locale": "es-ES", "os": "macOS 26.3 (25D125)", "version": "13.0"},
+  "reverify": {"kind": "script", "command": "Scripts/observations/locale-census.sh es-ES", "expected": "a census in es-ES whose inspector.channel_strip rows carry the same 9 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading", "cost": "~1 min with Logic open on the fixture project in that locale"},
+  "depends": ["Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"],
+  "evidence": ["evidence/2026-11-20-es-ES-navigation-free.census.jsonl"],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {"what": "rows on inspector.channel_strip", "rows": 13, "distinct_strings": 9, "distinct_identifiers": 1},
+    {"what": "the strings, verbatim", "strings": ["Actívalo para expandir", "Contraído", "Deluxe Classic", "Inspector", "MIDI 리전", "Pasaje", "Pasaje:", "Pista", "Pista:"]},
+    {"what": "identifiers seen", "identifiers": ["chevron.right"]}
+  ],
+  "conclusion": "On this host in es-ES, inspector.channel_strip exposes 13 elements carrying 9 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": ["Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.", "9 window-level rows (the title bar, its close/minimise/zoom buttons and the unnamed containers directly under the window) belong to no area and are filed under no record; 0 further window rows matched no area rule. All are in the evidence file.", "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."],
+  "supersedes": null,
+  "canon_groups": [
+    {"ref": "logic-canon://strings/es#value", "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed", "binding": {"kind": "record"}, "values": ["Actívalo para expandir", "Contraído", "Pasaje:", "Pista", "Pista:"]},
+    {"ref": "logic-canon://strings/en#value", "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed", "binding": {"kind": "record"}, "values": ["Deluxe Classic"]},
+    {"ref": "logic-canon://nibstrings/en#value", "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed", "binding": {"kind": "record"}, "values": ["Inspector"]},
+    {"ref": "logic-canon://quickhelp/ko#value", "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed", "binding": {"kind": "record"}, "values": ["MIDI 리전"]},
+    {"ref": "logic-canon://niblabels/es#value", "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed", "binding": {"kind": "record"}, "values": ["Pasaje"]}
+  ]
+}

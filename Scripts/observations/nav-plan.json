@@ -1,0 +1,13 @@
+{
+ "note": "Which surface each step opens. A step names a LABEL (a LabelSet of AXLocalePolicy), a menu identifier or a key equivalent -- never a localised string; nav-census.py resolves it against the locale's own census. Add a step only with a close that cannot commit: the probe presses nothing but a menu item and the surface's own cancel or close.",
+ "steps": [
+  {"id": "key_commands", "surface": "system.preferences", "open": [{"identifier": "showWindow:"}]},
+  {"id": "save_as", "surface": "project.lifecycle", "open": [{"label": "saveAsMenuItem"}]},
+  {"id": "import_midi_file", "surface": "project.lifecycle", "open": [{"label": "midiFileMenuItem", "under": "importMenuItem"}]},
+  {"id": "new_tracks", "surface": "arrange.track_creation", "open": [{"shortcut": {"char": "N", "mods": 2}}]},
+  {"id": "go_to_position", "surface": "arrange.locators", "open": [{"label": "goToPositionMenuItem"}]},
+  {"id": "control_surface_setup", "surface": "system.midi", "open": [{"label": "controlSurfaceSetupMenuItem"}]},
+  {"id": "step_input_keyboard", "surface": "editor.step", "open": [{"label": "showStepInputKeyboardMenuItem"}, {"shortcut": {"char": "K", "mods": 2}}]},
+  {"id": "export_all_tracks_as_audio_files", "surface": "project.export", "open": [{"label": "allTracksAsAudioFilesMenuItem"}]}
+ ]
+}

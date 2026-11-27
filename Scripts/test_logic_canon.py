@@ -1618,7 +1618,11 @@ class AgainstTheRealCorpus(unittest.TestCase):
             return sorted({canon.normalize(line) for line in handle if line.strip()})
 
     def test_the_live_axhelp_corpus_is_explained_by_canonical_data(self):
-        """113 of 114, and the one left over is left over rather than explained away.
+        """110 of 114 on Logic 13.0 (7801), and the four left over are left over rather than explained away.
+
+        It was 113 of 114 on 12.3 (6674). The readings are Logic 12.3's, so what moved is Apple's
+        QuickHelp: `Library Focus triangle` became `Browser Focus triangle` (13.0 renamed the
+        Library to the Browser), and the Control Bar and Project Tempo menu texts were reworded.
 
         The source is bound to this historical measurement. Installed-bundle round trips
         exercise the current Logic separately; changing its text cannot change this assertion.
@@ -1632,7 +1636,11 @@ class AgainstTheRealCorpus(unittest.TestCase):
         resolver = canon.AXStringResolver(historical_logic_app(), "ko")
         unresolved = [value for value in values if resolver.resolve(value) is None]
         self.assertEqual(len(values), 114)
-        self.assertEqual(unresolved, ["이 버튼을 누르면 윈도우를 확대/축소합니다."])
+        self.assertEqual(len(unresolved), 4)
+        self.assertIn("이 버튼을 누르면 윈도우를 확대/축소합니다.", unresolved)
+        self.assertTrue(any(value.startswith("라이브러리 포커스 삼각형.") for value in unresolved))
+        self.assertTrue(any(value.startswith("컨트롤 막대.") for value in unresolved))
+        self.assertTrue(any(value.startswith("프로젝트 템포 메뉴") for value in unresolved))
 
     def test_the_ten_locales_carry_the_same_keys(self):
         sets = {}
