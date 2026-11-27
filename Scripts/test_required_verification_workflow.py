@@ -19,6 +19,14 @@ def read(path):
         return handle.read()
 
 
+def release_jobs_pages(*attempts):
+    """`gh api --paginate --slurp` output for the run jobs API: one release-build job per
+    (run_attempt, conclusion) given, beside an unrelated job."""
+    jobs = [{"name": "release-build", "run_attempt": a, "conclusion": c} for a, c in attempts]
+    return [{"total_count": len(jobs) + 1,
+             "jobs": [{"name": "test-build", "run_attempt": 1, "conclusion": "success"}, *jobs]}]
+
+
 def job_body(workflow, name):
     match = re.search(rf"^  {re.escape(name)}:\n", workflow, re.M)
     if not match:
@@ -127,7 +135,8 @@ def workflow_problems(workflow):
         problems.append("missing native-logic-e2e job")
     if "logic-native-e2e" not in native or "Native PASS a=" not in native:
         problems.append("native job does not consume the exact live status")
-    for binding in ("EXPECTED_ATTEMPT", "release-runtime-{run_id}-{expected_attempt}",
+    for binding in ("EXPECTED_ATTEMPT", "release-runtime-{run_id}-{artifact_attempt}",
+                    "actions/runs/$RUN_ID/jobs?filter=all", 'job.get("name") == "release-build"',
                     'commits/$EXPECTED_SHA/status?per_page=100',
                     'commits/$EXPECTED_SHA/statuses?per_page=100',
                     'gh api --paginate --slurp',
@@ -507,7 +516,7 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             self.assertIn(required, wrapper)
         for required in ("EXPECTED_ATTEMPT", 'artifact.get("id")',
                          'artifact.get("digest")', "Native PASS a=",
-                         "release-runtime-{run_id}-{expected_attempt}"):
+                         "release-runtime-{run_id}-{artifact_attempt}"):
             self.assertIn(required, native)
 
     def test_run_attempt_artifact_binding_cannot_be_removed_silently(self):
@@ -557,15 +566,18 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             status_path = os.path.join(directory, "status.json")
             status_pages_path = os.path.join(directory, "status-pages.json")
             artifacts_path = os.path.join(directory, "artifacts.json")
+            jobs_path = os.path.join(directory, "jobs.json")
             with open(status_path, "w", encoding="utf-8") as handle:
                 json.dump(status, handle)
             with open(status_pages_path, "w", encoding="utf-8") as handle:
                 json.dump(status_pages, handle)
             with open(artifacts_path, "w", encoding="utf-8") as handle:
                 json.dump(artifacts, handle)
+            with open(jobs_path, "w", encoding="utf-8") as handle:
+                json.dump(release_jobs_pages((2, "success")), handle)
             result = subprocess.run(
                 ["python3", "-", status_path, status_pages_path, artifacts_path,
-                 sha, target, attempt, run_id],
+                 sha, target, attempt, run_id, jobs_path],
                 input=native_consumer_script(read(".github/workflows/ci.yml")),
                 text=True,
                 capture_output=True,
@@ -574,23 +586,28 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Current run-attempt artifact passed native Logic qualification", result.stdout)
 
-    def run_native_consumer(self, rows):
-        sha, run_id, attempt, digest = "a" * 40, "123", "2", "b" * 64
+    def run_native_consumer(self, rows, release_jobs=((2, "success"),), artifact_attempts=(2,),
+                            receipt_id=42, attempt="2"):
+        """Run the consumer as attempt 2 (or `attempt`). `release_jobs` is the (run_attempt, conclusion) of every
+        release-build job the jobs API lists; `artifact_attempts` the attempts that have an artifact."""
+        sha, run_id, digest = "a" * 40, "123", "b" * 64
         target = f"https://github.com/MongLong0214/logic-pro-mcp/actions/runs/{run_id}/attempts/{attempt}"
-        artifacts = {"artifacts": [{"name": f"release-runtime-{run_id}-{attempt}",
-                                    "expired": False, "id": 42, "digest": f"sha256:{digest}"}]}
+        artifacts = {"artifacts": [{"name": f"release-runtime-{run_id}-{a}",
+                                    "expired": False, "id": 40 + a, "digest": f"sha256:{digest}"}
+                                   for a in artifact_attempts]}
         creator = {"login": "MongLong0214", "id": 97578200}
         pages = [[{"context": "logic-native-e2e", "creator": creator,
-                   "target_url": target.replace("/attempts/2", f"/attempts/{a}") if a else target,
-                   "state": state, "description": f"Native PASS a={a or attempt} id=42 d={digest}"}
+                   "target_url": target.replace(f"/attempts/{attempt}", f"/attempts/{a}") if a else target,
+                   "state": state, "description": f"Native PASS a={a or attempt} id={receipt_id} d={digest}"}
                   for a, state in rows]]
         with tempfile.TemporaryDirectory() as directory:
-            paths = [os.path.join(directory, name) for name in ("s.json", "p.json", "a.json")]
-            for path, body in zip(paths, ({"sha": sha}, pages, artifacts)):
+            paths = [os.path.join(directory, name) for name in ("s.json", "p.json", "a.json", "j.json")]
+            for path, body in zip(paths, ({"sha": sha}, pages, artifacts,
+                                          release_jobs_pages(*release_jobs))):
                 with open(path, "w", encoding="utf-8") as handle:
                     json.dump(body, handle)
             return subprocess.run(
-                ["python3", "-", *paths, sha, target, attempt, run_id],
+                ["python3", "-", *paths[:3], sha, target, attempt, run_id, paths[3]],
                 input=native_consumer_script(read(".github/workflows/ci.yml")),
                 text=True, capture_output=True, check=False)
 
@@ -611,6 +628,96 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             self.assertEqual(result.returncode, 1, result.stderr)
             self.assertIn("not success", result.stderr)
 
+    def test_failed_only_rerun_uses_the_earlier_attempts_artifact(self):
+        # Attempt 2 re-ran only native and build: release-build's job and artifact are attempt 1's.
+        # The status is still this attempt's (target .../attempts/2).
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=((1, "success"),),
+            artifact_attempts=(1,), receipt_id=41)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # Attempt 4 failed-only: the most recent earlier attempt that built (3) wins over 1,
+        # and a later attempt than this one is never chosen.
+        result = self.run_native_consumer(
+            [(None, "success")], attempt="4", release_jobs=((1, "success"), (3, "success")),
+            artifact_attempts=(1, 3), receipt_id=43)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=((1, "success"), (3, "success")),
+            artifact_attempts=(1, 3), receipt_id=41)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_failed_only_rerun_still_binds_the_current_attempts_status(self):
+        kwargs = dict(release_jobs=((1, "success"),), artifact_attempts=(1,), receipt_id=41)
+        # An old attempt's success never satisfies this attempt; only this attempt's does.
+        self.assertEqual(self.run_native_consumer([("1", "success")], **kwargs).returncode, 3)
+        self.assertEqual(self.run_native_consumer([("1", "failure")], **kwargs).returncode, 3)
+        # Its receipt must carry the artifact that was actually used (attempt 1's id).
+        result = self.run_native_consumer([(None, "success")], **{**kwargs, "receipt_id": 42})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not bind the current artifact", result.stderr)
+
+    def test_release_build_in_this_attempt_refuses_an_older_artifact(self):
+        # release-build ran in attempt 2, so attempt 1's artifact must not be used, even when
+        # attempt 2 has none (or when attempt 1's exists beside it).
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=((1, "success"), (2, "success")),
+            artifact_attempts=(1,), receipt_id=41)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("expected one current 'release-runtime-123-2' artifact, found 0", result.stderr)
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=((1, "success"), (2, "failure")),
+            artifact_attempts=(1,), receipt_id=41)
+        self.assertEqual(result.returncode, 1)
+
+    def test_failed_only_rerun_still_needs_exactly_one_candidate_artifact(self):
+        kwargs = dict(release_jobs=((1, "success"),), receipt_id=41)
+        for attempts in ((), (1, 1)):
+            result = self.run_native_consumer([(None, "success")], artifact_attempts=attempts, **kwargs)
+            self.assertEqual(result.returncode, 1, attempts)
+            self.assertIn("expected one current 'release-runtime-123-1' artifact", result.stderr)
+        # No earlier release-build success: nothing to fall back to.
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=((1, "failure"),), artifact_attempts=(1,), receipt_id=41)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("did not run in this attempt or succeed in an earlier one", result.stderr)
+        # A current-attempt artifact beside a fallback is contradictory and refused.
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=((1, "success"),), artifact_attempts=(1, 2),
+            receipt_id=41)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("an artifact exists for this attempt", result.stderr)
+
+    def test_native_producer_picks_the_artifact_attempt_like_the_consumer(self):
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        self.assertIn("actions/runs/$RUN_ID/jobs?filter=all", wrapper)
+        self.assertIn('select_artifact_attempt "$work/jobs.json"', wrapper)
+        self.assertIn('"$artifact_attempt"', wrapper)
+        # The status stays bound to the current attempt, not the artifact's.
+        self.assertIn('target_url="https://github.com/$REPO/actions/runs/$RUN_ID/attempts/$run_attempt"', wrapper)
+        self.assertIn('receipt="Native PASS a=$run_attempt id=$artifact_id d=$artifact_hash"', wrapper)
+
+    def test_native_producer_selects_the_same_attempt_as_the_consumer(self):
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        match = re.search(r'select_artifact_attempt\(\) \{\n  python3 - .*?<<\'PY\'\n(.*?)\nPY\n', wrapper, re.S)
+        self.assertTrue(match, "producer attempt selector not found")
+
+        def select(current, *attempts):
+            with tempfile.TemporaryDirectory() as directory:
+                path = os.path.join(directory, "jobs.json")
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(release_jobs_pages(*attempts), handle)
+                return subprocess.run(["python3", "-", path, str(current)], input=match.group(1),
+                                      text=True, capture_output=True, check=False)
+
+        self.assertEqual(select(2, (1, "success")).stdout.strip(), "1")
+        self.assertEqual(select(4, (1, "success"), (3, "success")).stdout.strip(), "3")
+        # release-build ran in this attempt: only this attempt counts.
+        self.assertEqual(select(2, (1, "success"), (2, "success")).stdout.strip(), "2")
+        self.assertEqual(select(2, (1, "success"), (2, "failure")).stdout.strip(), "2")
+        refused = select(2, (1, "failure"))
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertNotEqual(select(2).returncode, 0)
+
     def test_combined_status_rejects_a_wrong_top_level_sha(self):
         workflow = read(".github/workflows/ci.yml")
         script = native_consumer_script(workflow)
@@ -620,6 +727,9 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             status_path = os.path.join(directory, "status.json")
             status_pages_path = os.path.join(directory, "status-pages.json")
             artifacts_path = os.path.join(directory, "artifacts.json")
+            jobs_path = os.path.join(directory, "jobs.json")
+            with open(jobs_path, "w", encoding="utf-8") as handle:
+                json.dump([], handle)
             with open(status_path, "w", encoding="utf-8") as handle:
                 json.dump({"sha": "b" * 40}, handle)
             with open(status_pages_path, "w", encoding="utf-8") as handle:
@@ -628,7 +738,7 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                 json.dump({"artifacts": []}, handle)
             result = subprocess.run(
                 ["python3", "-", status_path, status_pages_path, artifacts_path, "a" * 40,
-                 "https://example.invalid/attempt", "1", "123"],
+                 "https://example.invalid/attempt", "1", "123", jobs_path],
                 input=script,
                 text=True,
                 capture_output=True,
