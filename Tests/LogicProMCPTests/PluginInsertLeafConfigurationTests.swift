@@ -244,4 +244,47 @@ struct PluginInsertLeafConfigurationTests {
             }
         }
     }
+
+    // MARK: - #1618: data-driven stock Audio FX specs
+
+    @Test("DeEsser 2 and ChromaVerb resolve to category > name > format leaf, in every locale's leaf")
+    func stockEffectsResolveToMenuPaths() throws {
+        let deesser = try #require(AccessibilityChannel.pluginInsertSpec(named: "deesser 2"))
+        #expect(deesser.canonicalName == "DeEsser 2")
+        #expect(deesser.menuPaths.contains(["Dynamics", "DeEsser 2", "Stereo"]))
+        #expect(deesser.menuPaths.contains(["Dynamics", "DeEsser 2", "스테레오"]))
+        let verb = try #require(AccessibilityChannel.pluginInsertSpec(named: "ChromaVerb"))
+        #expect(verb.menuPaths.contains(["Reverb", "ChromaVerb", "Stereo"]))
+        #expect(verb.menuPaths.count == AXLocalePolicy.pluginFormatStereo.labels.count)
+        let expected = [
+            "Pitch Correction": "Pitch", "Pitch Shifter": "Pitch", "Space Designer": "Reverb",
+            "Tape Delay": "Delay",
+        ]
+        for (name, category) in expected {
+            let spec = try #require(AccessibilityChannel.pluginInsertSpec(named: name))
+            #expect(spec.menuPaths.allSatisfy { $0.dropLast() == [category, name] })
+        }
+    }
+
+    @Test("Gain, Compressor and Channel EQ keep exactly the paths they had")
+    func originalThreeKeepTheirPaths() throws {
+        let leaves = AXLocalePolicy.pluginFormatStereo.labels
+        let gain = try #require(AccessibilityChannel.pluginInsertSpec(named: "Gain"))
+        #expect(gain.menuPaths == leaves.map { ["Utility", "Gain", $0] })
+        let compressor = try #require(AccessibilityChannel.pluginInsertSpec(named: "Compressor"))
+        #expect(compressor.menuPaths == leaves.map { ["Dynamics", "Compressor", $0] })
+        let eq = try #require(AccessibilityChannel.pluginInsertSpec(named: "channeleq"))
+        #expect(eq.menuPaths == leaves.map { ["Channel EQ", $0] } + leaves.map { ["EQ", "Channel EQ", $0] })
+    }
+
+    @Test("a name the canon has not measured refuses")
+    func unmeasuredNamesRefuse() {
+        // In the catalog, but with no row in the plug-in name canon.
+        #expect(AccessibilityChannel.pluginInsertSpec(named: "ChromaGlow") == nil)
+        #expect(AccessibilityChannel.pluginInsertSpec(named: "Quantec Room Simulator") == nil)
+        // Not in the catalog at all, and an instrument.
+        #expect(AccessibilityChannel.pluginInsertSpec(named: "Totally Made Up") == nil)
+        #expect(AccessibilityChannel.pluginInsertSpec(named: "Alchemy") == nil)
+        #expect(AccessibilityChannel.pluginInsertSpec(named: "  ") == nil)
+    }
 }

@@ -7418,6 +7418,19 @@ extension QualificationRunnerTests {
         #expect(reason.contains("baseline observation unavailable"))
     }
 
+    /// The baseline DISPATCH hands to the judgement is the settled one: the first read has no window
+    /// list (Logic not yet found), a later read is readable. Judged against the first read the
+    /// operation would fail on the unreadable baseline and a focus that "moved" from nothing.
+    @Test func theOperationIsJudgedAgainstTheSettledBaselineNotTheFirstUnreadableRead() throws {
+        let unreadable = QualificationUIObservation(
+            windowListRead: false, unreadable: ["CGWindowListCopyWindowInfo"])
+        let script = UIScript([unreadable, Self.mixerFocus])
+        let operation = try driveFastForward(observer: { script.next() })
+        #expect(operation.failureReason == nil, "\(operation.failureReason ?? "")")
+        #expect(operation.status == .passed)
+        #expect(script.reads >= 3, "the unreadable baseline was re-read before the operation")
+    }
+
     // MARK: the shipped `--qualify` path
 
     /// Runs `--qualify` through `QualificationRunner.Runtime.transportDrive`, the drive

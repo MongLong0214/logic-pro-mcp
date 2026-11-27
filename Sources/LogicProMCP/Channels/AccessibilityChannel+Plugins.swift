@@ -22,30 +22,34 @@ extension AccessibilityChannel {
         }
     }
 
+    /// The catalog's effects, read once and without touching disk: the lookup needs a name and a
+    /// category, not the census of what this Mac has installed.
+    private static let insertCatalog: [StockPluginCatalogEntry] =
+        StockPluginCatalog.defaultSnapshot(census: .deterministic()).entries
+            .filter { $0.type != .instrument && $0.type != .midiEffect }
+
+    private static func insertKey(_ name: String) -> String {
+        name.lowercased().filter { !$0.isWhitespace }
+    }
+
+    /// A stock Audio FX name to its menu paths, built from measured data (PluginInsertMenuCanon).
+    /// A name or category the canon has not measured gives nil: the caller refuses, nothing is guessed.
     static func pluginInsertSpec(named rawName: String) -> PluginInsertSpec? {
-        let normalized = rawName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch normalized {
-        case "gain":
-            return PluginInsertSpec(
-                canonicalName: "Gain",
-                aliases: ["Gain"],
-                menuPaths: insertPaths([["Utility", "Gain"]])
-            )
-        case "compressor":
-            return PluginInsertSpec(
-                canonicalName: "Compressor",
-                aliases: ["Compressor"],
-                menuPaths: insertPaths([["Dynamics", "Compressor"]])
-            )
-        case "channel eq", "channeleq":
-            return PluginInsertSpec(
-                canonicalName: "Channel EQ",
-                aliases: ["Channel EQ"],
-                menuPaths: insertPaths([["Channel EQ"], ["EQ", "Channel EQ"]])
-            )
-        default:
+        let key = insertKey(rawName)
+        guard !key.isEmpty,
+              let entry = insertCatalog.first(where: { insertKey($0.displayName) == key }),
+              PluginInsertMenuCanon.measuredPluginNames.contains(entry.displayName),
+              PluginInsertMenuCanon.measuredRootCategories.contains(entry.category) else {
             return nil
         }
+        // Channel EQ is also offered at the top of the root menu; the path it always had stays.
+        var bases = [[entry.category, entry.displayName]]
+        if entry.displayName == "Channel EQ" { bases.insert(["Channel EQ"], at: 0) }
+        return PluginInsertSpec(
+            canonicalName: entry.displayName,
+            aliases: [entry.displayName],
+            menuPaths: insertPaths(bases)
+        )
     }
 
     static func defaultInsertPlugin(
@@ -62,12 +66,16 @@ extension AccessibilityChannel {
                 hint: "insert_plugin requires explicit 'track' (Int >= 0)"
             ))
         }
-        guard let slotRaw = params["slot"] ?? params["insert"],
-              let slotIndex = Int(slotRaw), slotIndex >= 0 else {
-            return .error(HonestContract.encodeStateC(
-                error: .invalidParams,
-                hint: "insert_plugin requires explicit 'slot' (Int >= 0)"
-            ))
+        // Optional: without one the plug-in goes into the first empty Audio FX slot.
+        var requestedSlot: Int?
+        if let slotRaw = params["slot"] ?? params["insert"] {
+            guard let parsed = Int(slotRaw), parsed >= 0 else {
+                return .error(HonestContract.encodeStateC(
+                    error: .invalidParams,
+                    hint: "insert_plugin 'slot' must be an Int >= 0 when given"
+                ))
+            }
+            requestedSlot = parsed
         }
         // #871 — the channel configuration, when the caller names one. Optional: a strip that
         // offers exactly one, or offers the spec's preference, needs no choice made. It becomes
@@ -85,7 +93,7 @@ extension AccessibilityChannel {
             }
             return .error(HonestContract.encodeStateC(
                 error: .invalidParams,
-                hint: "unsupported plugin for insert_plugin. Supported stock plugins: Gain, Compressor, Channel EQ",
+                hint: "unsupported plugin for insert_plugin: its menu path is not in the measured canon (stock Audio FX only)",
                 extras: ["requested_plugin_name": requestedPluginName]
             ))
         }
@@ -142,23 +150,23 @@ extension AccessibilityChannel {
                 error: .elementNotFound,
                 hint: "refusing insert_plugin: the strip's children did not read, so its insert slots "
                     + "are unknown, not absent.",
-                extras: ["track": track, "slot": slotIndex, "strip_children_unread": true,
+                extras: ["track": track, "slot": requestedSlot ?? NSNull(), "strip_children_unread": true,
                          "write_attempted": false]
             ))
         }
-        guard slotIndex < slots.count else {
+        guard !slots.isEmpty, requestedSlot.map({ $0 < slots.count }) ?? true else {
             // #234 — a zero-slot strip names the insert_section_not_enumerable
             // condition (retaining visible_slots:0); an out-of-range index on a
             // non-empty chain keeps the generic wording.
             let detail = AccessibilityChannel.slotAddressingFailureDetail(
-                requestedIndex: slotIndex, slotCount: slots.count
+                requestedIndex: requestedSlot ?? 0, slotCount: slots.count
             )
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
                 hint: slots.isEmpty
                     ? "\(detail.observed). \(AccessibilityChannel.insertSectionNotEnumerableRecoveryHint)"
                     : "plugin slot out of range for visible mixer strip",
-                extras: ["track": track, "slot": slotIndex, "visible_slots": slots.count]
+                extras: ["track": track, "slot": requestedSlot ?? NSNull(), "visible_slots": slots.count]
             ))
         }
         guard !slots.contains(where: { $0.readStatus == .unclassified }) else {
@@ -166,9 +174,18 @@ extension AccessibilityChannel {
                 error: .elementNotFound,
                 hint: "refusing insert_plugin: "
                     + AccessibilityChannel.stripInsertsUnclassifiedMessage
-                    + ", so slot \(slotIndex) cannot be named.",
-                extras: ["track": track, "slot": slotIndex, "inserts_unclassified": true,
+                    + ", so the target slot cannot be named.",
+                extras: ["track": track, "slot": requestedSlot ?? NSNull(), "inserts_unclassified": true,
                          "write_attempted": false]
+            ))
+        }
+        // No slot named: the first verified-empty one. Every slot is classified by now, so "first
+        // empty" cannot skip an occupied slot whose name did not read.
+        guard let slotIndex = requestedSlot ?? slots.firstIndex(where: { $0.isEmpty }) else {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "no_free_slot: every visible Audio FX slot on this strip is occupied",
+                extras: ["track": track, "visible_slots": slots.count, "write_attempted": false]
             ))
         }
         let targetSlot = slots[slotIndex]
@@ -183,6 +200,7 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+        let slotsBefore = slots.map { $0.name }
 
         _ = AXHelpers.performAction(targetSlot.element, kAXPressAction, runtime: runtime.ax)
         try? await Task.sleep(for: .milliseconds(250))
@@ -237,7 +255,16 @@ extension AccessibilityChannel {
             // request back instead of the choice would hide the entire behaviour this fix adds.
             "menu_leaf_chosen": menuLeafChosen(selection),
         ]
-        if let observed, spec.matches(observed) {
+        // The plug-ins that were already there are read back too: inserting must not have moved or
+        // replaced any of them. Slots past the old chain are the new empty slot Logic grows.
+        let slotsAfter = pluginSlotNames(track: track, runtime: runtime)
+        let preexistingUnchanged = slotsAfter.map { after in
+            slotsBefore.enumerated().allSatisfy { $0.offset == slotIndex || ($0.offset < after.count && after[$0.offset] == $0.element) }
+        }
+        extras["slots_before"] = slotsBefore.map { $0 ?? NSNull() as Any }
+        extras["slots_after"] = slotsAfter.map { $0.map { $0 ?? NSNull() as Any } } ?? NSNull()
+        extras["preexisting_slots_unchanged"] = preexistingUnchanged ?? NSNull()
+        if let observed, spec.matches(observed), preexistingUnchanged == true {
             return .success(HonestContract.encodeStateA(extras: extras))
         }
         extras["rollback_attempted"] = true
@@ -296,6 +323,17 @@ extension AccessibilityChannel {
             try? await Task.sleep(for: .milliseconds(100))
         }
         return nil
+    }
+
+    /// Every audio insert slot's plug-in name on one strip, nil when the strip did not read.
+    /// An empty slot is nil in the list.
+    private static func pluginSlotNames(track: Int, runtime: AXLogicProElements.Runtime) -> [String?]? {
+        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime),
+              let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax),
+              track < strips.count,
+              let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
+        else { return nil }
+        return slots.map { $0.name }
     }
 
     /// The configuration actually pressed, or "" when nothing was.

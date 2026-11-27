@@ -280,6 +280,28 @@ struct SystemDispatcher: OperationTraceDispatching {
             }
         }
 
+        /// #1565: the two usual causes of a 25 s timeout, measured. Absent when not probed.
+        struct LivenessSection: Encodable {
+            let windowOnScreen: Bool?
+            let cpuPercent: Double?
+            let mainThreadSaturated: Bool
+            let likelyCauses: [String]
+
+            init(_ liveness: LogicLiveness) {
+                windowOnScreen = liveness.windowOnScreen
+                cpuPercent = liveness.cpuPercent.map { ($0 * 10).rounded() / 10 }
+                mainThreadSaturated = liveness.mainThreadSaturated
+                likelyCauses = liveness.likelyCauses
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case windowOnScreen = "window_on_screen"
+                case cpuPercent = "cpu_percent"
+                case mainThreadSaturated = "main_thread_saturated"
+                case likelyCauses = "likely_causes"
+            }
+        }
+
         let logicProRunning: Bool
         let logicProHasWindow: Bool
         let logicProHasDocument: Bool
@@ -295,8 +317,10 @@ struct SystemDispatcher: OperationTraceDispatching {
         let cache: CacheSection
         let permissions: PermissionsSection
         let process: ProcessSection
+        var logicLiveness: LivenessSection?
 
         enum CodingKeys: String, CodingKey {
+            case logicLiveness = "logic_liveness"
             case logicProRunning = "logic_pro_running"
             case logicProHasWindow = "logic_pro_has_window"
             case logicProHasDocument = "logic_pro_has_document"
@@ -380,6 +404,10 @@ struct SystemDispatcher: OperationTraceDispatching {
         ])
     )
 
+    private static func healthLiveness(_ liveness: LogicLiveness) -> HealthResponse.LivenessSection? {
+        liveness == .unavailable ? nil : HealthResponse.LivenessSection(liveness)
+    }
+
     static func handle(
         command: String,
         params: [String: Value],
@@ -399,6 +427,8 @@ struct SystemDispatcher: OperationTraceDispatching {
         projectChooserVisible: @Sendable () -> Bool = {
             AccessibilityChannel.projectChooserShellIsPositivelyObserved()
         },
+        // #1565: window-on-Space and CPU probe for `health`. Not probed by default.
+        logicLiveness: @Sendable () -> LogicLiveness = { .unavailable },
         // ADR-002 F5 — live AX track-header reader forwarded to the saga
         // executor so target_ref track/mixer steps fail closed on out-of-band
         // reorder. nil by default (saga surface tests stay deterministic);
@@ -536,6 +566,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             // into the running-state bit made the two truths drift.
             let logicObservation = logicHealthObservation()
             let logicProHasWindow = ProcessUtils.hasVisibleWindow()
+            let livenessReading = Self.healthLiveness(logicLiveness())
             let logicProProjectChooserVisible = projectChooserVisible()
             let logicProHasDocument = logicProProjectChooserVisible
                 ? false
@@ -597,7 +628,8 @@ struct SystemDispatcher: OperationTraceDispatching {
                     cpuPercentUnits: process.cpuPercentUnits,
                     cpuSampleWindowSec: Double(String(format: "%.3f", process.cpuSampleWindowSec))
                         ?? process.cpuSampleWindowSec
-                )
+                ),
+                logicLiveness: logicObservation.running ? livenessReading : nil
             )
             let json = encodeJSON(health)
             return toolTextResult(json)

@@ -94,6 +94,9 @@ extension TrackDispatcher {
         relocationTrackInventory: @escaping @Sendable () -> [RecordSequenceRelocationTrackObservation]? = {
             AccessibilityChannel.defaultGetTrackStates()?.map(RecordSequenceRelocationTrackObservation.init(track:))
         },
+        targetStripReading: @escaping @Sendable (String) -> AXLogicProElements.StripReading = {
+            AXLogicProElements.inspectorStripReading(expectedName: $0)
+        },
         readRegions: @escaping @Sendable () -> RecordSequenceRegionReadback = {
             switch AccessibilityChannel.enumerateRegionItems() {
             case .success(let result):
@@ -262,7 +265,11 @@ extension TrackDispatcher {
                 refusal["hint"] = "target_expected_name must identify exactly one Arrange track before any write."
                 return jsonToolTextResult(refusal, isError: true)
             }
-            guard target.type == .softwareInstrument else {
+            // The track header cannot tell an audio track from a software instrument and answers
+            // `unknown` for both (#766), so `unknown` is not evidence against the target. The
+            // inspector channel strip, when it carries this exact name, is the same evidence
+            // create_instrument verifies with; it is read only here, with no write.
+            guard targetIsSoftwareInstrument(target, stripReading: targetStripReading) else {
                 refusal["error"] = "target_not_software_instrument"
                 refusal["hint"] = "target_track must be positively observed as a Software Instrument track."
                 return jsonToolTextResult(refusal, isError: true)
@@ -564,6 +571,7 @@ extension TrackDispatcher {
                     cache: cache,
                     traceID: traceID,
                     relocationTrackInventory: relocationTrackInventory,
+                    targetStripReading: targetStripReading,
                     readRegions: readRegions,
                     settleReadback: settleReadback
                 )
@@ -726,6 +734,7 @@ extension TrackDispatcher {
         cache: StateCache,
         traceID: TraceID?,
         relocationTrackInventory: @escaping @Sendable () -> [RecordSequenceRelocationTrackObservation]?,
+        targetStripReading: @escaping @Sendable (String) -> AXLogicProElements.StripReading,
         readRegions: @escaping @Sendable () -> RecordSequenceRegionReadback,
         settleReadback: @escaping @Sendable () async -> Void
     ) async -> CallTool.Result {
@@ -790,7 +799,7 @@ extension TrackDispatcher {
         }
         guard afterImport.indices.contains(target.index),
               afterImport[target.index].name.utf8.elementsEqual(target.expectedName.utf8),
-              afterImport[target.index].type == .softwareInstrument else {
+              afterImport[target.index].type == baseline[target.index].type else {
             return failure(
                 "target_changed", stage: "relocation_postimport",
                 hint: "The exact Software Instrument target did not survive the owned GM-lane append unchanged."
@@ -879,7 +888,7 @@ extension TrackDispatcher {
               relocationInventoriesMatch(afterImport, pasteBoundary),
               pasteBoundary.indices.contains(target.index),
               pasteBoundary[target.index].name.utf8.elementsEqual(target.expectedName.utf8),
-              pasteBoundary[target.index].type == .softwareInstrument else {
+              pasteBoundary[target.index].type == baseline[target.index].type else {
             return failure(
                 "target_changed", stage: "relocation_paste_boundary",
                 hint: "The exact selected Software Instrument target changed or could not be renewed immediately before paste. Nothing was pasted."
@@ -891,6 +900,14 @@ extension TrackDispatcher {
             return failure(
                 "target_changed", stage: "relocation_paste_boundary",
                 hint: "The exact Software Instrument target was not the sole selected track immediately before paste. Nothing was pasted."
+            )
+        }
+
+        // The target is now the sole selected track, so its inspector strip is the one to read.
+        guard targetIsSoftwareInstrument(pasteBoundary[target.index], stripReading: targetStripReading) else {
+            return failure(
+                "target_changed", stage: "relocation_paste_boundary",
+                hint: "The selected target was not confirmed as a Software Instrument immediately before paste. Nothing was pasted."
             )
         }
 
@@ -931,6 +948,27 @@ extension TrackDispatcher {
         payload["gm_device_lane_retained"] = true
         payload["cleanup_hint"] = "The original take is still on GM Device lane \(gmLane). Remove it with logic_tracks delete { index: \(gmLane), expected_name: \"\(gmLaneName)\" } once satisfied."
         return jsonToolTextResult(payload)
+    }
+
+    /// A header that read `software_instrument` is a positive reading. One that read `unknown`
+    /// is accepted only when the inspector strip carrying this exact name shows a MIDI effect
+    /// slot, which no audio or external MIDI strip has. A Drummer strip has the same slot
+    /// (#766), so this cannot exclude a Drummer track; that still needs a live measurement.
+    private static func targetIsSoftwareInstrument(
+        _ target: RecordSequenceRelocationTrackObservation,
+        stripReading: @Sendable (String) -> AXLogicProElements.StripReading
+    ) -> Bool {
+        switch target.type {
+        case .softwareInstrument:
+            return true
+        case .unknown:
+            switch stripReading(target.name) {
+            case .type(.softwareInstrument), .instrumentFamily: return true
+            case .type, .undetermined: return false
+            }
+        default:
+            return false
+        }
     }
 
     private static func relocationInventoryIsExact(

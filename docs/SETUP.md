@@ -5,7 +5,7 @@ Minimal install and Logic Pro integration guide for Logic Pro MCP v3.19.0.
 ## Requirements
 
 - macOS 14+
-- Logic Pro — **latest release prioritized (currently 13.0)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variant: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported; the two use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro.
+- Logic Pro — **latest release prioritized (the release `AXLocalePolicy.currentLogicVersion` declares)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variant: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported; the two use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro.
 - Claude Code, Claude Desktop, Cursor, or another MCP client
 - Homebrew, or Command Line Tools with Swift if building from source
 
@@ -317,6 +317,10 @@ A detected Logic Pro version below the 12.0.1 support floor is a terminal unavai
 A measured blocking modal is a terminal unavailable state for this read-only check. The diagnostic
 retains bounded dialog identity but suppresses the observed dismissal instruction and exposes no
 operator action in `fix_plan`.
+
+<a id="doctor-logicresponsiveness"></a>
+### `logic.responsiveness`
+Warns, with the fix, when the two usual causes of "every live operation times out at 25 s" are measured. If Logic's window is not on screen on the current Space, move Logic to the same desktop as the app running the server (a window on another desktop or in full screen reads as no window). If Logic's CPU stays above about 85% over a 200 ms sample, its main thread is saturated and AX calls stall: with Logic 13 the usual cause is the open Browser panel, so close it. The same causes appear as `likely_causes` on an `operation_timeout` reply. The check reads the process CPU and the window list only; it never touches Logic's AX tree.
 
 <a id="doctor-channelsmanual-validation"></a>
 ### `channels.manual_validation`

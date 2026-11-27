@@ -444,8 +444,8 @@ and `MANIFEST.json` to agree, instead of one text edit.
 
 **Three is the cost of adding a row, not the cost of every forgery, and this paragraph used to say
 three flatly.** Review 2026-09-19 replaced the CONTENTS of `absence/strings.es.u32` — keeping only
-the prefixes the cited `es` rows need, randomising the rest, and keeping the entry count the old
-manifest recorded — then refreshed the manifest's `artifacts` digest. TWO files, every
+the prefixes the cited `es` rows need, randomising the rest, and keeping the entry count at the
+figure the manifest records for it — then refreshed the manifest's `artifacts` digest. TWO files, every
 guard green, and `is_absent("strings", "es", "Editar")` flipped from False to True for a string
 Logic ships. The count ratchet compares a number and the digest compares the bytes that same edit
 rewrote, so nothing looked at the contents. Nothing offline can: an entry nobody has cited has no
@@ -538,3 +538,18 @@ driver is loaded through unittest. The other installed-bundle
 tests still read the current application. These are static corpus checks, not native AX readback
 or release qualification. Hosted machines without Logic retain the existing installed-bundle
 skips; the offline extraction and input-validation cases still execute.
+
+What a rebuild on a new Logic needed, first measured on 13.0 (7801) over 12.3 (6674), so the next
+one starts from it rather than from the failures:
+
+* A bundle shape the extractor has never met stops the build naming the file. 13.0 brought
+  `NSStringDeviceSpecificRuleType` in Jet2P's `Localizable.stringsdict`.
+* A locale whose `QuickHelp.plist` is absent is read through the development localization, and the
+  build records that fallback; it is not a measurement of what the running Logic shows in that language.
+* A string Apple replaced stays a member while the app must work on the older Logic, but a literal
+  newly classified `nowhere` after a Logic change must be re-proved absent from every pinned corpus
+  (`check_policy_nowhere_only_shrinks` in `Scripts/check-canon-citations.py`).
+* Cited rows Apple removed are re-pointed at the row that now carries the value, then
+  `Scripts/locale_labels.py --write`; the generated tables are never edited.
+* The order is: build, `check-policy-literals-against-canon.py --reclassify`, build again (the
+  ledger is cut from the classification), `locale_labels.py --write`.

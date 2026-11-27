@@ -109,7 +109,11 @@ class HistoricalHostBindingTests(unittest.TestCase):
                 json.dumps({"labels": {}, "supported_locales": ["ko-KR"]}), encoding="utf-8")
             (obs / "SURFACES.md").write_text(
                 "| `system.accessibility` | fixture |\n", encoding="utf-8")
-            (obs / "LOGIC-BUILD.json").write_text(json.dumps(self.later), encoding="utf-8")
+            swift = root / "Sources" / "LogicProMCP" / "Accessibility"
+            swift.mkdir(parents=True)
+            (swift / "AXLocalePolicy.swift").write_text(
+                f'enum AXLocalePolicy {{\n    static let currentLogicVersion = "{self.later["version"]}"\n'
+                f'    static let currentLogicBuild = "{self.later["build"]}"\n}}\n', encoding="utf-8")
             path = obs / (RID + ".json")
             mixed = copy.deepcopy(self.record)
             mixed["host"] = dict(self.later, binding="unknown", reason="Unbound history.")

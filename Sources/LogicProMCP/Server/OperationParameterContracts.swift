@@ -231,7 +231,7 @@ extension OperationRegistry {
                 "confirmed": .enforced(.boolean, .bool(false)),
                 "configuration": .unconstrained("read as text and checked by the channel against the strip's menu"),
                 "channel_configuration": .unconstrained("read as text and checked by the channel against the strip's menu"),
-            ], required: [["track", "track_index", "index"], ["slot", "insert"], ["plugin_name", "plugin", "name"]]),
+            ], required: [["track", "track_index", "index"], ["plugin_name", "plugin", "name"]]),
             "mixer.set_plugin_param": .init(params: [
                 "track": index(), "insert": index(0), "param": index(), "value": .enforced(.number, .double(0.5)),
             ], required: [["track"], ["insert"], ["param"], ["value"]]),

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Partition and verify exact Swift Testing manifests for coverage shards."""
+"""Partition and verify exact Swift Testing manifests for N coverage shards."""
 
 import argparse
 from pathlib import Path
@@ -37,33 +37,94 @@ def _write_new(path: Path, lines: list[str]) -> None:
         raise ManifestError(f"refusing to replace existing manifest: {path}") from error
 
 
-def partition_manifest(
-    inventory_path: Path, selector: str, selected_path: Path, complement_path: Path
-) -> None:
-    inventory = _read(inventory_path, label="test inventory")
-    try:
-        pattern = re.compile(selector)
-    except re.error as error:
-        raise ManifestError(f"invalid shard selector {selector!r}: {error}") from error
-    selected = sorted(entry for entry in inventory if pattern.search(entry))
-    complement = sorted(entry for entry in inventory if not pattern.search(entry))
-    if not selected:
-        raise ManifestError("selected shard is empty")
-    if not complement:
-        raise ManifestError("complement shard is empty")
-    _write_new(selected_path, selected)
-    _write_new(complement_path, complement)
-    verify_union(inventory_path, selected_path, complement_path)
+# SwiftPM applies --filter as a regular expression to the module-qualified identifier that
+# `swift test list` prints (measured with a local `swift test --skip-build --filter`: an anchored
+# pattern ending in `$` selects nothing for Swift Testing, one ending in `(?:/|$)` selects exactly
+# the test). The shard also checks its xUnit output against its own manifest, so a filter that
+# selected the wrong tests fails verify-xunit instead of passing quietly.
+_REGEX_METACHARACTERS = frozenset("\\.^$|?*+()[]{}")
+
+# One command-line argument carries the whole filter. macOS allows about 1 MiB for arguments and
+# environment together, so a shard that outgrows this fails the partition step (add shards)
+# rather than failing later inside exec.
+MAX_FILTER_BYTES = 400_000
 
 
-def verify_union(inventory_path: Path, selected_path: Path, complement_path: Path) -> None:
+def _literal(text: str) -> str:
+    return "".join("\\" + char if char in _REGEX_METACHARACTERS else char for char in text)
+
+
+def shard_manifest_path(directory: Path, index: int) -> Path:
+    return directory / f"shard-{index}.txt"
+
+
+def shard_filter_path(directory: Path, index: int) -> Path:
+    return directory / f"shard-{index}.filter"
+
+
+def shard_filter(entries: list[str]) -> str:
+    """An anchored regular expression that matches exactly these identifiers.
+
+    Entries are grouped by everything up to their last separator so the pattern names each suite
+    once, which keeps it short and lets the matcher reject a non-member at the suite name.
+    """
+    groups: dict[str, list[str]] = {}
+    for entry in entries:
+        separator = "/" if "/" in entry else "."
+        head, tail = entry.rsplit(separator, 1)
+        groups.setdefault(head + separator, []).append(tail)
+    branches = [
+        _literal(head) + "(?:" + "|".join(_literal(tail) for tail in tails) + ")"
+        for head, tails in groups.items()
+    ]
+    # SwiftPM matches Swift Testing against the identifier followed by "/<file>:<line>:<column>",
+    # and XCTest against the bare identifier, so the identifier must end at a "/" or the end.
+    return "^(?:" + "|".join(branches) + ")(?:/|$)"
+
+
+def partition_manifest(inventory_path: Path, shard_count: int, output_directory: Path) -> None:
+    """Deal the byte-sorted inventory round-robin into `shard_count` shards.
+
+    Entry i of the sorted inventory goes to shard i mod N. Tests of one suite are adjacent in
+    that order, so every suite, including a very long one, is spread over all the shards, and no
+    list of suites or timings has to be maintained. A stale assumption can only cost balance:
+    verify_union proves exactness against the inventory afterwards.
+    """
+    if shard_count < 1:
+        raise ManifestError(f"shard count must be at least 1: {shard_count}")
+    inventory = sorted(_read(inventory_path, label="test inventory"))
+    if len(inventory) < shard_count:
+        raise ManifestError(
+            f"inventory has {len(inventory)} tests, fewer than {shard_count} shards")
+    manifests = [shard_manifest_path(output_directory, index) for index in range(shard_count)]
+    for index, path in enumerate(manifests):
+        entries = inventory[index::shard_count]
+        pattern = shard_filter(entries)
+        if len(pattern.encode("utf-8")) > MAX_FILTER_BYTES:
+            raise ManifestError(
+                f"shard {index} filter exceeds {MAX_FILTER_BYTES} bytes; use more shards")
+        try:
+            re.compile(pattern)
+        except re.error as error:
+            raise ManifestError(f"shard {index} filter is not a regular expression: {error}") from error
+        _write_new(path, entries)
+        _write_new(shard_filter_path(output_directory, index), [pattern])
+    verify_union(inventory_path, manifests)
+
+
+def verify_union(inventory_path: Path, shard_paths: list[Path]) -> None:
+    """Every inventory entry is in exactly one shard manifest, and nothing else is."""
+    if not shard_paths:
+        raise ManifestError("no shard manifests given")
     inventory = set(_read(inventory_path, label="test inventory"))
-    selected = set(_read(selected_path, label="selected manifest", require_sorted=True))
-    complement = set(_read(complement_path, label="complement manifest", require_sorted=True))
-    overlap = selected & complement
-    if overlap:
-        raise ManifestError(f"shard manifests overlap: {sorted(overlap)[:3]}")
-    union = selected | complement
+    owner: dict[str, Path] = {}
+    for path in shard_paths:
+        for entry in _read(path, label="shard manifest", require_sorted=True):
+            if entry in owner:
+                raise ManifestError(
+                    f"shard manifests overlap: {entry!r} is in {owner[entry].name} and {path.name}")
+            owner[entry] = path
+    union = set(owner)
     if union != inventory:
         missing = sorted(inventory - union)[:3]
         extra = sorted(union - inventory)[:3]
@@ -140,9 +201,8 @@ def _parser() -> argparse.ArgumentParser:
 
     partition = subparsers.add_parser("partition")
     partition.add_argument("--inventory", type=Path, required=True)
-    partition.add_argument("--selector", required=True)
-    partition.add_argument("--selected", type=Path, required=True)
-    partition.add_argument("--complement", type=Path, required=True)
+    partition.add_argument("--shards", type=int, required=True)
+    partition.add_argument("--output-directory", type=Path, required=True)
 
     xunit = subparsers.add_parser("verify-xunit")
     xunit.add_argument("--expected", type=Path, required=True)
@@ -151,8 +211,7 @@ def _parser() -> argparse.ArgumentParser:
 
     union = subparsers.add_parser("verify-union")
     union.add_argument("--inventory", type=Path, required=True)
-    union.add_argument("--selected", type=Path, required=True)
-    union.add_argument("--complement", type=Path, required=True)
+    union.add_argument("--shard", type=Path, action="append", required=True)
     return parser
 
 
@@ -160,11 +219,11 @@ def main() -> int:
     args = _parser().parse_args()
     try:
         if args.command == "partition":
-            partition_manifest(args.inventory, args.selector, args.selected, args.complement)
+            partition_manifest(args.inventory, args.shards, args.output_directory)
         elif args.command == "verify-xunit":
             verify_xunit(args.expected, args.xunit_directory, args.actual)
         else:
-            verify_union(args.inventory, args.selected, args.complement)
+            verify_union(args.inventory, args.shard)
     except ManifestError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

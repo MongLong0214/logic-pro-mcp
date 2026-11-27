@@ -115,6 +115,8 @@ extension SetupDoctor {
             return logicApplicationStateCheck(runtime: context.runtime)
         case .logicBlockingDialog:
             return logicBlockingDialogCheck(runtime: context.runtime, checks: checks)
+        case .logicResponsiveness:
+            return logicResponsivenessCheck(runtime: context.runtime)
         case .channelsManualValidation:
             return manualValidationCheck(
                 approvals: context.approvals,

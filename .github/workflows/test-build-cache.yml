@@ -1,0 +1,93 @@
+name: Test build cache
+
+# Seeds the incremental `.build` cache that the `test-build` job of ci.yml restores.
+# GitHub lets a workflow run read caches saved on its own ref and on the default branch, and a
+# pull request run reads the base branch's too, but never another pull request's. ci.yml only
+# runs for pull requests, so nothing ever ran on main to save one; this is that run. It builds
+# exactly what `test-build` builds (same runner, same command, same key), starting from the
+# previous main cache, so after the first cold build each run recompiles only what the merge
+# changed. It publishes no artifact and is not a required check.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/**'
+      - 'Tests/**'
+      - 'Package.swift'
+      - 'Package.resolved'
+      - 'Scripts/ci-incremental-build.sh'
+      - 'Scripts/ci-restore-source-mtimes.py'
+      - '.github/workflows/test-build-cache.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time, and the newest push waits rather than cancelling the one in flight: a cancelled
+# build saves nothing, and every cache is made from the one before it.
+concurrency:
+  group: test-build-cache
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  seed:
+    name: seed-test-build-cache
+    runs-on: macos-15
+    timeout-minutes: 130
+    env:
+      DEVELOPER_DIR: /Library/Developer/CommandLineTools
+      # Must stay equal to TEST_BUILD_COMMAND in ci.yml; a contract test compares them.
+      TEST_BUILD_COMMAND: swift build --build-tests --enable-code-coverage -Xswiftc -suppress-warnings
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Cache SwiftPM downloads
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ runner.arch }}-clt-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ runner.arch }}-clt-
+
+      - name: Use Command Line Tools
+        run: |
+          set -euo pipefail
+          test -d /Library/Developer/CommandLineTools
+          DEVELOPER_DIR=/Library/Developer/CommandLineTools swift --version
+          uname -m
+          sw_vers
+
+      - name: Name the incremental build cache
+        id: build-cache
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # the command is deliberately split into words
+          echo "prefix=$(bash Scripts/ci-incremental-build.sh key $TEST_BUILD_COMMAND)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the previous incremental build cache
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .build
+          key: ${{ steps.build-cache.outputs.prefix }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ steps.build-cache.outputs.prefix }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-
+
+      - name: Build the coverage test products
+        run: |
+          set -euo pipefail
+          export LLVM_PROFILE_FILE="$RUNNER_TEMP/logicpromcp-build-profraw/%m-%p.profraw"
+          mkdir -p "$RUNNER_TEMP/logicpromcp-build-profraw"
+          # shellcheck disable=SC2086 # the command is deliberately split into words
+          bash Scripts/ci-incremental-build.sh build $TEST_BUILD_COMMAND
+          git diff --exit-code Package.resolved
+
+      # Only reached when the build above succeeded.
+      - name: Save the incremental build cache
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .build
+          key: ${{ steps.build-cache.outputs.prefix }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-${{ github.sha }}

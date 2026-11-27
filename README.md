@@ -23,7 +23,7 @@ A local [Model Context Protocol](https://modelcontextprotocol.io) server that le
 |------|-------|
 | Server version | 3.19.0 (`ServerConfig.serverVersion`) |
 | Release state | **Current published stable**: [`v3.19.0`](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.19.0) |
-| Logic Pro | Desktop Logic Pro (`com.apple.logic10`). The declared current version is **13.0** (`LogicProSupport.latestValidatedLogicVersion`; build 7801 from `docs/canon/MANIFEST.json`); the supported floor is 12.0.1 (`minimumSupportedLogicVersion`), best effort. Apple Creator Studio's Logic Pro is recognized, not supported |
+| Logic Pro | Desktop Logic Pro (`com.apple.logic10`). The current version is declared once, in `AXLocalePolicy.currentLogicVersion`, and `LogicProSupport.latestValidatedLogicVersion` is derived from it (Logic 13.0 build 7801 is what `docs/canon/MANIFEST.json` pins today); the supported floor is 12.0.1 (`minimumSupportedLogicVersion`), best effort. Apple Creator Studio's Logic Pro is recognized, not supported |
 | macOS | 14 or later (`Package.swift`: `.macOS(.v14)`) |
 | Architecture | Release package is universal (`arm64` and `x86_64`, `LogicProMCP-macOS-universal.tar.gz`) |
 | Source build | Swift 6 toolchain (`swift-tools-version: 6.0`) |

@@ -87,7 +87,7 @@ def main():
 
     ran = [0]
 
-    def check(name, cond, detail):
+    def check(name, cond, detail=""):
         # Counted, not typed. The closing line carried a literal and was stale the first time a
         # case was added without editing it.
         ran[0] += 1
@@ -107,12 +107,16 @@ def main():
         # than left out: an unlisted dimension makes the guard refuse, which is correct behaviour
         # and would have failed this fixture for the wrong reason.
         "records_without_evidence": ["2026-09-05-r1", "2026-09-05-r2"],
-        # Both build-drift dimensions are empty in a fixture tree: it carries no LOGIC-BUILD.json,
+        # Both build-drift dimensions are empty in a fixture tree: it carries no AXLocalePolicy.swift,
         # so there is no declared build for a reading to be superseded FROM. Listed rather than
         # omitted because an unlisted dimension makes the guard refuse -- correct behaviour, and it
         # would fail these cases for a reason none of them is about.
         "records_from_a_superseded_build": [],
         "label_readings_from_a_superseded_build": [],
+        # Nor is there a declared release here (no AXLocalePolicy.swift), so no cell can be
+        # "not measured on it" and no canon pin can trail it. Cases 18 onward declare one.
+        "cells_not_measured_on_current_version": {"en-US": [], "ko-KR": [], "ja-JP": []},
+        "canon_pinned_to_a_superseded_logic": [],
         "surfaces_without_records": sorted(
             f"{loc}\u2192{s_}" for loc in ("en-US", "ko-KR", "ja-JP")
             for s_ in ("arrange.regions", "mixer.inserts")
@@ -457,6 +461,197 @@ def main():
           "L\u2192mixer" not in undocumented, sorted(undocumented))
     check("a variant differing by more than case is still debt",
           "L\u2192mixr" in undocumented, sorted(undocumented))
+
+
+    # 18. THE VERSION AXIS. Cells, per locale, that are not measured on the declared Logic. The
+    #     declaration is Swift's; a record is trusted only while it verifies against its digest.
+    import types as _types
+    labels_mod = importlib.util.module_from_spec(importlib.util.spec_from_file_location(
+        "locale_labels_for_ratchet_tests", Path(__file__).resolve().parent / "locale_labels.py"))
+    labels_mod.__spec__.loader.exec_module(labels_mod)
+
+    def mutant(path, old, new, name):
+        source = Path(path).read_text(encoding="utf-8")
+        assert source.count(old) == 1, (name, source.count(old))
+        module = _types.ModuleType(name)
+        module.__file__ = str(path)
+        sys.modules[name] = module
+        exec(compile(source.replace(old, new), str(path), "exec"), module.__dict__)
+        return module
+
+    def declare(root, version="98.7", build="65432"):
+        swift = Path(root) / "Sources" / "LogicProMCP" / "Accessibility"
+        swift.mkdir(parents=True, exist_ok=True)
+        (swift / "AXLocalePolicy.swift").write_text(
+            f'enum AXLocalePolicy {{\n    static let currentLogicVersion = "{version}"\n'
+            f'    static let currentLogicBuild = "{build}"\n}}\n', encoding="utf-8")
+
+    def release_record(root, rid, version, build, locale="ko-KR"):
+        obs = Path(root) / "docs" / "observations"
+        (obs / "evidence").mkdir(exist_ok=True)
+        (obs / "evidence" / f"{rid}.json").write_text('{"census": [{"title": "a"}]}', encoding="utf-8")
+        doc = _record(rid, locale=locale, schema=2)
+        doc["host"] = {"locale": locale, "version": version, "build": build}
+        doc["evidence"] = [f"evidence/{rid}.json"]
+        (obs / f"{rid}.json").write_text(json.dumps(doc), encoding="utf-8")
+
+    def bound(root, rid, observed="a"):
+        facts = labels_mod.record_facts(rid, str(Path(root) / "docs" / "observations"))
+        return {"locale": "ko-KR", "date": "2026-09-05", "observed": observed, "record": rid,
+                "role": "AXMenuItem", "attribute": "title", "logic_version": facts["version"],
+                "logic_build": facts["build"], "record_sha256": facts["sha256"]}
+
+    def axis_tree(git_init=False):
+        root = _tree({}, [], {})
+        declare(root)
+        release_record(root, "2026-11-02-new", "98.7", "65432")
+        release_record(root, "2026-09-05-old", "12.3", "6674")
+        fresh = {loc: "unmeasured" for loc in LOCALES}
+        cur = _label(["a"], {"a": bound(root, "2026-11-02-new")}, dict(fresh, **{"ko-KR": "measured"}))
+        old = _label(["a"], {"a": bound(root, "2026-09-05-old")}, dict(fresh, **{"ko-KR": "measured"}))
+        der = _label(["a"], None, dict(fresh, **{"ko-KR": "derived"}))
+        docs = {"Cur": cur, "Old": old, "Der": der}
+        (root / "docs" / "locale" / "ui-labels.json").write_text(json.dumps({
+            "schema": 3, "supported_locales": LOCALES, "labels": docs}), encoding="utf-8")
+        if git_init:
+            for cmd in (["init", "-q", "-b", "base"], ["add", "-A"], ["-c", "user.email=t@t", "-c",
+                        "user.name=t", "commit", "-qm", "base"]):
+                subprocess.run(["git", "-C", str(root), *cmd], capture_output=True)
+        return root, docs
+
+    def live_cells(root, mod=None):
+        state = (mod or guard).live_state(str(root))["cells_not_measured_on_current_version"]
+        return {loc: sorted(v) for loc, v in state.items()}
+
+    root, docs = axis_tree()
+    cells = live_cells(root)
+    check("a verified reading on the declared release is the only cell that is measured on it",
+          cells["ko-KR"] == ["Der", "Old"], cells)
+    check("a derived cell is never measured, and neither is an unmeasured one",
+          "Der" in cells["ko-KR"] and cells["en-US"] == ["Cur", "Der", "Old"], cells)
+
+    # Unreadable is not the same as absent: edit, delete, or break the record and the cell leaves
+    # "measured on the current version" -- it never stays there on the strength of a stale JSON.
+    obs = root / "docs" / "observations"
+    target = obs / "2026-11-02-new.json"
+    saved = target.read_bytes()
+    target.write_bytes(saved.replace(b'"surface"', b'"surfacE"', 1))
+    check("editing the record moves its cell out of 'measured on the current version'",
+          "Cur" in live_cells(root)["ko-KR"], live_cells(root))
+    target.write_bytes(saved)
+    target.unlink()
+    check("deleting the record moves its cell out of it", "Cur" in live_cells(root)["ko-KR"])
+    target.write_text("{broken", encoding="utf-8")
+    # An unparseable record does not leave the cell standing: the ratchet's own read of the records
+    # raises, which is a red run, and the cell classifier on its own says `unverified`.
+    check("an unreadable record moves its cell out of it",
+          labels_mod.classify_cell(docs["Cur"], "ko-KR", {"version": "98.7", "build": "65432"},
+                                   str(obs)) == "unverified")
+    target.write_bytes(saved)
+    (obs / "evidence" / "2026-11-02-new.json").write_text('{"census": [1]}', encoding="utf-8")
+    check("editing the record's EVIDENCE moves its cell out of it", "Cur" in live_cells(root)["ko-KR"])
+    (obs / "evidence" / "2026-11-02-new.json").write_text('{"census": [{"title": "a"}]}', encoding="utf-8")
+    check("restoring the evidence restores the cell", "Cur" not in live_cells(root)["ko-KR"])
+
+    # The ratchet: a cell may leave the set, never join it, per locale.
+    def seed_allowed(tree):
+        """`allowed` equal to what is live in `tree`, nested the way RATCHETS.json nests it."""
+        out = {}
+        for key, values in guard._flatten(guard.live_state(str(tree))):
+            node = out
+            parts = key.split(".")
+            for part in parts[:-1]:
+                node = node.setdefault(part, {})
+            node[parts[-1]] = sorted(values)
+        return out
+
+    allowed_now = seed_allowed(root)
+    (root / "docs" / "observations" / "RATCHETS.json").write_text(json.dumps({
+        "schema": 2, "allowed": allowed_now, "raised": {}}), encoding="utf-8")
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
+    check("the seeded sets pass", proc.returncode == 0, proc.stdout[-400:])
+    target.unlink()
+    proc = subprocess.run([sys.executable, str(GUARD), str(root)], capture_output=True, text=True)
+    check("a cell that stops being measured on the current version fails the ratchet, by key",
+          proc.returncode == 1 and "cells_not_measured_on_current_version.ko-KR" in proc.stdout
+          and "Cur" in proc.stdout, proc.stdout[-500:])
+    check("and only for the locale it happened in",
+          "cells_not_measured_on_current_version.ja-JP" not in proc.stdout, proc.stdout[-500:])
+    no_axis = mutant(GUARD, '        "cells_not_measured_on_current_version": cells_not_current,\n', "",
+                     "ratchet_mut_cells")
+    check("MUTANT: without the per-locale dimension the same loss is invisible",
+          "cells_not_measured_on_current_version" not in no_axis.live_state(str(root)), "")
+    target.write_bytes(saved)
+
+    # A raise needs a decision in the same diff: against a real base, adding the member to `allowed`
+    # alone is refused, and a `raised` entry naming exactly it lands.
+    root2, docs2 = axis_tree(git_init=True)
+    base_allowed = dict(guard._flatten(seed_allowed(root2)))
+    (root2 / "docs/observations/RATCHETS.json").write_text(json.dumps({
+        "schema": 2, "allowed": seed_allowed(root2), "raised": {}}), encoding="utf-8")
+    for cmd in (["add", "-A"], ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"]):
+        subprocess.run(["git", "-C", str(root2), *cmd], capture_output=True)
+    subprocess.run(["git", "-C", str(root2), "branch", "-f", "base"], capture_output=True)
+    obs2 = root2 / "docs" / "observations"
+    (obs2 / "2026-11-02-new.json").unlink()
+    grown = seed_allowed(root2)          # the record is gone now, so `Cur` has joined the live set
+    base_for_diff = {k: v for k, v in base_allowed.items()}
+    (obs2 / "RATCHETS.json").write_text(json.dumps({"schema": 2, "allowed": grown, "raised": {}}),
+                                        encoding="utf-8")
+    env = dict(os.environ, LPM_RATCHET_BASE_REF="base")
+    proc = subprocess.run([sys.executable, str(GUARD), str(root2)], capture_output=True, text=True, env=env)
+    check("raising the ceiling in the same diff, with no reasoned baseline change, is refused",
+          proc.returncode == 1 and "raised.cells_not_measured_on_current_version.ko-KR" in proc.stdout,
+          proc.stdout[-500:])
+    (obs2 / "RATCHETS.json").write_text(json.dumps({"schema": 2, "allowed": grown, "raised": {
+        "cells_not_measured_on_current_version.ko-KR": {
+            "date": "2026-11-17", "reason": "the cited record was withdrawn on purpose", "members": ["Cur"]}}}),
+        encoding="utf-8")
+    proc = subprocess.run([sys.executable, str(GUARD), str(root2)], capture_output=True, text=True, env=env)
+    check("a dated, reasoned baseline change naming exactly the member lands",
+          proc.returncode == 0, proc.stdout[-500:])
+    # and the one command that writes that entry for a Logic update
+    (obs2 / "RATCHETS.json").write_text(json.dumps({"schema": 2, "allowed": seed_allowed(root2),
+                                                    "raised": {}}), encoding="utf-8")
+    try:
+        guard.rebaselined(str(root2), "no")
+        short = False
+    except ValueError:
+        short = True
+    check("--rebaseline refuses a reason with no substance", short)
+    new_doc = guard.rebaselined(str(root2), "the cited record was withdrawn on purpose", today="2026-11-17",
+                                base=base_for_diff)
+    entry = new_doc["raised"].get("cells_not_measured_on_current_version.ko-KR") or {}
+    check("--rebaseline writes the growth under `raised` with exactly its members",
+          entry.get("members") == ["Cur"] and entry.get("date") == "2026-11-17", entry)
+
+    # A new measured provenance with no version: counted against the declared release, so it is
+    # growth the base never allowed, and CI refuses it.
+    root3, docs3 = axis_tree()
+    nover = dict(bound(root3, "2026-11-02-new"))
+    nover.pop("logic_version")
+    docs3["Cur"]["provenance"]["a"] = nover
+    (root3 / "docs/locale/ui-labels.json").write_text(json.dumps({
+        "schema": 3, "supported_locales": LOCALES, "labels": docs3}), encoding="utf-8")
+    state3 = guard.live_state(str(root3))["label_readings_from_a_superseded_build"]
+    check("a measured provenance with no `logic_version` is counted as not on the declared release",
+          "Cur→a" in state3, sorted(state3))
+    versionless = mutant(GUARD, 'if (str(prov.get("logic_version") or ""), str(prov.get("logic_build") or "")) != target:',
+                         "if False:", "ratchet_mut_version")
+    check("MUTANT: without the version comparison it is not counted",
+          "Cur→a" not in versionless.live_state(str(root3))["label_readings_from_a_superseded_build"], "")
+
+    # The canon the derived cells rest on, pinned behind the declaration, is a counted gap.
+    root4, _ = axis_tree()
+    (root4 / "docs" / "canon").mkdir(parents=True)
+    (root4 / "docs" / "canon" / "MANIFEST.json").write_text(json.dumps({
+        "logic": {"version": "12.3", "build": "6674"}}), encoding="utf-8")
+    pinned = guard.live_state(str(root4))["canon_pinned_to_a_superseded_logic"]
+    check("a canon pinned to an older Logic than the declaration is counted", pinned == {"12.3 (6674)"}, pinned)
+    (root4 / "docs" / "canon" / "MANIFEST.json").write_text(json.dumps({
+        "logic": {"version": "98.7", "build": "65432"}}), encoding="utf-8")
+    check("and stops being counted when the canon is re-ingested on the declared release",
+          guard.live_state(str(root4))["canon_pinned_to_a_superseded_logic"] == set())
 
     # 17. The real repository is within its sets right now.
     proc = subprocess.run([sys.executable, str(GUARD)], capture_output=True, text=True)

@@ -39,6 +39,16 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # undocumented variant and documenting a different one leaves `total - documented` unchanged.
 
 
+
+def _census_evidence():
+    """`Scripts/census_evidence.py`, which reads census evidence whether it is JSON Lines or JSON."""
+    spec = importlib.util.spec_from_file_location(
+        "census_evidence_for_guard", os.path.join(os.path.dirname(os.path.abspath(__file__)), "census_evidence.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _module():
     spec = importlib.util.spec_from_file_location(
         "locale_labels", os.path.join(REPO, "Scripts", "locale_labels.py"))
@@ -430,7 +440,7 @@ def _rows(rec):
         if not path.startswith(root + os.sep):
             continue
         try:
-            yield from walk(json.load(open(path, encoding="utf-8")))
+            yield from walk(_census_evidence().load(path))
         except (OSError, ValueError):
             continue
 
@@ -900,7 +910,22 @@ def main():
         print("docs/locale/ui-labels.json is missing or unreadable — run Scripts/locale_labels.py --write")
         return 1
 
-    expected = labels.build(existing=on_disk)["labels"]
+    # Bytes first, then claims. A projection is exactly what the generator renders: the JSON carries a
+    # declared `logic`, per-locale `currency` counts and every digest, and a hand edit to any of them
+    # has to be red even where no label changed.
+    unbound = []
+    generated = labels.build(existing=on_disk, unbound=unbound)
+    expected = generated["labels"]
+    try:
+        with open(labels.JSON_PATH, encoding="utf-8", newline="") as handle:
+            raw = handle.read()
+    except OSError:
+        raw = ""
+    if raw != labels.render(generated) and on_disk["labels"] == expected:
+        print("docs/locale/ui-labels.json is not byte-identical to what Scripts/locale_labels.py "
+              "generates (top-level fields, ordering or whitespace differ).\n"
+              "\n  Regenerate: Scripts/locale_labels.py --write")
+        return 1
     if on_disk["labels"] != expected:
         only_json = sorted(set(on_disk["labels"]) - set(expected))
         only_swift = sorted(set(expected) - set(on_disk["labels"]))
@@ -919,12 +944,20 @@ def main():
     locales = tuple(on_disk.get("supported_locales") or ())
     values = tuple(on_disk.get("coverage_values") or ())
     problems = []
-    if on_disk.get("schema") != 2:
-        problems.append(f"schema is {on_disk.get('schema')!r}; this guard reads schema 2 — regenerate")
+    if on_disk.get("schema") != labels.SCHEMA:
+        problems.append(f"schema is {on_disk.get('schema')!r}; this guard reads schema "
+                        f"{labels.SCHEMA} — regenerate")
+    # THE VERSION AXIS. Every measured cell is bound to a record that exists, whose locale, Logic
+    # version and build match the cell and whose bytes (and evidence) hash to the digest the cell
+    # carries. Missing, unreadable or changed is a failure, never a quiet demotion.
+    problems += [f"unbound: {line}" for line in unbound]
+    problems += [f"unbound: {line}" for line in labels.binding_report(on_disk)]
+    problems += [f"restated: {line}" for line in labels.restatement_problems()]
     if not locales or not values:
         problems.append("supported_locales / coverage_values missing — regenerate")
     surfaces = _records_module().known_surfaces()
     for name, entry in sorted(on_disk["labels"].items()):
+        problems += labels.derived_problems(name, entry)
         problems += scope_problems(name, entry, surfaces)
         problems += provenance_problems(name, entry)
         if locales and values:

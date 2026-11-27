@@ -203,10 +203,10 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
             return value
         })
     )
-    #expect(report.checks.count == 26)
+    #expect(report.checks.count == 27)
     let perCheckSum = report.checks.reduce(0.0) { $0 + $1.durationMs }
     #expect(report.summary.durationMs == perCheckSum)
-    #expect(report.summary.durationMs == 26.0)
+    #expect(report.summary.durationMs == 27.0)
     let maxPerCheck = report.checks.map(\.durationMs).max() ?? 0
     #expect(report.summary.durationMs >= maxPerCheck)
     #expect(report.summary.durationMs >= 0)
@@ -711,9 +711,9 @@ private func runEntrypoint(
 @Test func test_t1_summary_counts_invariant_with_update_check_14() {
     // The invariant must hold with the opt-in update check present (27 checks).
     let report = makeReport(runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: ServerConfig.serverVersion) }))
-    #expect(report.checks.count == 27)
+    #expect(report.checks.count == 28)
     let s = report.summary
-    #expect(s.total == 27)
+    #expect(s.total == 28)
     #expect(s.passed + s.failed + s.warnings + s.manual + s.skipped == s.total)
 }
 
