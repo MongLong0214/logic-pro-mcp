@@ -1199,6 +1199,7 @@ func testRecordSequenceRelocationRequiresPositiveSoftwareInstrumentType(_ type: 
         trackHeaderCount: { 1 },
         trackNameAt: relocationTrackName,
         relocationTrackInventory: { [relocationTrack(0, "Deluxe Classic", type)] },
+        targetStripReading: { _ in .undetermined },
         readRegions: { .success([]) },
         settleReadback: {}
     )
@@ -1210,6 +1211,158 @@ func testRecordSequenceRelocationRequiresPositiveSoftwareInstrumentType(_ type: 
     #expect(!(try #require(object["write_attempted"] as? Bool)))
     #expect(await ax.importCalls == 0)
     #expect(await keys.operations.isEmpty)
+}
+
+private final class StripReadingBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [AXLogicProElements.StripReading]
+    private var seenNames: [String] = []
+
+    init(_ values: [AXLogicProElements.StripReading]) {
+        self.values = values
+    }
+
+    var names: [String] { lock.withLock { seenNames } }
+
+    func next(_ name: String) -> AXLogicProElements.StripReading {
+        lock.withLock {
+            seenNames.append(name)
+            return values.count > 1 ? values.removeFirst() : (values.first ?? .undetermined)
+        }
+    }
+}
+
+@Test(arguments: [AXLogicProElements.StripReading.type(.audio), .type(.externalMIDI), .undetermined])
+func testRecordSequenceRelocationRefusesUnknownHeaderWhenStripIsNotInstrument(
+    _ reading: AXLogicProElements.StripReading
+) async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+    let strips = StripReadingBox([reading])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { [relocationTrack(0, "Deluxe Classic", .unknown)] },
+        targetStripReading: { strips.next($0) },
+        readRegions: { .success([]) },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "target_not_software_instrument")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(strips.names == ["Deluxe Classic"])
+    #expect(await ax.importCalls == 0)
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationDoesNotConsultStripForAHeaderThatNamesAnotherType() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, _) = try await relocationRouter()
+    let strips = StripReadingBox([.instrumentFamily])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { [relocationTrack(0, "Deluxe Classic", .drummer)] },
+        targetStripReading: { strips.next($0) },
+        readRegions: { .success([]) },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    #expect(recordSequenceJSONObject(result)["error"] as? String == "target_not_software_instrument")
+    #expect(strips.names.isEmpty)
+    #expect(await ax.importCalls == 0)
+}
+
+/// Logic 13 (#1565): the header reads `unknown` for every track, including the Software
+/// Instrument that create_instrument verified through the inspector strip's MIDI effect slot.
+private func unknownHeaderRelocationInventories() -> SequentialRelocationInventoryBox {
+    SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .unknown, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .unknown, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .unknown, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .unknown, identity: "target", selected: false),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: true),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .unknown, identity: "target", selected: true),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: false),
+        ],
+    ])
+}
+
+@Test(arguments: [true, false])
+func testRecordSequenceRelocatesToAnUnknownHeaderTargetOnInspectorStripEvidence(_ stripHoldsAtPaste: Bool) async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = unknownHeaderRelocationInventories()
+    let strips = StripReadingBox(stripHoldsAtPaste ? [.instrumentFamily] : [.instrumentFamily, .undetermined])
+    let regionReads = SequentialRegionReadBox([
+        .success([]), .success([gmRegion]), .success([gmRegion]), .success([gmRegion, pasted]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        targetStripReading: { strips.next($0) },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    let keyOps = await keys.operations
+    // Read once at preflight and once again at the paste boundary, with the target selected.
+    #expect(strips.names == ["Deluxe Classic", "Deluxe Classic"])
+    if stripHoldsAtPaste {
+        #expect(!(try #require(result.isError as Bool?)), "got: \(sharedToolText(result))")
+        let object = recordSequenceJSONObject(result)
+        #expect(try #require(object["verified"] as? Bool))
+        #expect(object["recorded_to_track"] as? Int == 0)
+        #expect(keyOps == ["edit.copy", "edit.paste"])
+    } else {
+        #expect(try #require(result.isError))
+        let object = recordSequenceJSONObject(result)
+        #expect(object["error"] as? String == "target_changed")
+        #expect(object["failure_stage"] as? String == "relocation_paste_boundary")
+        #expect(keyOps == ["edit.copy"], "nothing may be pasted once the strip no longer vouches for the target")
+    }
+    #expect(await ax.importCalls == 1)
 }
 
 @Test func testRecordSequenceRelocationRejectsDuplicateExpectedNameBeforeAnyWrite() async throws {

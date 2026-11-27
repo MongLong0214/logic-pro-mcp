@@ -3079,7 +3079,7 @@ enum SemanticOracleTable {
         .mixerInsertPlugin,
         semantics: [
             .valueEquals(key: "verify_source", expected: .string("ax_plugin_slot")),
-            .enumMember(key: "plugin_name", allowed: ["Gain", "Compressor", "Channel EQ"]),
+            .enumMember(key: "plugin_name", allowed: PluginInsertMenuCanon.measuredPluginNames.sorted()),
             .typedField(key: "observed_plugin_name", type: .string),
             .typedField(key: "track", type: .number),
             .typedField(key: "slot", type: .number),

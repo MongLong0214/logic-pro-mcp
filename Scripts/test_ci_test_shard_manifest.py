@@ -3,6 +3,9 @@
 
 import importlib.util
 from pathlib import Path
+import re
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -28,43 +31,153 @@ class ManifestFixture(unittest.TestCase):
 
 
 class PartitionTests(ManifestFixture):
-    def test_partition_is_nonempty_disjoint_and_complete(self):
-        inventory = self.write("inventory.txt", "Suite.Slow/b()\nSuite.Fast/a()\nSuite.Slow/a()\n")
-        selected = self.root / "selected.txt"
-        complement = self.root / "complement.txt"
+    def partition(self, entries, shards):
+        inventory = self.write("inventory.txt", "".join(f"{entry}\n" for entry in entries))
+        out = self.root / "out"
+        manifest.partition_manifest(inventory, shards, out)
+        return inventory, [manifest.shard_manifest_path(out, index) for index in range(shards)], out
 
-        manifest.partition_manifest(inventory, r"^Suite\.Slow/", selected, complement)
+    def lines(self, path):
+        return path.read_text(encoding="utf-8").splitlines()
 
-        self.assertEqual(selected.read_text(encoding="utf-8"),
-                         "Suite.Slow/a()\nSuite.Slow/b()\n")
-        self.assertEqual(complement.read_text(encoding="utf-8"), "Suite.Fast/a()\n")
-        manifest.verify_union(inventory, selected, complement)
+    def test_sorted_round_robin_is_exact_for_every_shard_count(self):
+        entries = [f"M.Suite{suite}/t{number:02d}()" for suite in range(5) for number in range(7)]
+        for shards in (1, 2, 3, 4, 6, 35):
+            with self.subTest(shards=shards):
+                self.root = Path(tempfile.mkdtemp(dir=self.temporary.name))
+                inventory, paths, _ = self.partition(entries, shards)
+                dealt = [self.lines(path) for path in paths]
+                self.assertEqual(sorted(entry for shard in dealt for entry in shard), sorted(entries))
+                self.assertEqual(dealt, [sorted(entries)[index::shards] for index in range(shards)])
+                self.assertLessEqual(max(map(len, dealt)) - min(map(len, dealt)), 1)
+                manifest.verify_union(inventory, paths)
 
-    def test_selector_typo_that_matches_nothing_is_refused(self):
-        inventory = self.write("inventory.txt", "Suite.Fast/a()\nSuite.Slow/a()\n")
-        with self.assertRaisesRegex(manifest.ManifestError, "selected shard is empty"):
-            manifest.partition_manifest(
-                inventory, r"^Suite\.Slwo/", self.root / "selected.txt",
-                self.root / "complement.txt")
+    def test_one_long_suite_is_spread_over_every_shard(self):
+        entries = [f"M.Long/t{number:03d}()" for number in range(40)] + ["M.Other/a()"]
+        _, paths, _ = self.partition(entries, 4)
+        for path in paths:
+            self.assertTrue(any(line.startswith("M.Long/") for line in self.lines(path)))
+
+    def test_assignment_does_not_depend_on_inventory_order(self):
+        entries = ["M.B/a()", "M.A/b()", "M.A/a()", "M.C/a()"]
+        _, forward, _ = self.partition(entries, 2)
+        first = [self.lines(path) for path in forward]
+        self.root = Path(tempfile.mkdtemp(dir=self.temporary.name))
+        _, backward, _ = self.partition(list(reversed(entries)), 2)
+        self.assertEqual(first, [self.lines(path) for path in backward])
+
+    def test_fewer_tests_than_shards_and_bad_counts_are_refused(self):
+        inventory = self.write("inventory.txt", "M.S/a()\nM.S/b()\n")
+        with self.assertRaisesRegex(manifest.ManifestError, "fewer than 3 shards"):
+            manifest.partition_manifest(inventory, 3, self.root / "out")
+        with self.assertRaisesRegex(manifest.ManifestError, "at least 1"):
+            manifest.partition_manifest(inventory, 0, self.root / "out-zero")
 
     def test_duplicate_inventory_entry_is_refused(self):
         inventory = self.write("inventory.txt", "Suite.Fast/a()\nSuite.Fast/a()\n")
         with self.assertRaisesRegex(manifest.ManifestError, "duplicate"):
-            manifest.partition_manifest(
-                inventory, r"Fast", self.root / "selected.txt",
-                self.root / "complement.txt")
+            manifest.partition_manifest(inventory, 2, self.root / "out")
 
-    def test_union_refuses_overlap_and_gap(self):
-        inventory = self.write("inventory.txt", "Suite/a()\nSuite/b()\nSuite/c()\n")
-        selected = self.write("selected.txt", "Suite/a()\nSuite/b()\n")
-        overlap = self.write("overlap.txt", "Suite/b()\nSuite/c()\n")
+    def test_existing_manifest_is_never_replaced(self):
+        entries = ["M.S/a()", "M.S/b()"]
+        inventory, _, out = self.partition(entries, 2)
+        with self.assertRaisesRegex(manifest.ManifestError, "refusing to replace"):
+            manifest.partition_manifest(inventory, 2, out)
+
+    def test_oversized_filter_is_refused_before_a_shard_could_fail_to_exec(self):
+        inventory = self.write("inventory.txt", "".join(f"M.S/t{n:05d}()\n" for n in range(60)))
+        original = manifest.MAX_FILTER_BYTES
+        manifest.MAX_FILTER_BYTES = 100
+        try:
+            with self.assertRaisesRegex(manifest.ManifestError, "use more shards"):
+                manifest.partition_manifest(inventory, 2, self.root / "out")
+        finally:
+            manifest.MAX_FILTER_BYTES = original
+
+    def test_filter_matches_exactly_its_own_entries_and_no_other(self):
+        entries = [
+            "M.Suite/plain()", "M.Suite/param(_:)", "M.Suite/param(arguments:)",
+            "M.Suite/Nested/deep()", "M.free_function()", "M.Class/test_snake_case",
+            "M.SuiteTwo/plain()", "M.Other/a.b()",
+        ]
+        _, paths, out = self.partition(entries, 3)
+        compiled = [re.compile(self.lines(manifest.shard_filter_path(out, index))[0])
+                    for index in range(3)]
+        for index, path in enumerate(paths):
+            own = set(self.lines(path))
+            for entry in entries:
+                matches = [bool(pattern.search(entry)) for pattern in compiled]
+                self.assertEqual(matches.count(True), 1, entry)
+                self.assertEqual(matches[index], entry in own, entry)
+        # Swift Testing identifiers carry a "/<file>:<line>:<column>" suffix when matched.
+        for index, path in enumerate(paths):
+            for entry in self.lines(path):
+                self.assertTrue(compiled[index].search(entry + "/File.swift:12:3"), entry)
+        # An identifier that merely contains or extends a member is not selected.
+        for lookalike in ("M.Suite/plain()x", "xM.Suite/plain()", "M.Suite/plain", "M.SuiteX/plain()",
+                          "M.Suite/paramX_:)"):
+            self.assertFalse(any(pattern.search(lookalike) for pattern in compiled), lookalike)
+
+    def test_filter_is_one_line_and_carries_no_shell_hostile_newline(self):
+        _, _, out = self.partition(["M.S/a()", "M.S/b()"], 2)
+        for index in range(2):
+            self.assertEqual(len(self.lines(manifest.shard_filter_path(out, index))), 1)
+
+
+class UnionTests(ManifestFixture):
+    def shards(self, inventory_text, *shard_texts):
+        inventory = self.write("inventory.txt", inventory_text)
+        paths = [self.write(f"shard-{index}.txt", text) for index, text in enumerate(shard_texts)]
+        return inventory, paths
+
+    def test_exact_union_of_many_shards_is_accepted(self):
+        inventory, paths = self.shards(
+            "S/a()\nS/b()\nS/c()\nS/d()\n", "S/a()\nS/d()\n", "S/b()\n", "S/c()\n")
+        manifest.verify_union(inventory, paths)
+
+    def test_overlap_between_any_two_shards_is_refused(self):
+        inventory, paths = self.shards(
+            "S/a()\nS/b()\nS/c()\n", "S/a()\n", "S/b()\n", "S/b()\nS/c()\n")
         with self.assertRaisesRegex(manifest.ManifestError, "overlap"):
-            manifest.verify_union(inventory, selected, overlap)
+            manifest.verify_union(inventory, paths)
 
-        gap = self.write("gap.txt", "Suite/c()\n")
-        selected.write_text("Suite/a()\n", encoding="utf-8")
-        with self.assertRaisesRegex(manifest.ManifestError, "union"):
-            manifest.verify_union(inventory, selected, gap)
+    def test_a_test_in_no_shard_is_refused(self):
+        inventory, paths = self.shards(
+            "S/a()\nS/b()\nS/c()\n", "S/a()\n", "S/b()\n", "S/b2()\n")
+        with self.assertRaisesRegex(manifest.ManifestError, "union.*missing=.*S/c.*extra=.*S/b2"):
+            manifest.verify_union(inventory, paths)
+
+    def test_a_missing_shard_is_refused(self):
+        inventory, paths = self.shards(
+            "S/a()\nS/b()\nS/c()\n", "S/a()\n", "S/b()\n")
+        with self.assertRaisesRegex(manifest.ManifestError, "missing="):
+            manifest.verify_union(inventory, paths)
+
+    def test_an_empty_or_unsorted_shard_and_no_shards_are_refused(self):
+        inventory, paths = self.shards("S/a()\nS/b()\n", "S/a()\nS/b()\n", "")
+        with self.assertRaisesRegex(manifest.ManifestError, "empty"):
+            manifest.verify_union(inventory, paths)
+        inventory, paths = self.shards("S/a()\nS/b()\n", "S/b()\nS/a()\n")
+        with self.assertRaisesRegex(manifest.ManifestError, "not byte-sorted"):
+            manifest.verify_union(inventory, paths)
+        with self.assertRaisesRegex(manifest.ManifestError, "no shard manifests"):
+            manifest.verify_union(inventory, [])
+
+    def test_command_line_deals_and_verifies_the_same_shards(self):
+        inventory = self.write("inventory.txt", "S/a()\nS/b()\nS/c()\nS/d()\nS/e()\n")
+        out = self.root / "cli"
+        script = str(SCRIPT)
+        subprocess.run([sys.executable, script, "partition", "--inventory", str(inventory),
+                        "--shards", "3", "--output-directory", str(out)], check=True)
+        shard_args = [arg for index in range(3)
+                      for arg in ("--shard", str(manifest.shard_manifest_path(out, index)))]
+        subprocess.run([sys.executable, script, "verify-union", "--inventory", str(inventory),
+                        *shard_args], check=True)
+        manifest.shard_manifest_path(out, 2).write_text("S/zz()\n", encoding="utf-8")
+        failed = subprocess.run([sys.executable, script, "verify-union", "--inventory",
+                                 str(inventory), *shard_args], capture_output=True, text=True)
+        self.assertEqual(failed.returncode, 1)
+        self.assertIn("shard union differs from inventory", failed.stderr)
 
 
 class XUnitTests(ManifestFixture):
