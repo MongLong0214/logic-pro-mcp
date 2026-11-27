@@ -926,30 +926,96 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
         at root: String,
         in panel: AXUIElement
     ) -> ProjectStemExportPanelDriver.DestinationSelection {
-        let outlines = AXHelpers.censusDescendant(
-            of: panel, role: kAXOutlineRole as String, maxDepth: 16, runtime: runtime.ax
-        )
-        guard outlines.matches.count == 1, let outline = outlines.matches.first else {
-            return .refused("stem_destination_volume_outline_not_uniquely_resolvable")
+        let outlines: [AXUIElement]
+        switch AXHelpers.censusDescendantResult(
+            of: panel,
+            role: kAXOutlineRole as String,
+            maxDepth: 16,
+            runtime: runtime.ax,
+            requiresCompleteTraversal: true
+        ) {
+        case .failure:
+            return .refused(
+                "readback_unavailable: stem_destination_volume_outline_census_unreadable"
+            )
+        case let .success(census):
+            outlines = census.matches
         }
-        let rows = AXHelpers.censusDescendant(
-            of: outline, role: kAXRowRole as String, maxDepth: 16, runtime: runtime.ax
-        ).matches
-        let volumeRows = rows.filter { row in
-            AXHelpers.censusDescendant(
-                of: row, role: kAXStaticTextRole as String, maxDepth: 8, runtime: runtime.ax
-            ).matches.contains { text in
-                let value: String? = AXHelpers.getAttribute(
-                    text, kAXValueAttribute as String, runtime: runtime.ax
+
+        var candidates: [(outline: AXUIElement, row: AXUIElement)] = []
+        for outline in outlines {
+            let rows: [AXUIElement]
+            switch AXHelpers.censusDescendantResult(
+                of: outline,
+                role: kAXRowRole as String,
+                maxDepth: 16,
+                runtime: runtime.ax,
+                requiresCompleteTraversal: true
+            ) {
+            case .failure:
+                return .refused(
+                    "readback_unavailable: stem_destination_volume_row_census_unreadable:\(volumeName)"
                 )
-                return value?.trimmingCharacters(in: .whitespacesAndNewlines) == volumeName
+            case let .success(census):
+                rows = census.matches
+            }
+
+            var volumeRows: [AXUIElement] = []
+            for row in rows {
+                let texts: [AXUIElement]
+                switch AXHelpers.censusDescendantResult(
+                    of: row,
+                    role: kAXStaticTextRole as String,
+                    maxDepth: 8,
+                    runtime: runtime.ax,
+                    requiresCompleteTraversal: true
+                ) {
+                case .failure:
+                    return .refused(
+                        "readback_unavailable: stem_destination_volume_row_census_unreadable:\(volumeName)"
+                    )
+                case let .success(census):
+                    texts = census.matches
+                }
+
+                var rowMatches = false
+                for text in texts {
+                    switch readAttribute(
+                        text, kAXValueAttribute as String
+                    ) as Result<String?, PanelReadFailure> {
+                    case .failure:
+                        return .refused(
+                            "readback_unavailable: stem_destination_volume_row_census_unreadable:\(volumeName)"
+                        )
+                    case let .success(value):
+                        if value?.trimmingCharacters(in: .whitespacesAndNewlines) == volumeName {
+                            rowMatches = true
+                        }
+                    }
+                }
+                if rowMatches { volumeRows.append(row) }
+            }
+
+            guard volumeRows.count <= 1 else {
+                return .refused(
+                    "stem_destination_volume_row_not_uniquely_resolvable:\(volumeName)"
+                )
+            }
+            if let row = volumeRows.first {
+                candidates.append((outline, row))
             }
         }
-        guard volumeRows.count == 1, let row = volumeRows.first else {
-            return .refused(
-                "stem_destination_volume_row_not_uniquely_resolvable:\(volumeName)"
-            )
+
+        guard candidates.count == 1, let candidate = candidates.first else {
+            if outlines.count == 1 {
+                return .refused(
+                    "stem_destination_volume_row_not_uniquely_resolvable:\(volumeName)"
+                )
+            }
+            return .refused("stem_destination_volume_outline_not_uniquely_resolvable")
         }
+        let outline = candidate.outline
+        let row = candidate.row
 
         // The sidebar's display name only chooses a candidate. It is confirmed
         // only when the browser exposes entries whose parent is the requested
