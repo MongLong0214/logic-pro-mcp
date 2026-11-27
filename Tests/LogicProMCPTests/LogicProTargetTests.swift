@@ -294,8 +294,8 @@ import Testing
             manifestURL: unusable, configuredPath: nil, warn: { lines.append($0) })
         #expect(records == LogicProVariantPolicy.emergencyFallback())
         #expect(lines.count == 1)
-        #expect(lines.first?.contains(unusable.path) == true)
-        #expect(lines.first?.contains("found but is unusable") == true)
+        #expect(try #require(lines.first).contains(unusable.path))
+        #expect(try #require(lines.first).contains("found but is unusable"))
     }
 }
 
@@ -311,7 +311,7 @@ import Testing
     _ = LogicProVariantPolicy.resolveRecords(
         manifestURL: nil, configuredPath: "/no/such/manifest.json", warn: { lines.append($0) })
     #expect(lines.count == 1)
-    #expect(lines.first?.contains(LogicProVariantPolicy.manifestEnvironmentKey) == true)
+    #expect(try #require(lines.first).contains(LogicProVariantPolicy.manifestEnvironmentKey))
 
     // A usable manifest says nothing and supplies its own records.
     lines.removeAll()
