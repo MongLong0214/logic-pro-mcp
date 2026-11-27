@@ -82,26 +82,42 @@ enum LogicProVariantPolicy {
     }
 
     private static func loadRecords() -> [LogicProVariantRecord] {
-        if let records = loadManifestRecords() {
-            return records
-        }
-        // #1627: a packaged install (Homebrew) ships no manifest.json, so the built-in records are
-        // its normal source and say nothing. Only a path the user configured and that could not be
-        // used is worth a line.
-        if let configured = ProcessInfo.processInfo.environment[manifestEnvironmentKey]?
-            .trimmingCharacters(in: .whitespacesAndNewlines), !configured.isEmpty {
-            fputs(
+        resolveRecords(
+            manifestURL: findRepoFile(relativePath: "manifest.json"),
+            configuredPath: ProcessInfo.processInfo.environment[manifestEnvironmentKey],
+            warn: { fputs($0 + "\n", stderr) }
+        )
+    }
+
+    /// The manifest's variants, or the built-in ones with at most one line saying why.
+    ///
+    /// #1627: a packaged install (Homebrew) ships no manifest.json, so the built-in records are its
+    /// normal source and say nothing. Two cases are worth a line: a manifest the directory walk (or
+    /// the configured path) FOUND that cannot be used, which names the path, and a configured path
+    /// that names nothing at all.
+    static func resolveRecords(
+        manifestURL: URL?, configuredPath: String?, warn: (String) -> Void
+    ) -> [LogicProVariantRecord] {
+        if let manifestURL {
+            if let records = manifestRecords(at: manifestURL) {
+                return records
+            }
+            warn(
+                "LogicProVariantPolicy: \(manifestURL.path) was found but is unusable; "
+                    + "using the built-in Logic Pro variants"
+            )
+        } else if let configured = configuredPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !configured.isEmpty {
+            warn(
                 "LogicProVariantPolicy: \(manifestEnvironmentKey) names a manifest that could not be "
-                    + "used; using the built-in Logic Pro variants\n",
-                stderr
+                    + "used; using the built-in Logic Pro variants"
             )
         }
         return emergencyFallback()
     }
 
-    private static func loadManifestRecords() -> [LogicProVariantRecord]? {
-        guard let url = findRepoFile(relativePath: "manifest.json"),
-              let data = try? Data(contentsOf: url),
+    private static func manifestRecords(at url: URL) -> [LogicProVariantRecord]? {
+        guard let data = try? Data(contentsOf: url),
               let root = try? JSONDecoder().decode(ManifestRoot.self, from: data),
               !root.supportedLogicProVariants.isEmpty else {
             return nil
@@ -175,7 +191,7 @@ enum LogicProVariantPolicy {
         return nil
     }
 
-    private static func emergencyFallback() -> [LogicProVariantRecord] {
+    static func emergencyFallback() -> [LogicProVariantRecord] {
         [
             LogicProVariantRecord(
                 name: "desktop",

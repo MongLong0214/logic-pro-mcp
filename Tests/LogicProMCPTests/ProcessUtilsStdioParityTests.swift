@@ -19,7 +19,7 @@ import Testing
 // Logic Pro), so this guard is most useful on developer machines and
 // any future macOS runner with Logic available.
 
-/// Evaluated once, and used as an `.enabled(if:)` trait rather than as a guard
+/// Evaluated once, and used as a `.requiresLogicHost(if:)` trait rather than as a guard
 /// inside each body. A body that returns early on a missing Logic install is
 /// reported as a passing test, so on a host without Logic these two would have
 /// claimed to pin the post-fix behaviour while asserting nothing at all.
@@ -27,7 +27,7 @@ private let logicProInstalled: Bool = FileManager.default.fileExists(
     atPath: "/Applications/Logic Pro.app"
 )
 
-@Test(processInspectionUnavailableInSandbox, .enabled(if: logicProInstalled))
+@Test(processInspectionUnavailableInSandbox, .requiresLogicHost(if: logicProInstalled))
 func testProcessUtilsBundleURLResolvesWithoutAppKitRunloop() async {
 
     // Run the lookup on a detached cooperative-pool task — no main
@@ -43,7 +43,7 @@ func testProcessUtilsBundleURLResolvesWithoutAppKitRunloop() async {
     #expect(url?.lastPathComponent == "Logic Pro.app")
 }
 
-@Test(processInspectionUnavailableInSandbox, .enabled(if: logicProInstalled))
+@Test(processInspectionUnavailableInSandbox, .requiresLogicHost(if: logicProInstalled))
 func testProcessUtilsLogicProVersionResolvesOffMain() async {
     let version: String? = await Task.detached(priority: .userInitiated) {
         ProcessUtils.logicProVersion(runtime: .production)

@@ -278,6 +278,52 @@ import Testing
     #expect(LogicProVariantPolicy.ancestorOfThisFile(containing: "no-such-file-1a2b3c.json") == nil)
 }
 
+@Test func aManifestThatIsFoundButUnusableIsReportedOnceWithItsPath() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("lpm-manifest-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let broken = directory.appendingPathComponent("manifest.json")
+    try Data("{\"supported_logic_pro_variants\": [{\"name\": 1}]}".utf8).write(to: broken)
+    let empty = directory.appendingPathComponent("empty.json")
+    try Data("{\"supported_logic_pro_variants\": []}".utf8).write(to: empty)
+
+    for unusable in [broken, empty] {
+        var lines: [String] = []
+        let records = LogicProVariantPolicy.resolveRecords(
+            manifestURL: unusable, configuredPath: nil, warn: { lines.append($0) })
+        #expect(records == LogicProVariantPolicy.emergencyFallback())
+        #expect(lines.count == 1)
+        #expect(lines.first?.contains(unusable.path) == true)
+        #expect(lines.first?.contains("found but is unusable") == true)
+    }
+}
+
+@Test func aPackagedInstallWithNoManifestStaysSilentAndAnUnusableConfiguredPathSpeaks() throws {
+    var lines: [String] = []
+    let records = LogicProVariantPolicy.resolveRecords(
+        manifestURL: nil, configuredPath: nil, warn: { lines.append($0) })
+    #expect(records == LogicProVariantPolicy.emergencyFallback())
+    #expect(lines.isEmpty)
+    _ = LogicProVariantPolicy.resolveRecords(
+        manifestURL: nil, configuredPath: "  ", warn: { lines.append($0) })
+    #expect(lines.isEmpty)
+    _ = LogicProVariantPolicy.resolveRecords(
+        manifestURL: nil, configuredPath: "/no/such/manifest.json", warn: { lines.append($0) })
+    #expect(lines.count == 1)
+    #expect(lines.first?.contains(LogicProVariantPolicy.manifestEnvironmentKey) == true)
+
+    // A usable manifest says nothing and supplies its own records.
+    lines.removeAll()
+    let repoManifest = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("manifest.json")
+    let records2 = LogicProVariantPolicy.resolveRecords(
+        manifestURL: repoManifest, configuredPath: nil, warn: { lines.append($0) })
+    #expect(lines.isEmpty)
+    #expect(!records2.isEmpty)
+}
+
 // Not tested here: `findRepoFile` itself under a working directory that misses. Driving that
 // means changing the PROCESS's current directory, which is global state this suite runs in
 // parallel with — a test that mutates it would make unrelated tests fail on timing. The unit

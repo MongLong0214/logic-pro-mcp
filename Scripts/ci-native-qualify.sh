@@ -62,6 +62,7 @@ target_url=""
 receipt=""
 identity_confirmed=0
 succeeded=0
+run_ended=0
 
 trusted_api() {
   local method="$1" endpoint="$2"
@@ -159,7 +160,11 @@ finish() {
   local status="$?"
   if [ "$succeeded" -ne 1 ] && [ "$identity_confirmed" -eq 1 ] \
       && ! success_already_published; then
-    post_status failure "Exact artifact failed native Logic qualification" || true
+    if [ "$run_ended" -eq 1 ]; then
+      post_status failure "CI run ended before native qualification finished; repeat it on a fresh attempt" || true
+    else
+      post_status failure "Exact artifact failed native Logic qualification" || true
+    fi
   fi
   rm -rf "$work"
   exit "$status"
@@ -181,18 +186,20 @@ if run.get("event") != "pull_request":
     raise SystemExit("native CI qualification requires a pull_request run")
 if run.get("path") != ".github/workflows/ci.yml":
     raise SystemExit("native CI qualification requires the exact ci.yml workflow")
-# The run must be active when qualification starts. At the end a run that already completed is
-# accepted (argv[8] == "allow-ended"): the status below is bound to the exact SHA, attempt,
-# artifact id and digest, which the consumer validates, and a rerun of the consumer job reads it.
+# The run must be active both when qualification starts and when its result is published. A run
+# that ended in between is a dead attempt: the status below names this attempt's URL and receipt,
+# the consumer accepts only the CURRENT attempt's status, and every re-run is a new attempt, so a
+# status posted for a dead attempt can never be consumed. Exit 75 tells the caller it ended.
 ended = run.get("status") != "in_progress" or run.get("conclusion") is not None
-if ended and sys.argv[8] != "allow-ended":
-    raise SystemExit("native CI qualification requires an active non-cancelled run")
-if ended and run.get("status") != "completed":
-    raise SystemExit("native CI qualification requires an in-progress or completed run")
+if ended and sys.argv[8] == "final":
+    print("ERROR: the CI run (attempt %s) ended (status=%s, conclusion=%s) before this native result "
+          "could be published. Nothing is posted as success for it: any re-run is a new attempt, and "
+          "the consumer accepts only the current attempt's status. A fresh attempt is needed, and the "
+          "native qualification must be repeated against it."
+          % (run.get("run_attempt"), run.get("status"), run.get("conclusion")), file=sys.stderr)
+    raise SystemExit(75)
 if ended:
-    print("NOTE: the CI run had already ended (status=%s, conclusion=%s) before this result was "
-          "published; re-run the native-logic-e2e job to consume it."
-          % (run.get("status"), run.get("conclusion")))
+    raise SystemExit("native CI qualification requires an active non-cancelled run")
 run_attempt = run.get("run_attempt")
 if isinstance(run_attempt, bool) or not isinstance(run_attempt, int) or run_attempt < 1:
     raise SystemExit("CI run attempt is not a positive integer")
@@ -430,7 +437,8 @@ test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$SHA"
 test -z "$(git -C "$CANDIDATE_ROOT" status --porcelain)"
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
 resolve_run_pull_request "$work/run-success.json"
-validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" allow-ended
+validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" final \
+  || { validate_status="$?"; [ "$validate_status" -ne 75 ] || run_ended=1; exit "$validate_status"; }
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts-success.json"
 fetch_run_jobs

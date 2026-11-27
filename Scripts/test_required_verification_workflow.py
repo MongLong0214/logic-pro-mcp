@@ -551,6 +551,45 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertIn('post_status failure "Exact artifact failed native Logic qualification"', wrapper)
         self.assertNotIn("LOGIC_PRO_MCP_RUN_LIVE_QA=0", wrapper)
 
+    def run_validate_run(self, status, conclusion, mode):
+        """Run the wrapper's own validate_run Python on a run document, up to the ended check."""
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        start = wrapper.index("validate_run() {")
+        body = wrapper[wrapper.index("<<'PY'\n", start) + len("<<'PY'\n"):]
+        code = body[:body.index("\nPY\n")]
+        with tempfile.TemporaryDirectory() as tmp:
+            run_path = pathlib.Path(tmp, "run.json")
+            run_path.write_text(json.dumps({
+                "id": 7, "repository": {"full_name": "o/r"}, "event": "pull_request",
+                "path": ".github/workflows/ci.yml", "run_attempt": 2,
+                "status": status, "conclusion": conclusion}))
+            return subprocess.run(
+                [sys.executable, "-c", code, str(run_path), "a" * 40, "7", "o/r",
+                 str(pathlib.Path(tmp, "attempt.txt")), tmp, "2", mode],
+                text=True, capture_output=True, check=False)
+
+    def test_a_run_that_ended_before_publishing_posts_nothing_a_rerun_could_consume(self):
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        self.assertNotIn("allow-ended", wrapper)
+        self.assertNotIn("re-run the native-logic-e2e job to consume it", wrapper)
+        for status, conclusion in (("completed", "success"), ("completed", "cancelled")):
+            result = self.run_validate_run(status, conclusion, "final")
+            self.assertEqual(result.returncode, 75, result.stderr)
+            self.assertIn("fresh attempt is needed", result.stderr)
+            self.assertIn("native qualification must be repeated", result.stderr)
+            self.assertNotIn("consume it", result.stderr + result.stdout)
+        # The same document is refused at the start too, with the ordinary message.
+        started = self.run_validate_run("completed", "success", "")
+        self.assertNotEqual(started.returncode, 75)
+        self.assertIn("requires an active non-cancelled run", started.stderr)
+        # A run that is still in progress passes the ended check and fails only on a later one.
+        active = self.run_validate_run("in_progress", None, "final")
+        self.assertIn("exactly one pull request identity", active.stderr)
+        # The ended exit never reaches the success post; it posts a failure that says why.
+        ended_exit = wrapper.index('[ "$validate_status" -ne 75 ] || run_ended=1')
+        self.assertLess(ended_exit, wrapper.index('post_status success "$receipt"'))
+        self.assertIn("repeat it on a fresh attempt", wrapper)
+
     def test_native_candidate_binds_the_run_base_and_head(self):
         wrapper = read("Scripts/ci-native-qualify.sh")
         self.assertIn('run.get("head_sha") != head_sha', wrapper)

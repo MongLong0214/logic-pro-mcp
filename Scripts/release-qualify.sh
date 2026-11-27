@@ -10,7 +10,10 @@
 # test process must not contaminate the release binary's live ownership check.
 # A missing process or permission still stops before testing; no live success is
 # inferred. The general suite is not re-run here: hosted CI runs every test of the same
-# candidate (the union of every test-shards shard), and only the live tests need this Mac.
+# candidate (the union of every test-shards shard), EXCEPT the tests that switch on only where
+# Logic is installed. A hosted runner has no Logic and reports those as not run, which
+# `verify-xunit` counts as run, so this Mac is the only place their bodies execute: after the live
+# tests it runs exactly the host-gated, non-live tests below and fails unless every one passed.
 #
 # Release entrypoints consume staged final artifacts; this runner does not publish.
 # The release contract tests cover the build-before-live ordering without replacing the runtime.
@@ -53,12 +56,28 @@ release_live_tests=(
 debug_live_tests=(
     "runnerRejectsPartialStateObservedFromRealServer"
 )
+# Every test marked `.requiresLogicHost` (Tests/LogicProMCPTests/SharedTestHelpers.swift). Keep this
+# list equal to that set: HostGatedTestsContractTests fails when they differ, and when a host
+# condition is written without the marker.
+host_gated_tests=(
+    "scanLocalFactoryLibraryReportsFullCoverage"
+    "installedLibraryEmitsOnlyPanelCategories"
+    "testProcessUtilsBundleURLResolvesWithoutAppKitRunloop"
+    "testProcessUtilsLogicProVersionResolvesOffMain"
+    "hostFactorySettingsFoldersAreAccountedFor"
+)
 test_inventory="$(swift test list)"
-for live_test in ${release_live_tests[@]+"${release_live_tests[@]}"} ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
+for live_test in ${release_live_tests[@]+"${release_live_tests[@]}"} ${debug_live_tests[@]+"${debug_live_tests[@]}"} \
+        ${host_gated_tests[@]+"${host_gated_tests[@]}"}; do
+    # A test method lists as `Module.Suite/name()`, a free function as `Module.name()`.
     match_count="$(
-        printf '%s\n' "$test_inventory" | awk -v suffix="/${live_test}()" '
-            length($0) >= length(suffix) &&
-                substr($0, length($0) - length(suffix) + 1) == suffix { matches += 1 }
+        printf '%s\n' "$test_inventory" | awk -v method="/${live_test}()" -v free="." -v name="${live_test}()" '
+            {
+                n = length(name)
+                if (length($0) >= length(method) && substr($0, length($0) - length(method) + 1) == method) matches += 1
+                else if (length($0) > n && substr($0, length($0) - n + 1) == name \
+                         && substr($0, length($0) - n, 1) == free) matches += 1
+            }
             END { print matches + 0 }
         '
     )"
@@ -107,5 +126,20 @@ for live_test in ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
     LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
     verify_candidate_bytes
 done
+# The host-gated, non-live tests, in one filtered run. They need Logic installed, not Logic driven,
+# so they carry no LOGIC_PRO_MCP_RUN_LIVE_QA. A test that did not run would be absence reported as
+# success, so a run in which fewer than all of them passed fails.
+host_gated_log=".build/host-gated-tests.log"
+host_gated_filters=()
+for host_test in ${host_gated_tests[@]+"${host_gated_tests[@]}"}; do
+    host_gated_filters+=(--filter "${host_test}\\(\\)")
+done
+swift test --no-parallel ${host_gated_filters[@]+"${host_gated_filters[@]}"} 2>&1 | tee "$host_gated_log"
+verify_candidate_bytes
+host_gated_passed="$(grep -cE '^✔ Test .* passed after' "$host_gated_log" || true)"
+if [ "$host_gated_passed" -ne "${#host_gated_tests[@]}" ]; then
+    echo "Error: ${#host_gated_tests[@]} host-gated tests must each pass on this host; $host_gated_passed passed (see $host_gated_log)." >&2
+    exit 1
+fi
 verify_candidate_bytes
 trap - EXIT INT TERM

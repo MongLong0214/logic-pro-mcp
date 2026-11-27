@@ -25,6 +25,22 @@ let coreMIDIUnavailableInSandbox: ConditionTrait = .disabled(
     "This sandbox denies the CoreMIDI service connection; the behaviour remains live qualification."
 )
 
+/// The one marker for a test that can run only on a machine with Logic installed (its app bundle,
+/// its Library, its factory-settings roots). Hosted CI has no Logic, so it reports these as skipped
+/// and `verify-xunit` counts a skip as run; the Logic host is the only place their bodies execute.
+/// `Scripts/release-qualify.sh` therefore runs every test carrying this marker, and
+/// `HostGatedTestsContractTests` fails if a marked test is missing from that list or if a host
+/// condition is written any other way. Use it in place of `.enabled(if:)` for such a condition.
+extension Trait where Self == ConditionTrait {
+    static func requiresLogicHost(
+        if condition: @autoclosure @escaping @Sendable () throws -> Bool,
+        _ comment: Comment? = "skipped, not passed: this host has no Logic install to check against",
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) -> Self {
+        .enabled(if: try condition(), comment, sourceLocation: sourceLocation)
+    }
+}
+
 /// Independently ask whether CoreMIDI will hand THIS process a client right now,
 /// returning the refusal status or nil when it will.
 ///
