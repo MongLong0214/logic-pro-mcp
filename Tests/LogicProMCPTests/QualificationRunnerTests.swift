@@ -2551,9 +2551,10 @@ struct QualificationRunnerTests {
     }
 
     /// Logic's default control bar is Beats & Project, which publishes bar and beat. The cycle reads
-    /// the mode, switches to Beats, confirms it, captures the four-component origin, runs, puts the
-    /// playhead back and verifies it while still in Beats, and only then gives the mode back and
-    /// reads it again.
+    /// the mode, switches to Beats, confirms it, captures the four-component origin, and gives the
+    /// mode back and reads it before the request: Beats does not show the tempo the requests need.
+    /// It switches to Beats again only to read the playhead, puts it back and verifies it there,
+    /// and then gives the mode back and reads it again.
     @Test(arguments: ["play", "stop", "pause"])
     func aBeatsAndProjectStartIsSwitchedToBeatsAndGivenBackAfterThePlayheadIsRestored(command: String) throws {
         let fixture = try SlowHandshakeFixture(
@@ -2567,12 +2568,13 @@ struct QualificationRunnerTests {
         let events = displayEvents(fixture)
         let beatsAndProject = "mode_read=Beats & Project"
         #expect(QualificationPositionDisplayFake.containsInOrder([
-            beatsAndProject, "mode_switch", "mode_read=Beats", "transport_read", command,
+            beatsAndProject, "mode_switch", "mode_read=Beats", "transport_read", "mode_restore",
+            beatsAndProject, command, "mode_switch", "mode_read=Beats", "transport_read",
             "goto_position", "transport_read", "mode_restore", beatsAndProject,
         ], in: events), "\(events)")
         #expect(QualificationPositionDisplayFake.closingModeCalls(in: events) == ["mode_restore", beatsAndProject], "\(events)")
-        #expect(events.filter { $0 == "mode_switch" }.count == 1, "\(events)")
-        #expect(events.filter { $0 == "mode_restore" }.count == 1, "\(events)")
+        #expect(events.filter { $0 == "mode_switch" }.count == 2, "\(events)")
+        #expect(events.filter { $0 == "mode_restore" }.count == 2, "\(events)")
         #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
         let position = try String(
             contentsOf: fixture.directory.appendingPathComponent("transport-position"), encoding: .utf8
@@ -2670,8 +2672,9 @@ struct QualificationRunnerTests {
         #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
     }
 
-    /// A mode that is not given back is never a credited cycle, even though the playhead was put
-    /// back: the restore is refused, or reports itself done and the re-read says otherwise.
+    /// The mode is given back after the origin is read, before any request. When that give-back is
+    /// refused, or reports itself done and the re-read says otherwise, no request is sent in a mode
+    /// that is not the original: nothing is started and nothing is credited.
     @Test(arguments: ["play", "stop", "pause"],
           [QualificationPositionDisplayFake.Fault.restoreRefused, .restoreNotApplied])
     func aDisplayModeThatIsNotConfirmedRestoredIsNotRecordedAsSuccess(
@@ -2687,10 +2690,35 @@ struct QualificationRunnerTests {
         #expect(records == 0)
         #expect(observed.status != .passed)
         #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        let recipe = try recipeRequests(fixture)
+        for change in ["play", "stop", "pause", "goto_position", "goto_bar"] {
+            #expect(!recipe.contains { $0.contains("\"command\":\"\(change)\"") },
+                    "nothing is sent while the mode is not the original: \(recipe)")
+        }
+    }
+
+    /// The give-back after the origin is confirmed, the cycle runs, and the give-back after the
+    /// playhead is put back reports itself done while the re-read says Beats. The playhead is
+    /// restored and verified before that, and the cycle is still not credited.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aDisplayModeNotGivenBackAfterThePlayheadReadIsNotRecordedAsSuccess(command: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "paused", displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+            fault: .laterRestoreNotApplied)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.mutationRestore == nil)
+        #expect(records == 0)
+        #expect(observed.status != .passed)
+        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
         let events = displayEvents(fixture)
         #expect(QualificationPositionDisplayFake.containsInOrder(
-            ["mode_switch", command, "goto_position", "transport_read", "mode_restore"], in: events),
+            ["mode_restore", "mode_read=Beats & Project", command, "mode_switch", "goto_position",
+             "transport_read", "mode_restore", "mode_read=Beats"], in: events),
             "the playhead is restored and verified before the mode: \(events)")
+        #expect(fixtureFile(fixture, "transport-position") == "1", "the playhead is back at bar 1")
     }
 
     // MARK: Round 5: one setting read two ways, a start that moves, a read that only half failed
@@ -2929,13 +2957,12 @@ struct QualificationRunnerTests {
         }
     }
 
-    /// The failure seen live on the real Logic (PR 1625 native run): the whole play, stop and pause
-    /// cycle runs with the control bar in Beats, and Beats shows the position only, so the tempo that
-    /// sizes the stillness gap is not published while the cycle reads motion. The tempo is read live
-    /// in the mode found, before the switch, and read live again after the mode is given back; the
-    /// cycle keeps its full motion readback and is credited only when the two tempos agree.
+    /// The failure seen live on the real Logic (PR 1625 native run): Beats shows the position only,
+    /// so the tempo that sizes the stillness gap is not published there. The cycle reads motion only
+    /// with the bar in the original mode, where the tempo reads live, and enters Beats only for the
+    /// exact position reads; the cycle keeps its full motion readback.
     @Test(arguments: ["play", "stop", "pause"])
-    func aCycleInBeatsWhoseTempoIsHiddenThereUsesTheTempoReadInTheOriginalModeAndVerifiesItAfter(
+    func aCycleWhoseTempoIsHiddenInBeatsReadsMotionLiveInTheOriginalMode(
         command: String
     ) throws {
         let fixture = try SlowHandshakeFixture(
@@ -2950,8 +2977,8 @@ struct QualificationRunnerTests {
         #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
     }
 
-    /// The same Beats-hidden tempo with no tempo read in the original mode: nothing can size the gap,
-    /// and "tempo unavailable" stays a refusal. A cycle already in Beats has no original-mode tempo.
+    /// The same Beats-hidden tempo for a bar that started in Beats: the original mode is Beats, so no
+    /// read shows the tempo, nothing can size the gap, and "tempo unavailable" stays a refusal.
     @Test(arguments: ["play", "stop", "pause"])
     func aCycleStartedInBeatsWhoseTempoIsHiddenStillRefusesTempoUnavailable(command: String) throws {
         let fixture = try SlowHandshakeFixture(
@@ -2965,6 +2992,36 @@ struct QualificationRunnerTests {
         #expect(records == 0)
         #expect(try #require(observed.mutationRestoreRefusal).contains("tempo unavailable"),
                 "\(observed.mutationRestoreRefusal ?? "no refusal")")
+    }
+
+    /// The second failure seen live (PR 1625 native run): the product's own pause reads the tempo
+    /// to size its paused-against-playing gap, refuses in Beats where the tempo is not shown, and
+    /// sends nothing. The cycle sends its requests with the bar in the original mode and enters
+    /// Beats only to read the exact position, so the real pause is accepted, the playhead is put
+    /// back, and the mode ends as it started.
+    @Test(arguments: ["stopped", "paused"])
+    func aPauseTheProductRefusesInBeatsIsSentWithTheBarInTheOriginalMode(start: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: start,
+            displayMode: "Beats & Project", recoveryFlags: "tempo_hidden_in_beats,pause_refused_in_beats")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        let (observed, records) = try driveGoto(fixture, command: "pause", display: fake.display)
+        #expect(observed.status == .passed, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(records == 1)
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
+        #expect(fixtureFile(fixture, "transport-position") == "1", "the playhead is back at bar 1")
+        // Every transport request is sent while the last mode event says the original mode.
+        let events = displayEvents(fixture)
+        var mode = "Beats & Project"
+        for event in events {
+            if event == "mode_switch" { mode = "switching" }
+            if event.hasPrefix("mode_read=") { mode = String(event.dropFirst("mode_read=".count)) }
+            if ["play", "stop", "pause"].contains(event) {
+                #expect(mode == "Beats & Project", "\(event) sent with the bar in \(mode): \(events)")
+            }
+        }
     }
 
     /// If the stop cannot be confirmed by a read, nothing else is attempted: no seek, and the run
@@ -7914,6 +7971,13 @@ struct QualificationRunnerTests {
                         printf '%s\n' "$track_name" > track-name
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id" ;;
                       *'"command":"pause"'*)
+                        # The real product's pause, with Play on, reads the tempo to size the gap that
+                        # tells a paused playhead from a playing one. Beats does not show the tempo, so
+                        # there it refuses and sends nothing (PR 1625 native run).
+                        if has_flag pause_refused_in_beats && [ "$playing" = true ] && [ -f display-mode ] && [ "$(cat display-mode)" = Beats ]; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"readback_unavailable\\",\\"reason\\":\\"tempo_unreadable\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                            continue
+                        fi
                         transport_writes=$((transport_writes + 1))
                         if [ "$native_pause" = true ]; then
                             if [ "$playing" = true ]; then moving=false; fi

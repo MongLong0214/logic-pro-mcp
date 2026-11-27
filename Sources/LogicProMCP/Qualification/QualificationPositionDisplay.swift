@@ -4,9 +4,11 @@ import Foundation
 ///
 /// Four position components (bar, beat, division, tick) are shown only in the control bar's
 /// Beats display mode; Logic's default, Beats & Project, shows bar and beat, which cannot name an
-/// exact origin to put the playhead back to. The transport, marker and bar restore cycles
-/// therefore switch to Beats for their reads and give the mode back afterwards
-/// (`QualificationTransport.withBeatsPositionDisplay`).
+/// exact origin to put the playhead back to. The marker and bar restore cycles therefore switch
+/// to Beats for the whole cycle and give the mode back afterwards
+/// (`QualificationTransport.withBeatsPositionDisplay`); the transport cycles switch only for the
+/// exact position reads, because Beats does not show the tempo their requests need
+/// (`QualificationTransport.withPositionDisplay`).
 ///
 /// A seam, not a global: a transport built without one leaves the display alone, which is what
 /// every unit test of the transport itself wants. The live `--qualify` drive supplies

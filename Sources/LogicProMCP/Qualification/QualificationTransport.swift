@@ -1602,9 +1602,11 @@ struct QualificationTransport: Sendable {
     /// modal, editor or Marker List. The live gate always sets it; a transport built without it
     /// (a unit test of the transport itself) checks nothing about the machine it runs on.
     let startingWindowFacts: (@Sendable () -> QualificationStartingWindowFacts)?
-    /// When set, the transport, marker-navigation and bar restore cycles run with the control bar
-    /// in Beats mode and give the original mode back (`withBeatsPositionDisplay`). The live drive
-    /// always sets it; a transport built without it leaves Logic's display alone.
+    /// When set, the marker-navigation and bar restore cycles run with the control bar in Beats
+    /// mode and give the original mode back (`withBeatsPositionDisplay`); the transport cycles hold
+    /// Beats only for their exact position reads and send their requests in the original mode
+    /// (`withPositionDisplay`). The live drive always sets it; a transport built without it leaves
+    /// Logic's display alone.
     let positionDisplay: QualificationPositionDisplay?
 
     init(
@@ -2086,13 +2088,13 @@ struct QualificationTransport: Sendable {
                         if let expected = Self.transportExpectedPlaying[spec.id] {
                             let recoveryWitness = TransportRecoveryWitness()
                             do {
-                                let cycle = try withBeatsPositionDisplay(
+                                let cycle = try withPositionDisplay(
                                     session, nextID: &nextID, requiresStationaryStart: true,
                                     recovery: recoveryWitness
-                                ) {
+                                ) { id, beats in
                                     try transportRestoreCycle(
-                                        session, startingAt: $0, spec: spec,
-                                        expectedPlaying: expected,
+                                        session, startingAt: id, spec: spec,
+                                        expectedPlaying: expected, beats: beats,
                                         recovery: positionDisplay == nil ? nil : recoveryWitness)
                                 }
                                 mutationRestoreRecords.append(cycle.record)
@@ -3358,8 +3360,8 @@ struct QualificationTransport: Sendable {
             params: [:], phase: "\(phase).refresh")
         let data = try resourceReadback(
             session, id: id + 1, uri: "logic://transport/state", phase: phase)
-        var raw = String(decoding: data, as: UTF8.self)
-        guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let raw = String(decoding: data, as: UTF8.self)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               object["source"] as? String == "ax_live",
               object["unverified"] as? Bool != true,
               object["ax_occluded"] as? Bool != true,
@@ -3368,15 +3370,6 @@ struct QualificationTransport: Sendable {
               let playing = state["isPlaying"] as? Bool else {
             throw QualificationTransportError.protocolViolation(
                 "\(phase): logic://transport/state did not report observed isPlaying")
-        }
-        // In Beats the bar shows no tempo, so a live read of it has none. The tempo read live in the
-        // original mode stands in, named as such; a read that has its own live tempo keeps it.
-        if playing, object["observed_tempo"] as? Double == nil,
-           let reference = session.beatsTempoReference {
-            object["observed_tempo"] = reference
-            object["observed_tempo_source"] = "original_display_mode_before_beats"
-            raw = String(decoding: try JSONSerialization.data(withJSONObject: object,
-                options: [.sortedKeys, .withoutEscapingSlashes]), as: UTF8.self)
         }
         return (playing, raw)
     }
@@ -3514,6 +3507,7 @@ struct QualificationTransport: Sendable {
         startingAt id: Int,
         spec: OperationSpec,
         expectedPlaying: Bool,
+        beats: BeatsPositionHold? = nil,
         recovery: TransportRecoveryWitness? = nil
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
@@ -3521,6 +3515,20 @@ struct QualificationTransport: Sendable {
         let expected: TransportMotion = spec.id == .transportPause ? .paused : (expectedPlaying ? .moving : .stopped)
         let inverse = expected == .moving ? "stop" : "play"
 
+        // With the display in use, Beats is held only to read the exact position: here, and after
+        // the cycle. Every request and motion read runs in the original mode, which shows the tempo
+        // that the product's pause (and play from a paused start) and the motion reads size their
+        // stillness gap from; in Beats the real pause refused (PR 1625 native run).
+        var origin: String?
+        if let beats {
+            origin = try beats.hold(unread: "nothing is started") {
+                try awaitFourComponentOrigin(session, nextID: &nextID)
+            }
+            if let problem = beats.problem {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.display_mode: \(problem), so no request is sent in it; nothing is started")
+            }
+        }
         let pre = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.pre_state")
         // The start guard read a stationary transport earlier; this read is the one the change is
         // made from. With the display in use, moving here means no exact origin can be put back.
@@ -3534,7 +3542,8 @@ struct QualificationTransport: Sendable {
         // a different place (measured: 30.3 before a gate, 5.2 after). From a stopped or paused
         // start the exact position is read here and put back, verified, on every exit. A moving
         // start has no stationary origin to return to.
-        let prePosition = pre.motion != .moving ? Self.observedPlayheadPosition(pre.raw) : nil
+        let prePosition = pre.motion == .moving ? nil
+            : beats != nil ? origin : Self.observedPlayheadPosition(pre.raw)
         if pre.motion != .moving, prePosition == nil {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.pre_state: the playhead position did not read, so it could not be put "
@@ -3623,7 +3632,8 @@ struct QualificationTransport: Sendable {
                 throw QualificationTransportError.protocolViolation(
                     "phase_b.restore_readback: recorded transport cycle did not verify")
             }
-            if let prePosition, Self.observedPlayheadPosition(restored.raw) != prePosition {
+            func putPlayheadBack(at prePosition: String, observed: String?) throws {
+                guard observed != prePosition else { return }
                 playheadRestoreAttempted = true
                 let fix = restorePlayhead(
                     session, nextID: &nextID, to: prePosition, phase: "phase_b.playhead_restore")
@@ -3631,6 +3641,15 @@ struct QualificationTransport: Sendable {
                     throw QualificationTransportError.protocolViolation(
                         "phase_b.playhead_restore: \(fix.summary)")
                 }
+            }
+            if let prePosition, let beats {
+                try beats.hold(unread: "the playhead position is not read back") {
+                    let now = try awaitFourComponentPosition(
+                        session, nextID: &nextID, phase: "phase_b.playhead_readback")
+                    try putPlayheadBack(at: prePosition, observed: now)
+                }
+            } else if let prePosition {
+                try putPlayheadBack(at: prePosition, observed: Self.observedPlayheadPosition(restored.raw))
             }
             workMayHaveLanded = false
             return (record, nextID)
@@ -3651,7 +3670,7 @@ struct QualificationTransport: Sendable {
                     nextID: &nextID)
                 let position = confirmPosition(
                     session, origin: prePosition, stopped: stopped,
-                    seekAlreadyAttempted: playheadRestoreAttempted, nextID: &nextID)
+                    seekAlreadyAttempted: playheadRestoreAttempted, beats: beats, nextID: &nextID)
                 recovery.record(stopped: stopped, position: position)
                 let detail = "\(error) | compensating restore: \(compensation.summary) | "
                     + recovery.summary
@@ -3718,24 +3737,41 @@ struct QualificationTransport: Sendable {
         origin: String?,
         stopped: TransportRecoveryWitness.Verdict,
         seekAlreadyAttempted: Bool,
+        beats: BeatsPositionHold? = nil,
         nextID: inout Int
     ) -> TransportRecoveryWitness.Verdict {
         guard let origin else { return .confirmed("no stationary origin was owed") }
         guard stopped.isConfirmed else {
             return .unconfirmed("not attempted: playback is not confirmed stopped")
         }
-        let readID = nextID
-        nextID += 2
-        if let read = try? observedTransportPosition(session, id: readID, phase: "phase_b.recovery.position"),
-           Self.observedPlayheadPosition(read.raw) == origin {
-            return .confirmed("read at \(origin), no seek needed")
+        func confirm() -> TransportRecoveryWitness.Verdict {
+            let now: String?
+            if beats != nil {
+                // Just switched to Beats: the bar shows all four components a moment later.
+                now = (try? awaitFourComponentPosition(
+                    session, nextID: &nextID, phase: "phase_b.recovery.position")) ?? nil
+            } else {
+                let readID = nextID
+                nextID += 2
+                now = (try? observedTransportPosition(
+                    session, id: readID, phase: "phase_b.recovery.position"))
+                    .flatMap { Self.observedPlayheadPosition($0.raw) }
+            }
+            if now == origin { return .confirmed("read at \(origin), no seek needed") }
+            guard !seekAlreadyAttempted else {
+                return .unconfirmed("a seek to \(origin) was already attempted and failed; not repeated")
+            }
+            let fix = restorePlayhead(
+                session, nextID: &nextID, to: origin, phase: "phase_b.recovery.playhead_restore")
+            return fix.restored ? .confirmed(fix.summary) : .unconfirmed(fix.summary)
         }
-        guard !seekAlreadyAttempted else {
-            return .unconfirmed("a seek to \(origin) was already attempted and failed; not repeated")
+        guard let beats else { return confirm() }
+        // The exact position reads only in Beats, which is held for this read and the seek alone.
+        do {
+            return try beats.hold(unread: "the playhead position is not read", confirm)
+        } catch {
+            return .unconfirmed("position not read: \(error)")
         }
-        let fix = restorePlayhead(
-            session, nextID: &nextID, to: origin, phase: "phase_b.recovery.playhead_restore")
-        return fix.restored ? .confirmed(fix.summary) : .unconfirmed(fix.summary)
     }
 
     /// #373 Phase B for `tracks.select`. The moved thing is WHICH row carries `isSelected`, so the
@@ -4301,8 +4337,81 @@ struct QualificationTransport: Sendable {
         return true
     }
 
-    /// Runs a cycle that needs the four-component playhead with the control bar in Beats, and gives
-    /// the mode back.
+    /// The control bar held in Beats for the reads that need the four-component playhead, and given
+    /// back to the original mode after each one (`hold`). A bar found in Beats is never switched or
+    /// given back, and `hold` then only runs its body.
+    final class BeatsPositionHold {
+        let display: QualificationPositionDisplay
+        let original: String
+        /// False when the bar was found in Beats: nothing is switched, so nothing is given back.
+        let switches: Bool
+        /// The first give-back that was not confirmed. Once set, the bar is not switched again.
+        private(set) var problem: String?
+
+        init(display: QualificationPositionDisplay, original: String) {
+            self.display = display
+            self.original = original
+            switches = !ControlBarDisplayMode.isBeatsMode(original)
+        }
+
+        private func refusal(_ detail: String) -> QualificationTransportError {
+            .protocolViolation("phase_b.display_mode: \(detail)")
+        }
+
+        /// Restores the mode a switch found and reads it back both ways; nil when both say the original.
+        private func giveBack(_ lease: ControlBarDisplayMode.Lease) -> String? {
+            if case .refused(let reason) = display.restore(lease) {
+                return "display mode was not restored to \(original) (\(reason))"
+            }
+            guard let now = display.read() else {
+                return "display mode could not be read again after the restore to \(original)"
+            }
+            guard now == original else {
+                return "display mode reads \(now) after the restore, expected \(original)"
+            }
+            let checked = display.readChecked()
+            return checked == original ? nil
+                : "display mode's checked menu item reads \(checked ?? "nothing") after the restore, "
+                    + "expected \(original)"
+        }
+
+        /// Switches to Beats, confirms it by a readback, runs `body`, and gives the mode back however
+        /// `body` ends. A switch that is refused or not confirmed runs nothing (`unread` says what is
+        /// therefore not done); a give-back that is not confirmed is kept in `problem`.
+        func hold<T>(unread: String, _ body: () throws -> T) throws -> T {
+            guard switches else { return try body() }
+            if let problem { throw refusal("\(problem); \(unread)") }
+            // Just before the menu is opened to switch, both readings must still say the original:
+            // a switch leases whatever is checked then, and putting that back is not the original.
+            guard display.read() == original, display.readChecked() == original else {
+                throw refusal("the control bar's display mode is no longer \(original) just before "
+                    + "it would be switched; \(unread)")
+            }
+            let lease: ControlBarDisplayMode.Lease
+            switch display.selectBeats() {
+            case .switched(let held):
+                lease = held
+            case .unavailable(let reason):
+                throw refusal("display mode could not be switched to Beats (\(reason)); \(unread)")
+            case .unsettled(let held, let reason):
+                // No lease means nothing was found switched, so there is nothing to give back.
+                problem = held.flatMap { giveBack($0) }
+                throw refusal("display mode switch to Beats did not settle (\(reason)); \(unread)")
+            }
+            guard let confirmed = display.read(), ControlBarDisplayMode.isBeatsMode(confirmed) else {
+                problem = giveBack(lease)
+                throw refusal("display mode switch to Beats was not confirmed by a readback; \(unread)")
+            }
+            let result: Result<T, Error>
+            do { result = .success(try body()) } catch { result = .failure(error) }
+            if let given = giveBack(lease) { problem = given }
+            return try result.get()
+        }
+    }
+
+    /// Runs a cycle that needs the four-component playhead, with the control bar in Beats for the
+    /// whole cycle, and gives the mode back. The playhead and marker cycles use it: none of their
+    /// requests reads the tempo, which Beats does not show.
     ///
     /// Logic's default, Beats & Project, shows bar and beat only, which cannot name an exact origin,
     /// so every transport, marker and bar cycle refused there. In order: read the mode (unreadable:
@@ -4316,11 +4425,34 @@ struct QualificationTransport: Sendable {
     private func withBeatsPositionDisplay(
         _ session: QualificationSubprocessSession,
         nextID: inout Int,
-        requiresStationaryStart: Bool = false,
-        recovery: TransportRecoveryWitness? = nil,
         cycle: (Int) throws -> (record: QualificationMutationRestoreRecord, nextID: Int)
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
-        guard let display = positionDisplay else { return try cycle(nextID) }
+        try withPositionDisplay(session, nextID: &nextID) { id, beats in
+            guard let beats else { return try cycle(id) }
+            return try beats.hold(unread: "nothing is started") {
+                var id = id
+                try awaitFourComponentOrigin(session, nextID: &id)
+                return try cycle(id)
+            }
+        }
+    }
+
+    /// Reads the original display mode, hands the cycle a `BeatsPositionHold` for the reads that
+    /// need Beats, and verifies the mode after the cycle. The transport cycles hold Beats only for
+    /// the exact position reads: their requests and motion reads run in the original mode, which
+    /// shows the tempo. The product's pause (and play from a paused start) sizes its stillness gap
+    /// from that tempo and refuses without it, so a pause sent in Beats was refused on the real
+    /// Logic (PR 1625 native run). A mode that is not confirmed given back after any hold, or not
+    /// read as the original after the cycle by the popup and the checked menu item, withholds the
+    /// cycle's credit. With no `positionDisplay` the cycle gets no hold and the display is left alone.
+    private func withPositionDisplay(
+        _ session: QualificationSubprocessSession,
+        nextID: inout Int,
+        requiresStationaryStart: Bool = false,
+        recovery: TransportRecoveryWitness? = nil,
+        cycle: (Int, BeatsPositionHold?) throws -> (record: QualificationMutationRestoreRecord, nextID: Int)
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        guard let display = positionDisplay else { return try cycle(nextID, nil) }
         func refusal(_ detail: String) -> QualificationTransportError {
             .protocolViolation("phase_b.display_mode: \(detail)")
         }
@@ -4348,98 +4480,15 @@ struct QualificationTransport: Sendable {
                 + "reads \(checked ?? "nothing"); the original display mode is not known, "
                 + "so nothing is changed")
         }
-        // Not restoring is only ever a claim about a mode this call changed.
-        var lease: ControlBarDisplayMode.Lease?
-        func giveBack() -> String? {
-            guard let held = lease else { return nil }
-            lease = nil
-            switch display.restore(held) {
-            case .refused(let reason):
-                return "display mode was not restored to \(original) (\(reason))"
-            case .restored:
-                break
-            }
-            guard let now = display.read() else {
-                return "display mode could not be read again after the restore to \(original)"
-            }
-            return now == original
-                ? nil : "display mode reads \(now) after the restore, expected \(original)"
-        }
-        func failStart(_ detail: String) -> QualificationTransportError {
-            if let problem = giveBack() { return refusal("\(detail); \(problem)") }
-            return refusal(detail)
-        }
-        let switched = !ControlBarDisplayMode.isBeatsMode(original)
-        // The tempo is read live here, in the mode found, because Beats does not show it.
-        var tempoReference: Double?
-        if switched, requiresStationaryStart {
-            let read = try observedPlaying(session, id: nextID, phase: "phase_b.display_mode_tempo")
-            nextID += 2
-            tempoReference = (try? JSONSerialization.jsonObject(with: Data(read.raw.utf8)))
-                .flatMap { ($0 as? [String: Any])?["observed_tempo"] as? Double }
-        }
-        defer { session.beatsTempoReference = nil }
-        if switched {
-            // Just before the menu is opened to switch, both readings must still say the original:
-            // a switch leases whatever is checked then, and putting that back is not the original.
-            guard display.read() == original, display.readChecked() == original else {
-                throw refusal("the control bar's display mode is no longer \(original) just before "
-                    + "it would be switched; nothing is changed")
-            }
-            switch display.selectBeats() {
-            case .switched(let held):
-                lease = held
-            case .unavailable(let reason):
-                throw refusal("display mode could not be switched to Beats (\(reason)); nothing is started")
-            case .unsettled(let held, let reason):
-                lease = held
-                throw failStart("display mode switch to Beats did not settle (\(reason)); nothing is started")
-            }
-            guard let confirmed = display.read(), ControlBarDisplayMode.isBeatsMode(confirmed) else {
-                throw failStart("display mode switch to Beats was not confirmed by a readback; "
-                    + "nothing is started")
-            }
-        }
+        let beats = BeatsPositionHold(display: display, original: original)
         let outcome: Result<(record: QualificationMutationRestoreRecord, nextID: Int), Error>
         do {
-            try awaitFourComponentOrigin(session, nextID: &nextID)
-            // The stand-in is for a bar that shows no tempo in Beats. A bar that does show it in
-            // Beats must keep supplying it live, so a tempo that goes missing later still refuses.
-            if let reference = tempoReference {
-                let inBeats = try observedPlaying(session, id: nextID, phase: "phase_b.display_mode_tempo_in_beats")
-                nextID += 2
-                let hidden = (try? JSONSerialization.jsonObject(with: Data(inBeats.raw.utf8)))
-                    .flatMap { ($0 as? [String: Any])?["observed_tempo"] as? Double } == nil
-                if hidden { session.beatsTempoReference = reference }
-            }
-            outcome = .success(try cycle(nextID))
+            outcome = .success(try cycle(nextID, beats))
         } catch {
             outcome = .failure(error)
         }
-        session.beatsTempoReference = nil
-        var problem = giveBack()
-        // The stand-in tempo is credited only if the original mode reads the same tempo again.
-        var finalID = nextID
-        if case .success(let done) = outcome, problem == nil, let tempoReference {
-            finalID = done.nextID
-            // The bar republishes the tempo a moment after the mode comes back.
-            var tempo: Double?
-            let deadline = Date().addingTimeInterval(ControlBarDisplayMode.positionComponentsTimeout)
-            repeat {
-                let again = try? observedPlaying(
-                    session, id: finalID, phase: "phase_b.display_mode_tempo_after")
-                finalID += 2
-                tempo = again.flatMap { try? JSONSerialization.jsonObject(with: Data($0.raw.utf8)) }
-                    .flatMap { ($0 as? [String: Any])?["observed_tempo"] as? Double }
-                if tempo != nil { break }
-                uiSettleSleep(ControlBarDisplayMode.positionComponentsPollInterval)
-            } while Date() < deadline
-            if tempo != tempoReference {
-                problem = "tempo reads \(tempo.map { "\($0)" } ?? "nothing") in \(original) after the cycle, "
-                    + "expected \(tempoReference) read before it"
-            }
-        }
-        if problem == nil, !switched {
+        var problem = beats.problem
+        if problem == nil, !beats.switches {
             // Nothing was switched, so nothing is given back, and another party's change is not
             // overwritten. The mode is still read again: a changed or unreadable mode is no credit.
             if let now = display.read() {
@@ -4475,7 +4524,7 @@ struct QualificationTransport: Sendable {
         }
         switch (outcome, problem) {
         case (.success(let cycleResult), nil):
-            return (cycleResult.record, max(cycleResult.nextID, finalID))
+            return cycleResult
         case (.success, let problem?):
             throw refusal("\(problem); the cycle's credit is withheld")
         case (.failure(let error), nil):
@@ -4486,21 +4535,31 @@ struct QualificationTransport: Sendable {
     }
 
     /// The control bar publishes all four components a moment after a switch to Beats
-    /// (`ControlBarDisplayMode.positionComponentsTimeout`), so the origin is read until the strict
-    /// parser accepts it or that wait ends. Nothing is written here.
-    private func awaitFourComponentOrigin(
-        _ session: QualificationSubprocessSession, nextID: inout Int
-    ) throws {
+    /// (`ControlBarDisplayMode.positionComponentsTimeout`), so the position is read until the strict
+    /// parser accepts it or that wait ends; nil when it never did. Nothing is written here.
+    private func awaitFourComponentPosition(
+        _ session: QualificationSubprocessSession, nextID: inout Int, phase: String
+    ) throws -> String? {
         let deadline = Date().addingTimeInterval(ControlBarDisplayMode.positionComponentsTimeout)
         var attempts = 0
         while true {
-            let read = try observedTransportPosition(
-                session, id: nextID, phase: "phase_b.display_mode_origin")
+            let read = try observedTransportPosition(session, id: nextID, phase: phase)
             nextID += read.spent
-            if Self.observedPlayheadPosition(read.raw) != nil { return }
+            if let position = Self.observedPlayheadPosition(read.raw) { return position }
             attempts += 1
-            guard attempts < 40, Date() < deadline else { break }
+            guard attempts < 40, Date() < deadline else { return nil }
             uiSettleSleep(ControlBarDisplayMode.positionComponentsPollInterval)
+        }
+    }
+
+    /// The four-component origin a cycle starts from, read in Beats. Not read: nothing is moved.
+    @discardableResult
+    private func awaitFourComponentOrigin(
+        _ session: QualificationSubprocessSession, nextID: inout Int
+    ) throws -> String {
+        if let origin = try awaitFourComponentPosition(
+            session, nextID: &nextID, phase: "phase_b.display_mode_origin") {
+            return origin
         }
         throw QualificationTransportError.protocolViolation(
             "phase_b.display_mode: the playhead position did not read in Beats with all four "
@@ -7957,10 +8016,6 @@ final class QualificationSubprocessSession: @unchecked Sendable {
     private var started = false
     private var shutdownOutcome: ShutdownOutcome?
     private var framesTranscript: [QualificationWireFrame] = []
-    /// The tempo read live in the control bar's original display mode, held only while a cycle runs
-    /// with the bar in Beats, which shows the position and not the tempo
-    /// (`QualificationTransport.withBeatsPositionDisplay`).
-    var beatsTempoReference: Double?
 
     init(
         request: QualificationDriveRequest,

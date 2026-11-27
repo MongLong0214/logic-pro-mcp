@@ -20,6 +20,8 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
         case restoreRefused
         /// A restore that reports itself done and changes nothing, so the re-read disagrees.
         case restoreNotApplied
+        /// The first restore is applied; every later one reports itself done and changes nothing.
+        case laterRestoreNotApplied
         /// The popup's title says one thing and the menu's checked item another (Logic's popup
         /// value can lag the menu): the title reads the mode file, the checked item is
         /// `Time & Project`. A switch, if one is ever made, leases the checked item, as production
@@ -52,6 +54,7 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
     private var reads = 0
     private var checks = 0
     private var restored = false
+    private var restores = 0
 
     init(directory: URL, start: String, fault: Fault = .none) throws {
         self.directory = directory
@@ -92,9 +95,10 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
             },
             restore: { [self] lease in
                 log("restore", mode: nil)
-                lock.lock(); restored = true; lock.unlock()
+                lock.lock(); restored = true; restores += 1; let count = restores; lock.unlock()
                 if fault == .restoreRefused { return .refused("display_mode_not_restored") }
-                if fault != .restoreNotApplied { write(lease.original) }
+                let applied = fault != .restoreNotApplied && !(fault == .laterRestoreNotApplied && count > 1)
+                if applied { write(lease.original) }
                 return .restored
             })
     }
