@@ -45,6 +45,62 @@ struct QualificationWireFrame: Codable, Equatable, Sendable {
     }
 }
 
+/// What a failed transport cycle's recovery confirmed, one verdict for each thing that is owed
+/// back, each read on its own: playback stopped, the exact four-component playhead position, and
+/// the control bar's original display mode. A whole-run stop later is none of these.
+final class TransportRecoveryWitness: @unchecked Sendable {
+    enum Verdict: Equatable, Sendable {
+        case confirmed(String)
+        case unconfirmed(String)
+
+        var isConfirmed: Bool {
+            if case .confirmed = self { return true }
+            return false
+        }
+
+        var text: String {
+            switch self {
+            case .confirmed(let detail): "confirmed (\(detail))"
+            case .unconfirmed(let detail): "unconfirmed (\(detail))"
+            }
+        }
+    }
+
+    private let lock = NSLock()
+    private var stopped: Verdict?
+    private var position: Verdict?
+    private var mode: Verdict?
+
+    var ran: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return stopped != nil || position != nil
+    }
+
+    func record(stopped: Verdict, position: Verdict) {
+        lock.lock(); defer { lock.unlock() }
+        self.stopped = stopped
+        self.position = position
+    }
+
+    func recordMode(_ verdict: Verdict) {
+        lock.lock(); defer { lock.unlock() }
+        mode = verdict
+    }
+
+    /// True when any verdict taken so far is not a confirmation.
+    var unconfirmed: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return [stopped, position, mode].contains { $0.map { !$0.isConfirmed } ?? false }
+    }
+
+    var summary: String {
+        lock.lock(); defer { lock.unlock() }
+        return "recovery: stopped " + (stopped?.text ?? "not checked")
+            + "; position " + (position?.text ?? "not checked")
+            + (mode.map { "; display mode " + $0.text } ?? "")
+    }
+}
+
 enum QualificationMutationRestorePolicy: Codable, Equatable, Sendable {
     enum Motion: String, Codable, Equatable, Sendable {
         case stopped
@@ -1477,6 +1533,10 @@ enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sen
     case protocolViolation(String)
     case supportBundleOutcomeQuiesced(String)
     case supportBundleOutcomeUncertain(String)
+    /// A failed transport cycle whose recovery could not be confirmed (stopped, the exact
+    /// four-component position, and the original display mode, each read back on its own). The
+    /// machine is in a state nobody has read, so the drive stops mutating.
+    case recoveryUnconfirmed(String)
     case shutdownTimeout
     case unimplemented
 
@@ -1493,6 +1553,8 @@ enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sen
             "qualification_support_bundle_outcome_quiesced:\(detail)"
         case .supportBundleOutcomeUncertain(let detail):
             "qualification_support_bundle_outcome_uncertain:\(detail)"
+        case .recoveryUnconfirmed(let detail):
+            "qualification_transport_recovery_unconfirmed:\(detail)"
         case .shutdownTimeout: "qualification_transport_shutdown_timeout"
         case .unimplemented: "qualification_transport_unimplemented"
         }
@@ -1500,7 +1562,7 @@ enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sen
 
     var requiresDriveAbort: Bool {
         switch self {
-        case .supportBundleOutcomeQuiesced, .supportBundleOutcomeUncertain: true
+        case .supportBundleOutcomeQuiesced, .supportBundleOutcomeUncertain, .recoveryUnconfirmed: true
         default: false
         }
     }
@@ -1540,10 +1602,17 @@ struct QualificationTransport: Sendable {
     /// modal, editor or Marker List. The live gate always sets it; a transport built without it
     /// (a unit test of the transport itself) checks nothing about the machine it runs on.
     let startingWindowFacts: (@Sendable () -> QualificationStartingWindowFacts)?
+    /// When set, the marker-navigation and bar restore cycles run with the control bar in Beats
+    /// mode and give the original mode back (`withBeatsPositionDisplay`); the transport cycles hold
+    /// Beats only for their exact position reads and send their requests in the original mode
+    /// (`withPositionDisplay`). The live drive always sets it; a transport built without it leaves
+    /// Logic's display alone.
+    let positionDisplay: QualificationPositionDisplay?
 
     init(
         uiObserver: @escaping @Sendable () -> QualificationUIObservation?,
         startingWindowFacts: (@Sendable () -> QualificationStartingWindowFacts)? = nil,
+        positionDisplay: QualificationPositionDisplay? = nil,
         handshakeTimeout: TimeInterval = 45,
         requestTimeout: TimeInterval = 10,
         shutdownGrace: TimeInterval = 1,
@@ -1583,6 +1652,7 @@ struct QualificationTransport: Sendable {
         self.uiObserver = uiObserver
         self.uiSettleSleep = uiSettleSleep
         self.startingWindowFacts = startingWindowFacts
+        self.positionDisplay = positionDisplay
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -1866,8 +1936,10 @@ struct QualificationTransport: Sendable {
                         if Self.playheadRestoreOperations.contains(spec.id) {
                             let cleanupWitness = PhaseCCleanupWitness()
                             do {
-                                let cycle = try playheadRestoreCycle(
-                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
+                                let cycle = try withBeatsPositionDisplay(session, nextID: &nextID) {
+                                    try playheadRestoreCycle(
+                                        session, startingAt: $0, spec: spec, cleanup: cleanupWitness)
+                                }
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
@@ -1968,8 +2040,10 @@ struct QualificationTransport: Sendable {
                         if spec.id == .navigateGotoMarker {
                             let cleanupWitness = PhaseCCleanupWitness()
                             do {
-                                let cycle = try markerNavigationRestoreCycle(
-                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
+                                let cycle = try withBeatsPositionDisplay(session, nextID: &nextID) {
+                                    try markerNavigationRestoreCycle(
+                                        session, startingAt: $0, spec: spec, cleanup: cleanupWitness)
+                                }
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
@@ -2012,13 +2086,25 @@ struct QualificationTransport: Sendable {
                             }
                         }
                         if let expected = Self.transportExpectedPlaying[spec.id] {
+                            let recoveryWitness = TransportRecoveryWitness()
                             do {
-                                let cycle = try transportRestoreCycle(
-                                    session, startingAt: nextID, spec: spec,
-                                    expectedPlaying: expected)
+                                let cycle = try withPositionDisplay(
+                                    session, nextID: &nextID, requiresStationaryStart: true,
+                                    recovery: recoveryWitness
+                                ) { id, beats in
+                                    try transportRestoreCycle(
+                                        session, startingAt: id, spec: spec,
+                                        expectedPlaying: expected, beats: beats,
+                                        recovery: positionDisplay == nil ? nil : recoveryWitness)
+                                }
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
+                            } catch let error as QualificationTransportError
+                                where error.requiresDriveAbort {
+                                // Playback, the playhead or the display mode is in a state nobody
+                                // has read back: nothing further is written.
+                                throw error
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
@@ -3420,19 +3506,49 @@ struct QualificationTransport: Sendable {
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
         spec: OperationSpec,
-        expectedPlaying: Bool
+        expectedPlaying: Bool,
+        beats: BeatsPositionHold? = nil,
+        recovery: TransportRecoveryWitness? = nil
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         func step() -> Int { defer { nextID += 1 }; return nextID }
         let expected: TransportMotion = spec.id == .transportPause ? .paused : (expectedPlaying ? .moving : .stopped)
         let inverse = expected == .moving ? "stop" : "play"
 
+        // With the display in use, Beats is held only to read the exact position: here, and after
+        // the cycle. Every request and motion read runs in the original mode, which shows the tempo
+        // that the product's pause (and play from a paused start) and the motion reads size their
+        // stillness gap from; in Beats the real pause refused (PR 1625 native run).
+        var origin: String?
+        if let beats {
+            origin = try beats.hold(unread: "nothing is started") {
+                try awaitFourComponentOrigin(session, nextID: &nextID)
+            }
+            if let problem = beats.problem {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.display_mode: \(problem), so no request is sent in it; nothing is started")
+            }
+        }
         let pre = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.pre_state")
+        // The start guard read a stationary transport earlier; this read is the one the change is
+        // made from. With the display in use, moving here means no exact origin can be put back.
+        if positionDisplay != nil, pre.motion == .moving {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: playback is moving at the recipe's own pre-state, so the exact "
+                    + "playhead origin cannot be put back; nothing is changed")
+        }
         // Playback moves the playhead, and restoring the MOTION does not bring it back: every
         // play, pause and stop cycle left the playhead elsewhere, and the next run started from
-        // a different place (measured: 30.3 before a gate, 5.2 after). From a stopped start the
-        // exact position is read here and put back, verified, on every exit.
-        let prePosition = pre.motion == .stopped ? Self.observedPlayheadPosition(pre.raw) : nil
+        // a different place (measured: 30.3 before a gate, 5.2 after). From a stopped or paused
+        // start the exact position is read here and put back, verified, on every exit. A moving
+        // start has no stationary origin to return to.
+        let prePosition = pre.motion == .moving ? nil
+            : beats != nil ? origin : Self.observedPlayheadPosition(pre.raw)
+        if pre.motion != .moving, prePosition == nil {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: the playhead position did not read, so it could not be put "
+                    + "back; nothing is moved")
+        }
         var playheadRestoreAttempted = false
         var workMayHaveLanded = false
         do {
@@ -3516,7 +3632,8 @@ struct QualificationTransport: Sendable {
                 throw QualificationTransportError.protocolViolation(
                     "phase_b.restore_readback: recorded transport cycle did not verify")
             }
-            if let prePosition, Self.observedPlayheadPosition(restored.raw) != prePosition {
+            func putPlayheadBack(at prePosition: String, observed: String?) throws {
+                guard observed != prePosition else { return }
                 playheadRestoreAttempted = true
                 let fix = restorePlayhead(
                     session, nextID: &nextID, to: prePosition, phase: "phase_b.playhead_restore")
@@ -3524,6 +3641,15 @@ struct QualificationTransport: Sendable {
                     throw QualificationTransportError.protocolViolation(
                         "phase_b.playhead_restore: \(fix.summary)")
                 }
+            }
+            if let prePosition, let beats {
+                try beats.hold(unread: "the playhead position is not read back") {
+                    let now = try awaitFourComponentPosition(
+                        session, nextID: &nextID, phase: "phase_b.playhead_readback")
+                    try putPlayheadBack(at: prePosition, observed: now)
+                }
+            } else if let prePosition {
+                try putPlayheadBack(at: prePosition, observed: Self.observedPlayheadPosition(restored.raw))
             }
             workMayHaveLanded = false
             return (record, nextID)
@@ -3536,6 +3662,22 @@ struct QualificationTransport: Sendable {
                 nextID: &nextID,
                 phase: "phase_b.cleanup"
             )
+            if let recovery {
+                // Stopped, the exact position and (in the caller) the display mode are each read
+                // back on their own. Unconfirmed halts the drive.
+                let stopped = confirmStopped(
+                    session, spec: spec, target: pre.motion, compensation: compensation,
+                    nextID: &nextID)
+                let position = confirmPosition(
+                    session, origin: prePosition, stopped: stopped,
+                    seekAlreadyAttempted: playheadRestoreAttempted, beats: beats, nextID: &nextID)
+                recovery.record(stopped: stopped, position: position)
+                let detail = "\(error) | compensating restore: \(compensation.summary) | "
+                    + recovery.summary
+                throw recovery.unconfirmed
+                    ? QualificationTransportError.recoveryUnconfirmed(detail)
+                    : QualificationTransportError.protocolViolation(detail)
+            }
             var playhead = ""
             if let prePosition, !playheadRestoreAttempted {
                 playhead = "; " + restorePlayhead(
@@ -3544,6 +3686,91 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation(
                 "\(error) | compensating restore: \(compensation.summary)\(playhead)"
             )
+        }
+    }
+
+    /// Whether playback is stopped, read on its own. The compensation's verdict stands when it is
+    /// confirmed; when it could not read the motion (a playing transport whose tempo does not read)
+    /// and the start was stopped, one Stop is sent and `isPlaying` is read back. That read needs no
+    /// tempo, and a transport that still plays is unconfirmed.
+    private func confirmStopped(
+        _ session: QualificationSubprocessSession,
+        spec: OperationSpec,
+        target: TransportMotion,
+        compensation: (verified: Bool, summary: String),
+        nextID: inout Int
+    ) -> TransportRecoveryWitness.Verdict {
+        if compensation.verified { return .confirmed("transport \(target); \(compensation.summary)") }
+        guard target == .stopped else {
+            return .unconfirmed("transport \(target) not confirmed; \(compensation.summary)")
+        }
+        let firstID = nextID
+        nextID += 2
+        if let first = try? observedPlaying(session, id: firstID, phase: "phase_b.recovery.stop_check"),
+           !first.playing {
+            return .confirmed("isPlaying read false")
+        }
+        let stopID = nextID
+        nextID += 1
+        let reply = try? invoke(
+            session, id: stopID, tool: spec.tool.rawValue, command: "stop", params: [:],
+            phase: "phase_b.recovery.stop", timeout: spec.deadline.seconds + 5)
+        let afterID = nextID
+        nextID += 2
+        guard let after = try? observedPlaying(
+            session, id: afterID, phase: "phase_b.recovery.stop_readback") else {
+            return .unconfirmed("isPlaying did not read after Stop")
+        }
+        guard !after.playing else {
+            return .unconfirmed("playback is still on after Stop"
+                + (reply.map { Self.mutationSaysItFailed($0.text) ? " (Stop refused)" : "" } ?? ""))
+        }
+        return .confirmed("Stop sent, isPlaying read false")
+    }
+
+    /// Whether the playhead is at the exact origin, read on its own and only once playback is
+    /// confirmed stopped (a seek during unconfirmed playback is what failed live). A position that
+    /// already reads the origin needs no seek. Otherwise one seek is made, unless one was already
+    /// attempted and failed: a refused seek is not repeated.
+    private func confirmPosition(
+        _ session: QualificationSubprocessSession,
+        origin: String?,
+        stopped: TransportRecoveryWitness.Verdict,
+        seekAlreadyAttempted: Bool,
+        beats: BeatsPositionHold? = nil,
+        nextID: inout Int
+    ) -> TransportRecoveryWitness.Verdict {
+        guard let origin else { return .confirmed("no stationary origin was owed") }
+        guard stopped.isConfirmed else {
+            return .unconfirmed("not attempted: playback is not confirmed stopped")
+        }
+        func confirm() -> TransportRecoveryWitness.Verdict {
+            let now: String?
+            if beats != nil {
+                // Just switched to Beats: the bar shows all four components a moment later.
+                now = (try? awaitFourComponentPosition(
+                    session, nextID: &nextID, phase: "phase_b.recovery.position")) ?? nil
+            } else {
+                let readID = nextID
+                nextID += 2
+                now = (try? observedTransportPosition(
+                    session, id: readID, phase: "phase_b.recovery.position"))
+                    .flatMap { Self.observedPlayheadPosition($0.raw) }
+            }
+            if now == origin { return .confirmed("read at \(origin), no seek needed") }
+            guard !seekAlreadyAttempted else {
+                return .unconfirmed("a seek to \(origin) was already attempted and failed; not repeated")
+            }
+            let fix = restorePlayhead(
+                session, nextID: &nextID, to: origin, phase: "phase_b.recovery.playhead_restore")
+            return fix.restored ? .confirmed(fix.summary) : .unconfirmed(fix.summary)
+        }
+        guard let beats else { return confirm() }
+        // The exact position reads only in Beats, which is held for this read and the seek alone.
+        do {
+            return try beats.hold(unread: "the playhead position is not read", confirm)
+        } catch {
+            return .unconfirmed("position not read: \(error)")
         }
     }
 
@@ -4026,8 +4253,17 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: playhead is at bar \(restoredBar), expected \(preBar)")
         }
-        // Exact, not just the bar: the cycle's own return is a goto_bar.
-        if Self.observedPlayheadPosition(restored.raw) == originPosition { playheadOwed = false }
+        // Exact, not just the bar: the cycle's own return is a goto_bar, which lands on the bar's
+        // first beat. A failed exact move is a failed restore: it is thrown, so no cycle record is
+        // kept for a playhead that is not where it started (the defer above tries once more).
+        if Self.observedPlayheadPosition(restored.raw) != originPosition {
+            let fix = restorePlayhead(
+                session, nextID: &nextID, to: originPosition, phase: "phase_b.playhead_restore")
+            guard fix.restored else {
+                throw QualificationTransportError.protocolViolation("phase_b.playhead_restore: \(fix.summary)")
+            }
+        }
+        playheadOwed = false
         return (
             QualificationMutationRestoreRecord(
                 operationID: spec.id.rawValue,
@@ -4041,25 +4277,293 @@ struct QualificationTransport: Sendable {
         )
     }
 
-    /// The playhead as `logic://transport/state` shows it (`data.state.position`, `bar.beat` on
-    /// Logic 13), or nil when it is absent or not a position a `goto_position` can name.
+    /// The playhead as `logic://transport/state` shows it (`data.state.position`), or nil unless it
+    /// is an origin a restore can be verified against: a LIVE read (`source: ax_live`, not flagged
+    /// `unverified`) whose `positionReadback` carries all four components (bar, beat, subdivision,
+    /// tick) with the same value as `position`. `position` alone is the display default `1.1.1.1`
+    /// when the controls were unreadable; a cache snapshot (what the resource answers when the live
+    /// read failed) says where the playhead WAS; and a readback that stops at bar and beat cannot
+    /// say what subdivision and tick to put back. None of those is an origin.
     static func observedPlayheadPosition(_ raw: String) -> String? {
         guard let data = raw.data(using: .utf8),
               let envelope = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              envelope["source"] as? String == "ax_live",
+              envelope["unverified"] == nil || exactJSONBoolean(envelope["unverified"], equals: false),
               let payload = envelope["data"] as? [String: Any],
               let state = payload["state"] as? [String: Any],
               let position = state["position"] as? String,
+              let witness = state["positionReadback"] as? [String: Any],
+              witness["value"] as? String == position,
+              witness["observedComponents"] as? [String] == ["bar", "beat", "subdivision", "tick"],
               gotoPositionRequest(for: position) != nil else { return nil }
         return position
     }
 
-    /// The `goto_position` request for an observed position. Components the transport does not
-    /// show are the first division and tick, so the request reads back as the same position.
+    /// The `goto_position` request for an observed origin: its exact four components, or nil when
+    /// the position is not four integers a `goto_position` accepts. Nothing is padded — a padded
+    /// request would restore to a position the playhead was never at.
     static func gotoPositionRequest(for observed: String) -> String? {
         let parts = observed.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
-        guard (1...4).contains(parts.count), parts.allSatisfy({ Int($0) != nil }) else { return nil }
-        let request = (parts + Array(repeating: "1", count: 4 - parts.count)).joined(separator: ".")
-        return TransportDispatcher.isValidPositionString(request) ? request : nil
+        guard parts.count == 4, parts.allSatisfy({ Int($0) != nil }) else { return nil }
+        return TransportDispatcher.isValidPositionString(observed) ? observed : nil
+    }
+
+    /// A `goto_position` error reply that proves the Go To Position dialog was submitted and closed
+    /// and that only the dispatcher's immediate POST-write transport read failed
+    /// (`TransportDispatcher.finalizeGotoPositionResult`: the channel's State B receipt plus
+    /// `verification_source` and `post_write_readback: unavailable`, as an error). A failed
+    /// pre-write read with a good post-write read carries `verification_withheld` instead and is not it. Every field is exact. A State C, a submission that is
+    /// indeterminate or unattempted, a dialog not observed closed, an unknown input target and a
+    /// reply for another position are not it: they stay refusals.
+    static func gotoPositionSubmittedButUnread(_ text: String, requested: String) -> Bool {
+        guard let data = text.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              object["state"] as? String == "B",
+              exactJSONBoolean(object["success"], equals: true),
+              exactJSONBoolean(object["verified"], equals: false),
+              object["reason"] as? String == "readback_unavailable",
+              object["requested"] as? String == requested,
+              object["via"] as? String == "dialog",
+              exactJSONBoolean(object["dialog_submission_attempted"], equals: true),
+              object["dialog_cleanup"] as? String == "closed",
+              exactJSONBoolean(object["write_attempted"], equals: true),
+              object["verification_source"] as? String == "transport_state",
+              object["post_write_readback"] as? String == "unavailable",
+              object["verification_withheld"] == nil,
+              object["dialog_input_target"] as? String != "unknown",
+              object["fallback_unsafe"] == nil,
+              object["write_attempted_indeterminate"] == nil,
+              object["dialog_submission_indeterminate"] == nil else { return false }
+        return true
+    }
+
+    /// The control bar held in Beats for the reads that need the four-component playhead, and given
+    /// back to the original mode after each one (`hold`). A bar found in Beats is never switched or
+    /// given back, and `hold` then only runs its body.
+    final class BeatsPositionHold {
+        let display: QualificationPositionDisplay
+        let original: String
+        /// False when the bar was found in Beats: nothing is switched, so nothing is given back.
+        let switches: Bool
+        /// The first give-back that was not confirmed. Once set, the bar is not switched again.
+        private(set) var problem: String?
+
+        init(display: QualificationPositionDisplay, original: String) {
+            self.display = display
+            self.original = original
+            switches = !ControlBarDisplayMode.isBeatsMode(original)
+        }
+
+        private func refusal(_ detail: String) -> QualificationTransportError {
+            .protocolViolation("phase_b.display_mode: \(detail)")
+        }
+
+        /// Restores the mode a switch found and reads it back both ways; nil when both say the original.
+        private func giveBack(_ lease: ControlBarDisplayMode.Lease) -> String? {
+            if case .refused(let reason) = display.restore(lease) {
+                return "display mode was not restored to \(original) (\(reason))"
+            }
+            guard let now = display.read() else {
+                return "display mode could not be read again after the restore to \(original)"
+            }
+            guard now == original else {
+                return "display mode reads \(now) after the restore, expected \(original)"
+            }
+            let checked = display.readChecked()
+            return checked == original ? nil
+                : "display mode's checked menu item reads \(checked ?? "nothing") after the restore, "
+                    + "expected \(original)"
+        }
+
+        /// Switches to Beats, confirms it by a readback, runs `body`, and gives the mode back however
+        /// `body` ends. A switch that is refused or not confirmed runs nothing (`unread` says what is
+        /// therefore not done); a give-back that is not confirmed is kept in `problem`.
+        func hold<T>(unread: String, _ body: () throws -> T) throws -> T {
+            guard switches else { return try body() }
+            if let problem { throw refusal("\(problem); \(unread)") }
+            // Just before the menu is opened to switch, both readings must still say the original:
+            // a switch leases whatever is checked then, and putting that back is not the original.
+            guard display.read() == original, display.readChecked() == original else {
+                throw refusal("the control bar's display mode is no longer \(original) just before "
+                    + "it would be switched; \(unread)")
+            }
+            let lease: ControlBarDisplayMode.Lease
+            switch display.selectBeats() {
+            case .switched(let held):
+                lease = held
+            case .unavailable(let reason):
+                throw refusal("display mode could not be switched to Beats (\(reason)); \(unread)")
+            case .unsettled(let held, let reason):
+                // No lease means nothing was found switched, so there is nothing to give back.
+                problem = held.flatMap { giveBack($0) }
+                throw refusal("display mode switch to Beats did not settle (\(reason)); \(unread)")
+            }
+            guard let confirmed = display.read(), ControlBarDisplayMode.isBeatsMode(confirmed) else {
+                problem = giveBack(lease)
+                throw refusal("display mode switch to Beats was not confirmed by a readback; \(unread)")
+            }
+            let result: Result<T, Error>
+            do { result = .success(try body()) } catch { result = .failure(error) }
+            if let given = giveBack(lease) { problem = given }
+            return try result.get()
+        }
+    }
+
+    /// Runs a cycle that needs the four-component playhead, with the control bar in Beats for the
+    /// whole cycle, and gives the mode back. The playhead and marker cycles use it: none of their
+    /// requests reads the tempo, which Beats does not show.
+    ///
+    /// Logic's default, Beats & Project, shows bar and beat only, which cannot name an exact origin,
+    /// so every transport, marker and bar cycle refused there. In order: read the mode (unreadable:
+    /// nothing starts); switch to Beats only when it is not Beats already and confirm by a second
+    /// read that it took (not confirmed: nothing starts, and the switch is given back); capture a
+    /// four-component origin with the strict parser (not captured: nothing starts); run the cycle,
+    /// which puts the playhead back exactly and verifies it on every exit while the bar is still in
+    /// Beats; then restore the mode and read it again. A mode that is not confirmed restored
+    /// withholds the cycle's credit: the record is thrown away and the refusal says so.
+    /// With no `positionDisplay` the cycle runs as it is and the display is left alone.
+    private func withBeatsPositionDisplay(
+        _ session: QualificationSubprocessSession,
+        nextID: inout Int,
+        cycle: (Int) throws -> (record: QualificationMutationRestoreRecord, nextID: Int)
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        try withPositionDisplay(session, nextID: &nextID) { id, beats in
+            guard let beats else { return try cycle(id) }
+            return try beats.hold(unread: "nothing is started") {
+                var id = id
+                try awaitFourComponentOrigin(session, nextID: &id)
+                return try cycle(id)
+            }
+        }
+    }
+
+    /// Reads the original display mode, hands the cycle a `BeatsPositionHold` for the reads that
+    /// need Beats, and verifies the mode after the cycle. The transport cycles hold Beats only for
+    /// the exact position reads: their requests and motion reads run in the original mode, which
+    /// shows the tempo. The product's pause (and play from a paused start) sizes its stillness gap
+    /// from that tempo and refuses without it, so a pause sent in Beats was refused on the real
+    /// Logic (PR 1625 native run). A mode that is not confirmed given back after any hold, or not
+    /// read as the original after the cycle by the popup and the checked menu item, withholds the
+    /// cycle's credit. With no `positionDisplay` the cycle gets no hold and the display is left alone.
+    private func withPositionDisplay(
+        _ session: QualificationSubprocessSession,
+        nextID: inout Int,
+        requiresStationaryStart: Bool = false,
+        recovery: TransportRecoveryWitness? = nil,
+        cycle: (Int, BeatsPositionHold?) throws -> (record: QualificationMutationRestoreRecord, nextID: Int)
+    ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
+        guard let display = positionDisplay else { return try cycle(nextID, nil) }
+        func refusal(_ detail: String) -> QualificationTransportError {
+            .protocolViolation("phase_b.display_mode: \(detail)")
+        }
+        // A transport recipe cannot put back the exact origin of a start that is moving, so it
+        // refuses first: before the display mode is read or switched and before any command.
+        if requiresStationaryStart {
+            let start = try observedTransportMotion(
+                session, nextID: &nextID, phase: "phase_b.display_mode_start")
+            guard start.motion != .moving else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.display_mode: playback is moving at the start, so the exact playhead "
+                        + "origin cannot be put back; nothing is changed")
+            }
+        }
+        guard let original = display.read(),
+              !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw refusal("the control bar's display mode could not be read, so it could not be put "
+                + "back; nothing is changed")
+        }
+        // The popup's title and the menu's checked item are two readings of one setting. When they
+        // differ the original is not known, and nothing is guessed: nothing has been changed yet.
+        let checked = display.readChecked()
+        guard checked == original else {
+            throw refusal("the control bar's popup reads \(original) but its checked menu item "
+                + "reads \(checked ?? "nothing"); the original display mode is not known, "
+                + "so nothing is changed")
+        }
+        let beats = BeatsPositionHold(display: display, original: original)
+        let outcome: Result<(record: QualificationMutationRestoreRecord, nextID: Int), Error>
+        do {
+            outcome = .success(try cycle(nextID, beats))
+        } catch {
+            outcome = .failure(error)
+        }
+        var problem = beats.problem
+        if problem == nil, !beats.switches {
+            // Nothing was switched, so nothing is given back, and another party's change is not
+            // overwritten. The mode is still read again: a changed or unreadable mode is no credit.
+            if let now = display.read() {
+                if now != original { problem = "display mode reads \(now) after the cycle, expected \(original)" }
+            } else {
+                problem = "display mode could not be read again after the cycle"
+            }
+        }
+        // Immediately before credit: the popup's title was read above; the checked menu item is the
+        // other reading of the same setting and must agree. A mismatch or an unreadable value is
+        // not success.
+        if problem == nil {
+            if let checked = display.readChecked() {
+                if checked != original {
+                    problem = "display mode's checked menu item reads \(checked) after the cycle, expected \(original)"
+                }
+            } else {
+                problem = "display mode's checked menu item could not be read after the cycle"
+            }
+        }
+        if let recovery, recovery.ran {
+            recovery.recordMode(problem.map { .unconfirmed($0) }
+                ?? .confirmed("\(original) read back by the popup and the checked menu item"))
+            if case .failure(let error) = outcome {
+                var detail = "\(error)"
+                if case QualificationTransportError.recoveryUnconfirmed(let inner) = error { detail = inner }
+                detail += "; display mode " + (problem.map { "unconfirmed (\($0))" }
+                    ?? "confirmed (\(original) read back by the popup and the checked menu item)")
+                throw recovery.unconfirmed
+                    ? QualificationTransportError.recoveryUnconfirmed(detail)
+                    : QualificationTransportError.protocolViolation(detail)
+            }
+        }
+        switch (outcome, problem) {
+        case (.success(let cycleResult), nil):
+            return cycleResult
+        case (.success, let problem?):
+            throw refusal("\(problem); the cycle's credit is withheld")
+        case (.failure(let error), nil):
+            throw error
+        case (.failure(let error), let problem?):
+            throw QualificationTransportError.protocolViolation("\(error) | \(problem)")
+        }
+    }
+
+    /// The control bar publishes all four components a moment after a switch to Beats
+    /// (`ControlBarDisplayMode.positionComponentsTimeout`), so the position is read until the strict
+    /// parser accepts it or that wait ends; nil when it never did. Nothing is written here.
+    private func awaitFourComponentPosition(
+        _ session: QualificationSubprocessSession, nextID: inout Int, phase: String
+    ) throws -> String? {
+        let deadline = Date().addingTimeInterval(ControlBarDisplayMode.positionComponentsTimeout)
+        var attempts = 0
+        while true {
+            let read = try observedTransportPosition(session, id: nextID, phase: phase)
+            nextID += read.spent
+            if let position = Self.observedPlayheadPosition(read.raw) { return position }
+            attempts += 1
+            guard attempts < 40, Date() < deadline else { return nil }
+            uiSettleSleep(ControlBarDisplayMode.positionComponentsPollInterval)
+        }
+    }
+
+    /// The four-component origin a cycle starts from, read in Beats. Not read: nothing is moved.
+    @discardableResult
+    private func awaitFourComponentOrigin(
+        _ session: QualificationSubprocessSession, nextID: inout Int
+    ) throws -> String {
+        if let origin = try awaitFourComponentPosition(
+            session, nextID: &nextID, phase: "phase_b.display_mode_origin") {
+            return origin
+        }
+        throw QualificationTransportError.protocolViolation(
+            "phase_b.display_mode: the playhead position did not read in Beats with all four "
+                + "components, so it could not be put back; nothing is moved")
     }
 
     /// Puts the playhead back at `observed` and reads it there. The reply is not the evidence —
@@ -4076,13 +4580,34 @@ struct QualificationTransport: Sendable {
             return (false, "playhead not restored: \(observed) is not a position goto_position can name")
         }
         do {
-            _ = try invoke(
+            let reply = try invoke(
                 session, id: nextID, tool: "logic_transport", command: "goto_position",
                 params: ["position": request], phase: phase, timeout: 30)
             nextID += 1
-            let read = try observedTransportPosition(session, id: nextID, phase: "\(phase)_readback")
+            // A refused or errored seek is a failed restore whatever the next read shows: the
+            // playhead may have come back by itself, and that is not the restore working. The one
+            // error reply that is not a refusal is the dialog's: submitted and closed, and then
+            // only the dispatcher's own immediate read failed.
+            let submittedUnread = reply.isError
+                && Self.gotoPositionSubmittedButUnread(reply.text, requested: request)
+            guard !reply.isError || submittedUnread, !Self.mutationSaysItFailed(reply.text) else {
+                return (false, "playhead restore refused: goto_position \(request) answered "
+                    + String(reply.text.prefix(160)))
+            }
+            var read = try observedTransportPosition(session, id: nextID, phase: "\(phase)_readback")
             nextID += read.spent
-            guard let now = Self.observedPlayheadPosition(read.raw) else {
+            var landed = Self.observedPlayheadPosition(read.raw)
+            // That immediate read failed, so the next one may too while the control bar settles
+            // after the dialog. Only an unreadable answer is read again; a mismatch is final.
+            var rereads = 0
+            while landed == nil, submittedUnread, rereads < 3 {
+                rereads += 1
+                uiSettleSleep(0.25)
+                read = try observedTransportPosition(session, id: nextID, phase: "\(phase)_readback")
+                nextID += read.spent
+                landed = Self.observedPlayheadPosition(read.raw)
+            }
+            guard let now = landed else {
                 return (false, "playhead position unreadable after goto_position \(request)")
             }
             return now == observed
