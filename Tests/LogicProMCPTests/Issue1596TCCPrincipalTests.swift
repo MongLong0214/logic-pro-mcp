@@ -14,6 +14,10 @@ private let cellarBinary = "/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicP
 private let privateHome = "/Users/someone"
 private let privateHomeBinary = "/Users/someone/clients/acme/secret-album/.build/release/LogicProMCP"
 private let outsideHomeBinary = "/Volumes/Acme Records/secret-album/bin/LogicProMCP"
+// Synthetic secret-looking basename and bundle identifier: both fit the old character filters.
+private let secretName = "Bearer-SYNTHETIC_REVIEW_TOKEN"
+private let secretBundle = "com.synthetic.review-token-9f3a"
+private let secretFragments = ["SYNTHETIC", "REVIEW", "Bearer", "synthetic", "review-token", "9f3a"]
 private let privateFragments = ["clients", "acme", "Acme", "secret", "Volumes", "someone", "/Users", "~"]
 private let ownPrincipal = TCCResponsibility.Principal(pid: 4242, label: "LogicProMCP (homebrew)", isSelf: true)
 private let terminalPrincipal = TCCResponsibility.Principal(pid: 77, label: "Terminal (app bundle, com.apple.Terminal)", isSelf: false)
@@ -60,7 +64,7 @@ private func status(
     ))
     #expect(!principal.isSelf)
     #expect(principal.pid == 3)
-    #expect(principal.label == "Editor (app bundle)")
+    #expect(principal.label == "another executable")
 }
 
 @Test func test1596UnmeasuredPrincipalIsNilNotGuessed() {
@@ -79,11 +83,20 @@ private func status(
     }
     #expect(TCCResponsibility.publicLabel(forExecutablePath: privateHomeBinary, bundleIdentifier: { _ in nil }) == "LogicProMCP (source build)")
     #expect(TCCResponsibility.publicLabel(forExecutablePath: outsideHomeBinary, bundleIdentifier: { _ in nil }) == "LogicProMCP (other install)")
+}
+
+// The label is built from fixed strings only (TCC-PRIVATE-OUTPUT).
+@Test func test1596PublicLabelUsesFixedLabelsForAnyOtherBasenameOrBundleIdentifier() {
+    for name in [secretName, "acme-secret-album", "logicpromcp", "LogicProMCP ", "x\u{202E}y"] {
+        let path = "/Applications/Acme.app/Contents/MacOS/\(name)"
+        #expect(TCCResponsibility.publicLabel(forExecutablePath: path, bundleIdentifier: { _ in nil }) == "another executable")
+        #expect(TCCResponsibility.publicLabel(forExecutablePath: path, bundleIdentifier: { _ in secretBundle }) == "another application")
+        #expect(TCCResponsibility.publicLabel(forExecutablePath: path, bundleIdentifier: { _ in "com.apple.Terminal" }) == "com.apple.Terminal (app bundle)")
+    }
+    // The product basename still never admits an unknown bundle identifier.
     #expect(TCCResponsibility.publicLabel(
-        forExecutablePath: "/Applications/Editor.app/Contents/MacOS/Editor", bundleIdentifier: { _ in "com.example.editor" }
-    ) == "Editor (app bundle, com.example.editor)")
-    // A basename that is itself not a plain executable name is not echoed.
-    #expect(TCCResponsibility.publicLabel(forExecutablePath: "/x/acme\u{202E}secret", bundleIdentifier: { _ in nil }).hasPrefix("unnamed executable"))
+        forExecutablePath: "/Applications/X.app/Contents/MacOS/LogicProMCP", bundleIdentifier: { _ in secretBundle }
+    ) == "LogicProMCP (app bundle)")
 }
 
 private func measuredPrincipal(path: String, isSelf: Bool = true) throws -> TCCResponsibility.Principal {
@@ -139,6 +152,80 @@ private func measuredPrincipal(path: String, isSelf: Bool = true) throws -> TCCR
             }
         }
     }
+}
+
+@Test func test1596SecretBasenameAndBundleIdentifierNeverReachAnyRenderer() throws {
+    let path = "/Applications/Acme.app/Contents/MacOS/\(secretName)"
+    for isSelf in [true, false] {
+        let principal = try #require(TCCResponsibility.principal(
+            selfPID: 10, responsiblePID: { _ in isSelf ? 10 : 3 }, pathForPID: { _ in path },
+            labelForPath: { TCCResponsibility.publicLabel(forExecutablePath: $0, bundleIdentifier: { _ in secretBundle }) }
+        ))
+        var denied = PermissionChecker.PermissionStatus(
+            accessibilityState: .notGranted, automationState: .granted,
+            systemEventsAutomationState: .notGranted, postEventAccessState: .notGranted
+        )
+        denied.principal = principal
+        var outputs = [denied.summary]
+        let result = SystemDispatcher.permissionsResult(denied)
+        if case .text(let text, _, _)? = result.content.first { outputs.append(text) }
+        if case .object(let fields)? = result.structuredContent {
+            outputs.append(String(decoding: try JSONEncoder().encode(Value.object(fields)), as: UTF8.self))
+        }
+        let checks = [
+            SetupDoctor.accessibilityPermissionCheck(denied),
+            SetupDoctor.postEventAccessCheck(denied),
+            SetupDoctor.systemEventsAutomationCheck(denied),
+            SetupDoctor.launchContextCheck(runtime: doctorRuntime(context: "terminal"), permissionStatus: denied),
+        ]
+        for check in checks { outputs.append(String(decoding: try JSONEncoder().encode(check), as: UTF8.self)) }
+        #expect(outputs.count >= 6)
+        for output in outputs {
+            for fragment in secretFragments { #expect(!output.contains(fragment), "\(fragment) in \(output)") }
+            #expect(output.contains("another application"))
+        }
+    }
+}
+
+@Test func test1596RequestOutputNeverCarriesASecretBasename() {
+    let recorder = RequestRecorder()
+    let code = PermissionRequestCommand.run(
+        arguments: ["LogicProMCP", "--request-permissions", "/x/\(secretName)"],
+        runtime: requestRuntime(recorder, principal: ownPrincipal),
+        writeStderr: { recorder.stderr += $0 }
+    )
+    #expect(code == 1)
+    #expect(recorder.spawned.isEmpty)
+    for fragment in secretFragments { #expect(!recorder.stderr.contains(fragment), "\(fragment) in \(recorder.stderr)") }
+}
+
+// MARK: - launch-context hint is a fixed category (ROUND1-ESCAPE)
+
+@Test func test1596ResponsibleHintIsAFixedCategoryNeverARawEnvironmentValue() throws {
+    for termProgram in ["/Volumes/ClientArchive/Terminal", "Apple_Terminal", "/Users/someone/clients/acme/iTerm"] {
+        let info = SetupDoctor.classifyLaunchContext(
+            ancestryBundleIDs: [], cfBundleIdentifier: nil, termProgram: termProgram
+        )
+        #expect(["terminal", "iterm"].contains(info.responsibleHint), "\(info.responsibleHint)")
+    }
+    for ancestor in ["/Volumes/ClientArchive/Claude.app", "MyClientTerminalProject", "/Users/someone/acme/cursor-secret"] {
+        let info = SetupDoctor.classifyLaunchContext(
+            ancestryBundleIDs: [], ancestryProcessNames: [ancestor], cfBundleIdentifier: nil, termProgram: nil
+        )
+        #expect(SetupDoctor.publicResponsibleHints.contains(info.responsibleHint), "\(info.responsibleHint)")
+    }
+    // The doctor evidence sink normalises whatever it is handed.
+    for raw in ["/Volumes/ClientArchive/Terminal", "DesktopClient", secretName, ""] {
+        var runtime = SetupDoctor.Runtime.production
+        runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "unknown", responsibleHint: raw) }
+        let check = SetupDoctor.launchContextCheck(runtime: runtime)
+        #expect(check.evidence["responsible_hint"] == "unknown")
+        let rendered = String(decoding: try JSONEncoder().encode(check), as: UTF8.self)
+        for fragment in ["ClientArchive", "Volumes", "DesktopClient"] + secretFragments { #expect(!rendered.contains(fragment)) }
+    }
+    var terminal = SetupDoctor.Runtime.production
+    terminal.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
+    #expect(SetupDoctor.launchContextCheck(runtime: terminal).evidence["responsible_hint"] == "terminal")
 }
 
 @Test func test1596CheckPermissionsSummaryCarriesNoPrivatePath() throws {
@@ -264,31 +351,55 @@ private func measuredPrincipal(path: String, isSelf: Bool = true) throws -> TCCR
 // MARK: - --request-permissions (TCC-REQUEST-DISCLAIM)
 
 private final class RequestRecorder: @unchecked Sendable {
-    var spawned: [(String, [String], [String: String])] = []
+    var spawned: [(String, [String], String)] = []
     var accessibilityRequests = 0
     var postEventRequests = 0
+    var receiptWrites: [Data] = []
     var stderr = ""
 }
+
+private let validReceiptProbe = PermissionRequestCommand.Receipt.Probe(accessibility: true, postEvent: true)
+
+private func receiptData(
+    handoff: String,
+    requested: Bool = true,
+    selfResponsible: Bool = true,
+    version: Int = 1,
+    after: PermissionRequestCommand.Receipt.Probe = validReceiptProbe
+) -> Data {
+    let receipt = PermissionRequestCommand.Receipt(
+        version: version, handoff: handoff, requested: requested, selfResponsible: selfResponsible,
+        before: .init(accessibility: false, postEvent: false), after: after
+    )
+    return (try? JSONEncoder().encode(receipt)) ?? Data()
+}
+
+private let validHandoff = "900:token-1"
 
 private func requestRuntime(
     _ recorder: RequestRecorder,
     principal: TCCResponsibility.Principal?,
     spawnOutcome: TCCResponsibility.SpawnOutcome = .exited(0),
+    receipt: Data? = nil,
     granted: Bool = false,
     postEventGranted: Bool? = nil,
-    environment: [String: String] = [:],
-    parentPID: pid_t = 900
+    handoff: String? = nil,
+    parentPID: pid_t = 900,
+    receiptDelivered: Bool = true
 ) -> PermissionRequestCommand.Runtime {
     PermissionRequestCommand.Runtime(
         principal: { principal },
         ownExecutablePath: { privateHomeBinary },
-        runDisclaimed: { executable, arguments, extra in
-            recorder.spawned.append((executable, arguments, extra))
-            return spawnOutcome
+        runDisclaimed: { executable, arguments, handoffValue in
+            recorder.spawned.append((executable, arguments, handoffValue))
+            return .init(outcome: spawnOutcome, receipt: receipt ?? receiptData(handoff: handoffValue))
         },
         requestAccessibility: { recorder.accessibilityRequests += 1; return granted },
         requestPostEvent: { recorder.postEventRequests += 1; return postEventGranted ?? granted },
-        environment: { environment },
+        probeAccessibility: { recorder.accessibilityRequests > 0 && granted },
+        probePostEvent: { recorder.postEventRequests > 0 && (postEventGranted ?? granted) },
+        readHandoff: { handoff },
+        writeReceipt: { recorder.receiptWrites.append($0); return receiptDelivered },
         ownPID: { 900 },
         parentPID: { parentPID },
         makeToken: { "token-1" },
@@ -296,8 +407,6 @@ private func requestRuntime(
         labelForPath: { TCCResponsibility.publicLabel(forExecutablePath: $0, bundleIdentifier: { _ in nil }) }
     )
 }
-
-private let validProvenance = [PermissionRequestCommand.provenanceVariable: "900:token-1"]
 
 @Test func test1596PublicRequestAlwaysSpawnsEvenWhenAlreadySelf() {
     for principal in [ownPrincipal, terminalPrincipal, nil] as [TCCResponsibility.Principal?] {
@@ -311,7 +420,7 @@ private let validProvenance = [PermissionRequestCommand.provenanceVariable: "900
         #expect(recorder.spawned.count == 1)
         #expect(recorder.spawned.first?.0 == privateHomeBinary)
         #expect(recorder.spawned.first?.1 == [PermissionRequestCommand.disclaimedChildFlag])
-        #expect(recorder.spawned.first?.2 == validProvenance)
+        #expect(recorder.spawned.first?.2 == validHandoff)
         // Neither prompting API runs in this process, whatever it measures.
         #expect(recorder.accessibilityRequests == 0)
         #expect(recorder.postEventRequests == 0)
@@ -336,14 +445,86 @@ private let validProvenance = [PermissionRequestCommand.provenanceVariable: "900
     }
 }
 
-@Test func test1596PublicRequestPropagatesChildExitCode() {
+// MARK: - success comes only from the child's receipt (TCC-REQUEST-FALSE-SUCCESS)
+
+@Test func test1596ExitZeroWithoutAReceiptIsAFailure() {
+    for receipt in [Data(), Data("not json".utf8), Data("{}".utf8)] {
+        let recorder = RequestRecorder()
+        let code = PermissionRequestCommand.run(
+            arguments: ["LogicProMCP", "--request-permissions"],
+            runtime: requestRuntime(recorder, principal: ownPrincipal, spawnOutcome: .exited(0), receipt: receipt),
+            writeStderr: { recorder.stderr += $0 }
+        )
+        #expect(code == 1)
+        #expect(recorder.stderr.contains("without a valid receipt"))
+        #expect(!recorder.stderr.contains("Receipt from LogicProMCP"))
+    }
+}
+
+@Test func test1596MalformedOrForeignReceiptsAreRefused() {
+    let tooMuchTrust: [Data] = [
+        receiptData(handoff: "900:another-token"),                       // not this run's value
+        receiptData(handoff: validHandoff, requested: false),            // request path did not run
+        receiptData(handoff: validHandoff, selfResponsible: false),      // not its own principal
+        receiptData(handoff: validHandoff, version: 2),
+        Data(#"{"version":1,"handoff":"900:token-1","requested":true,"selfResponsible":true}"#.utf8),   // no probes
+        Data(#"{"version":1,"handoff":"900:token-1","requested":"yes","selfResponsible":true,"before":{},"after":{}}"#.utf8),
+    ]
+    for receipt in tooMuchTrust {
+        let recorder = RequestRecorder()
+        let code = PermissionRequestCommand.run(
+            arguments: ["LogicProMCP", "--request-permissions"],
+            runtime: requestRuntime(recorder, principal: ownPrincipal, spawnOutcome: .exited(0), receipt: receipt),
+            writeStderr: { recorder.stderr += $0 }
+        )
+        #expect(code == 1, "\(String(decoding: receipt, as: UTF8.self))")
+        #expect(recorder.stderr.contains("without a valid receipt"))
+    }
+}
+
+@Test func test1596ValidReceiptIsTheOnlyPathToSuccess() {
     let recorder = RequestRecorder()
-    let code = PermissionRequestCommand.run(
+    let ok = PermissionRequestCommand.run(
         arguments: ["LogicProMCP", "--request-permissions"],
         runtime: requestRuntime(recorder, principal: ownPrincipal, spawnOutcome: .exited(0)),
         writeStderr: { recorder.stderr += $0 }
     )
-    #expect(code == 0)
+    #expect(ok == 0)
+    #expect(recorder.stderr.contains("Receipt from LogicProMCP: Accessibility not granted -> granted, PostEvent not granted -> granted"))
+    // A valid receipt that reports a denied grant is not success even when the status is 0.
+    for after in [
+        PermissionRequestCommand.Receipt.Probe(accessibility: false, postEvent: true),
+        PermissionRequestCommand.Receipt.Probe(accessibility: true, postEvent: false),
+    ] {
+        let denied = RequestRecorder()
+        let code = PermissionRequestCommand.run(
+            arguments: ["LogicProMCP", "--request-permissions"],
+            runtime: requestRuntime(denied, principal: ownPrincipal, spawnOutcome: .exited(0), receipt: receiptData(handoff: validHandoff, after: after)),
+            writeStderr: { denied.stderr += $0 }
+        )
+        #expect(code == 1)
+    }
+    // And a nonzero status with a valid receipt stays a failure.
+    let failed = RequestRecorder()
+    #expect(PermissionRequestCommand.run(
+        arguments: ["LogicProMCP", "--request-permissions"],
+        runtime: requestRuntime(failed, principal: ownPrincipal, spawnOutcome: .exited(1)),
+        writeStderr: { failed.stderr += $0 }
+    ) == 1)
+}
+
+@Test func test1596TargetWhoseBasenameIsNotLogicProMCPIsRefusedBeforeSpawning() {
+    for target in ["/usr/bin/true", "/bin/sh", "/x/LogicProMCP-other", "/x/logicpromcp", "/x/LogicProMCP/true"] {
+        let recorder = RequestRecorder()
+        let code = PermissionRequestCommand.run(
+            arguments: ["LogicProMCP", "--request-permissions", target],
+            runtime: requestRuntime(recorder, principal: ownPrincipal),
+            writeStderr: { recorder.stderr += $0 }
+        )
+        #expect(code == 1, Comment(rawValue: target))
+        #expect(recorder.spawned.isEmpty, Comment(rawValue: target))
+        #expect(recorder.stderr.contains("not a LogicProMCP executable"))
+    }
 }
 
 @Test func test1596ExplicitTargetIsSpawnedAndNamedOnlyByLabel() {
@@ -373,44 +554,63 @@ private let validProvenance = [PermissionRequestCommand.provenanceVariable: "900
     }
 }
 
-@Test func test1596ChildWithoutParentProvenanceRefusesEvenWhenSelf() {
-    let cases: [[String: String]] = [
-        [:],
-        [PermissionRequestCommand.provenanceVariable: "token-only"],
-        [PermissionRequestCommand.provenanceVariable: "901:token-1"],   // another process's pid
-        [PermissionRequestCommand.provenanceVariable: "900:"],
+// MARK: - the child asks only with the parent's pipe handoff (TCC-REQUEST-DISCLAIM)
+
+@Test func test1596ChildWithoutTheParentsPipeHandoffRefusesEvenWhenSelf() {
+    let cases: [String?] = [
+        nil,                       // no inherited pipe at all
+        "token-only",
+        "901:token-1",             // another process's pid
+        "900:",
     ]
-    for environment in cases {
+    for handoff in cases {
         let recorder = RequestRecorder()
         let code = PermissionRequestCommand.run(
             arguments: ["LogicProMCP", PermissionRequestCommand.disclaimedChildFlag],
-            runtime: requestRuntime(recorder, principal: ownPrincipal, granted: true, environment: environment),
+            runtime: requestRuntime(recorder, principal: ownPrincipal, granted: true, handoff: handoff),
             writeStderr: { recorder.stderr += $0 }
         )
         #expect(code == 1)
         #expect(recorder.accessibilityRequests == 0)
         #expect(recorder.postEventRequests == 0)
+        #expect(recorder.receiptWrites.isEmpty)
         #expect(recorder.stderr.contains("internal"))
     }
 }
 
-@Test func test1596ChildWithProvenanceButNotSelfResponsibleRefuses() {
+/// The reviewer's case: the real parent pid and a fabricated token, started by hand with no pipe.
+@Test func test1596MatchingParentPidWithFabricatedTokenAndNoPipeIsRefused() {
     let recorder = RequestRecorder()
+    var runtime = requestRuntime(recorder, principal: ownPrincipal, granted: true, handoff: nil)
+    // A forged environment carries exactly what the previous contract accepted.
+    runtime.parentPID = { 900 }
     let code = PermissionRequestCommand.run(
         arguments: ["LogicProMCP", PermissionRequestCommand.disclaimedChildFlag],
-        runtime: requestRuntime(recorder, principal: terminalPrincipal, granted: true, environment: validProvenance),
-        writeStderr: { recorder.stderr += $0 }
+        runtime: runtime, writeStderr: { recorder.stderr += $0 }
     )
     #expect(code == 1)
     #expect(recorder.accessibilityRequests == 0)
     #expect(recorder.postEventRequests == 0)
 }
 
-@Test func test1596ChildWithProvenanceAndSelfResponsibilityAsksForBothAndNamesTheLabel() {
+@Test func test1596ChildWithHandoffButNotSelfResponsibleRefuses() {
     let recorder = RequestRecorder()
     let code = PermissionRequestCommand.run(
         arguments: ["LogicProMCP", PermissionRequestCommand.disclaimedChildFlag],
-        runtime: requestRuntime(recorder, principal: ownPrincipal, environment: validProvenance),
+        runtime: requestRuntime(recorder, principal: terminalPrincipal, granted: true, handoff: validHandoff),
+        writeStderr: { recorder.stderr += $0 }
+    )
+    #expect(code == 1)
+    #expect(recorder.accessibilityRequests == 0)
+    #expect(recorder.postEventRequests == 0)
+    #expect(recorder.receiptWrites.isEmpty)
+}
+
+@Test func test1596ChildWithHandoffAndSelfResponsibilityAsksForBothAndWritesAReceipt() throws {
+    let recorder = RequestRecorder()
+    let code = PermissionRequestCommand.run(
+        arguments: ["LogicProMCP", PermissionRequestCommand.disclaimedChildFlag],
+        runtime: requestRuntime(recorder, principal: ownPrincipal, handoff: validHandoff),
         writeStderr: { recorder.stderr += $0 }
     )
     #expect(code == 1)
@@ -418,16 +618,22 @@ private let validProvenance = [PermissionRequestCommand.provenanceVariable: "900
     #expect(recorder.postEventRequests == 1)
     #expect(recorder.stderr.contains("Requested for: LogicProMCP (homebrew)"))
     #expect(recorder.stderr.contains("PostEvent (CGEvent): NOT GRANTED"))
+    let written = try #require(recorder.receiptWrites.first)
+    let receipt = try #require(PermissionRequestCommand.validReceipt(written, handoff: validHandoff))
+    #expect(receipt.before == .init(accessibility: false, postEvent: false))
+    #expect(receipt.after == .init(accessibility: false, postEvent: false))
 }
 
-@Test func test1596ChildSucceedsOnlyWhenBothGranted() {
-    for (accessibility, postEvent, expected) in [(true, true, Int32(0)), (true, false, 1), (false, true, 1)] {
+@Test func test1596ChildSucceedsOnlyWhenBothGrantedAndTheReceiptIsDelivered() {
+    for (accessibility, postEvent, delivered, expected) in [
+        (true, true, true, Int32(0)), (true, false, true, 1), (false, true, true, 1), (true, true, false, 1),
+    ] {
         let recorder = RequestRecorder()
         let code = PermissionRequestCommand.run(
             arguments: ["LogicProMCP", PermissionRequestCommand.disclaimedChildFlag],
             runtime: requestRuntime(
                 recorder, principal: ownPrincipal, granted: accessibility, postEventGranted: postEvent,
-                environment: validProvenance
+                handoff: validHandoff, receiptDelivered: delivered
             ),
             writeStderr: { recorder.stderr += $0 }
         )
@@ -436,7 +642,7 @@ private let validProvenance = [PermissionRequestCommand.provenanceVariable: "900
 }
 
 /// The parent and child run end to end through fakes for the measurement seam: the child sees
-/// exactly the environment the parent passed, and what it measures decides whether it asks.
+/// exactly the handoff the parent passed, and its receipt is what the parent judges.
 @Test func test1596ChildsMeasuredResponsibilityDecidesWhetherEitherApiRuns() {
     for (childPrincipal, expectedCode, expectedRequests) in [
         (ownPrincipal, Int32(0), 1),          // disclaiming worked: the child is its own principal
@@ -444,12 +650,14 @@ private let validProvenance = [PermissionRequestCommand.provenanceVariable: "900
     ] {
         let recorder = RequestRecorder()
         var parent = requestRuntime(recorder, principal: terminalPrincipal)
-        parent.runDisclaimed = { executable, arguments, extra in
-            var child = requestRuntime(recorder, principal: childPrincipal, granted: true, environment: extra)
-            child.ownExecutablePath = { executable }
-            return .exited(PermissionRequestCommand.run(
+        parent.runDisclaimed = { executable, arguments, handoff in
+            var child = requestRuntime(recorder, principal: childPrincipal, granted: true, handoff: handoff)
+            var written = Data()
+            child.writeReceipt = { written = $0; return true }
+            let code = PermissionRequestCommand.run(
                 arguments: [executable] + arguments, runtime: child, writeStderr: { recorder.stderr += $0 }
-            ))
+            )
+            return .init(outcome: .exited(code), receipt: written)
         }
         let code = PermissionRequestCommand.run(
             arguments: ["LogicProMCP", "--request-permissions"], runtime: parent, writeStderr: { recorder.stderr += $0 }
@@ -503,20 +711,51 @@ private let validProvenance = [PermissionRequestCommand.provenanceVariable: "900
 // MARK: - The real spawn mechanism (no TCC request is made)
 
 @Test func test1596DisclaimedSpawnRunsChildAndPropagatesExitStatus() {
-    #expect(TCCResponsibility.runDisclaimed(executable: "/usr/bin/true", arguments: []) == .exited(0))
-    #expect(TCCResponsibility.runDisclaimed(executable: "/usr/bin/false", arguments: []) == .exited(1))
-    #expect(TCCResponsibility.runDisclaimed(executable: "/nonexistent/LogicProMCP", arguments: []) == .spawnFailed(ENOENT))
+    #expect(TCCResponsibility.runDisclaimed(executable: "/usr/bin/true", arguments: [], handoff: "h") == .init(outcome: .exited(0), receipt: Data()))
+    #expect(TCCResponsibility.runDisclaimed(executable: "/usr/bin/false", arguments: [], handoff: "h") == .init(outcome: .exited(1), receipt: Data()))
+    #expect(TCCResponsibility.runDisclaimed(executable: "/nonexistent/LogicProMCP", arguments: [], handoff: "h").outcome == .spawnFailed(ENOENT))
 }
 
-@Test func test1596DisclaimedSpawnPassesExtraEnvironmentToTheChild() {
-    // /usr/bin/env exits 0 whether or not the variable is present, so use sh to assert it.
-    #expect(TCCResponsibility.runDisclaimed(
-        executable: "/bin/sh", arguments: ["-c", "test \"$LOGICPROMCP_TEST_TOKEN\" = abc"],
-        extraEnvironment: ["LOGICPROMCP_TEST_TOKEN": "abc"]
-    ) == .exited(0))
-    #expect(TCCResponsibility.runDisclaimed(
-        executable: "/bin/sh", arguments: ["-c", "test \"$LOGICPROMCP_TEST_TOKEN\" = abc"]
-    ) == .exited(1))
+@Test func test1596DisclaimedSpawnGivesTheChildTheHandoffAndAReceiptPipe() {
+    // fd 3 carries the parent's value; fd 4 carries the child's answer back.
+    let run = TCCResponsibility.runDisclaimed(
+        executable: "/bin/sh", arguments: ["-c", "read value <&3; printf 'got:%s' \"$value\" >&4"], handoff: "900:abc"
+    )
+    #expect(run.outcome == .exited(0))
+    #expect(String(decoding: run.receipt, as: UTF8.self) == "got:900:abc")
+}
+
+/// Real spawn, real pipes, a stand-in child named LogicProMCP that never asks for anything.
+@Test func test1596RealSpawnOfAChildThatExitsZeroSilentlyOrWritesGarbageIsAFailure() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("tcc1596-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    for (script, label) in [("exit 0", "silent"), ("echo garbage >&4; exit 0", "malformed"), ("printf '{}' >&4; exit 0", "empty object")] {
+        let sub = directory.appendingPathComponent(label)
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        let fake = sub.appendingPathComponent("LogicProMCP")
+        try "#!/bin/sh\n\(script)\n".write(to: fake, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fake.path)
+        var stderr = ""
+        let code = PermissionRequestCommand.run(
+            arguments: ["LogicProMCP", "--request-permissions", fake.path], writeStderr: { stderr += $0 }
+        )
+        #expect(code == 1, Comment(rawValue: label))
+        #expect(stderr.contains("without a valid receipt"), Comment(rawValue: stderr))
+    }
+}
+
+@Test func test1596ProductionChildWithNoInheritedPipeHasNoHandoff() async {
+    // No fake runtime: the real descriptor check runs in this test process, where fd 3 is not the
+    // parent's pipe, so a hand-typed internal flag asks for nothing even with a forged environment.
+    setenv("LOGICPROMCP_REQUEST_PROVENANCE", "\(getppid()):forged", 1)
+    defer { unsetenv("LOGICPROMCP_REQUEST_PROVENANCE") }
+    var stderr = ""
+    let code = PermissionRequestCommand.run(
+        arguments: ["LogicProMCP", PermissionRequestCommand.disclaimedChildFlag], writeStderr: { stderr += $0 }
+    )
+    #expect(code == 1)
+    #expect(stderr.contains("internal"))
 }
 
 @Test func test1596ResponsibilityQueryResolvesOnThisSystem() {

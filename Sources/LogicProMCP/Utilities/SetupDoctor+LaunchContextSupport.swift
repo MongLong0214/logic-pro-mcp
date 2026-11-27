@@ -31,7 +31,10 @@ extension SetupDoctor {
         if let termProgram, !termProgram.isEmpty {
             if termProgram.localizedCaseInsensitiveContains("Terminal")
                 || termProgram.localizedCaseInsensitiveContains("iTerm") {
-                return LaunchContextInfo(context: "terminal", responsibleHint: termProgram)
+                return LaunchContextInfo(
+                    context: "terminal",
+                    responsibleHint: termProgram.localizedCaseInsensitiveContains("iTerm") ? "iterm" : "terminal"
+                )
             }
         }
         return LaunchContextInfo(context: "unknown", responsibleHint: "unknown")
@@ -44,28 +47,31 @@ extension SetupDoctor {
         if value.localizedCaseInsensitiveContains("Claude.app")
             || value.localizedCaseInsensitiveContains("claude_desktop")
             || value.localizedCaseInsensitiveContains("com.anthropic.claude") {
-            return LaunchContextInfo(context: "claude_desktop", responsibleHint: pathBasenameOrValue(value))
+            return LaunchContextInfo(context: "claude_desktop", responsibleHint: "claude_desktop")
         }
         if value.localizedCaseInsensitiveContains("claude") {
-            return LaunchContextInfo(context: "claude_code", responsibleHint: pathBasenameOrValue(value))
+            return LaunchContextInfo(context: "claude_code", responsibleHint: "claude_code")
         }
         if value.localizedCaseInsensitiveContains("cursor") {
-            return LaunchContextInfo(context: "cursor", responsibleHint: pathBasenameOrValue(value))
+            return LaunchContextInfo(context: "cursor", responsibleHint: "cursor")
         }
         if value.localizedCaseInsensitiveContains("Visual Studio Code")
             || value.localizedCaseInsensitiveContains("vscode")
             || value.localizedCaseInsensitiveContains("com.microsoft.VSCode") {
-            return LaunchContextInfo(context: "vscode", responsibleHint: pathBasenameOrValue(value))
+            return LaunchContextInfo(context: "vscode", responsibleHint: "vscode")
         }
         if value.localizedCaseInsensitiveContains("windsurf") {
-            return LaunchContextInfo(context: "custom", responsibleHint: pathBasenameOrValue(value))
+            return LaunchContextInfo(context: "custom", responsibleHint: "windsurf")
         }
         if value.localizedCaseInsensitiveContains("zed") {
-            return LaunchContextInfo(context: "custom", responsibleHint: pathBasenameOrValue(value))
+            return LaunchContextInfo(context: "custom", responsibleHint: "zed")
         }
         if value.localizedCaseInsensitiveContains("Terminal")
             || value.localizedCaseInsensitiveContains("iTerm") {
-            return LaunchContextInfo(context: "terminal", responsibleHint: pathBasenameOrValue(value))
+            return LaunchContextInfo(
+                context: "terminal",
+                responsibleHint: value.localizedCaseInsensitiveContains("iTerm") ? "iterm" : "terminal"
+            )
         }
         return nil
     }
@@ -121,9 +127,16 @@ extension SetupDoctor {
     }
 
 
-    private static func pathBasenameOrValue(_ value: String) -> String {
-        value.contains("/") ? URL(fileURLWithPath: value).lastPathComponent : value
+    /// Fixed vocabulary for `responsible_hint` in public doctor output. Whatever the environment or
+    /// the process ancestry supplied (TERM_PROGRAM, a bundle id, a process name) is never echoed:
+    /// a value outside this set becomes "unknown" (#1596).
+    static let publicResponsibleHints: Set<String> = [
+        "terminal", "iterm", "claude_desktop", "claude_code", "cursor", "vscode", "windsurf", "zed", "unknown",
+    ]
+
+    static func publicResponsibleHint(_ raw: String) -> String {
+        let normalized = raw.lowercased()
+        if publicResponsibleHints.contains(normalized) { return normalized }
+        return "unknown"
     }
-
-
 }

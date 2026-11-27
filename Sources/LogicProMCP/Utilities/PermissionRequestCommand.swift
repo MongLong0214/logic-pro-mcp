@@ -12,26 +12,58 @@ import Darwin
 /// Terminal. If the disclaimed copy cannot be started the command refuses and calls neither
 /// prompting API: a request from this process would be recorded for whatever app launched it.
 ///
+/// Trust between the two processes is two inherited pipes, not the environment and not the exit
+/// status. The parent writes a one-shot value to the child's `handoffDescriptor`; the child asks
+/// only after reading it, and answers on `receiptDescriptor` with a receipt that echoes the value
+/// and records what it measured. The parent reports success only from a well-formed receipt.
+///
+/// Bound of the contract: this stops an accidental or mistaken start (a typed internal flag, a
+/// target that is not LogicProMCP, a program that merely exits 0). It does not defend against a
+/// person who deliberately builds the pipes by hand on their own machine to see a permission
+/// prompt; that is out of scope.
+///
 /// The optional argument names the binary to request for (the one the MCP client is configured to
 /// launch). Output names it by its public label only; the path is used to spawn and never printed.
 enum PermissionRequestCommand {
     static let flag = "--request-permissions"
-    /// Internal: the disclaimed copy. Refuses unless the parent's one-shot provenance is present.
+    /// Internal: the disclaimed copy. Refuses unless the parent's handoff arrives on its pipe.
     static let disclaimedChildFlag = "--request-permissions-disclaimed"
-    /// Carries `<parent pid>:<one-shot token>` from the public command to its disclaimed child.
-    /// A user-typed flag cannot supply it by accident.
-    static let provenanceVariable = "LOGICPROMCP_REQUEST_PROVENANCE"
+
+    /// What the child reports back. The parent prints only values it derives from this, never text.
+    struct Receipt: Codable, Equatable {
+        struct Probe: Codable, Equatable {
+            var accessibility: Bool
+            var postEvent: Bool
+        }
+        var version: Int
+        /// The one-shot value the parent handed over, echoed.
+        var handoff: String
+        /// The child ran the request path (both prompting calls were made).
+        var requested: Bool
+        /// The child measured itself as its own responsible process.
+        var selfResponsible: Bool
+        var before: Probe
+        var after: Probe
+
+        static let currentVersion = 1
+    }
 
     struct Runtime {
         var principal: () -> TCCResponsibility.Principal?
         var ownExecutablePath: () -> String?
-        /// executable, arguments, extra environment.
-        var runDisclaimed: (String, [String], [String: String]) -> TCCResponsibility.SpawnOutcome
+        /// executable, arguments, handoff value.
+        var runDisclaimed: (String, [String], String) -> TCCResponsibility.DisclaimedRun
         /// `AXIsProcessTrustedWithOptions` with the prompt option set.
         var requestAccessibility: () -> Bool
         /// `CGRequestPostEventAccess`.
         var requestPostEvent: () -> Bool
-        var environment: () -> [String: String]
+        /// Non-prompting probes, taken before and after the request.
+        var probeAccessibility: () -> Bool
+        var probePostEvent: () -> Bool
+        /// The value on the inherited handoff pipe, or nil when there is no such pipe.
+        var readHandoff: () -> String?
+        /// Writes the receipt to the inherited receipt pipe; false when there is none.
+        var writeReceipt: (Data) -> Bool
         var ownPID: () -> pid_t
         var parentPID: () -> pid_t
         var makeToken: () -> String
@@ -44,14 +76,17 @@ enum PermissionRequestCommand {
             principal: { TCCResponsibility.currentPrincipal() },
             ownExecutablePath: { TCCResponsibility.executablePath(of: getpid()) },
             runDisclaimed: {
-                TCCResponsibility.runDisclaimed(executable: $0, arguments: $1, extraEnvironment: $2)
+                TCCResponsibility.runDisclaimed(executable: $0, arguments: $1, handoff: $2)
             },
             requestAccessibility: {
                 let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
                 return AXIsProcessTrustedWithOptions(options)
             },
             requestPostEvent: { CGRequestPostEventAccess() },
-            environment: { ProcessInfo.processInfo.environment },
+            probeAccessibility: { AXIsProcessTrusted() },
+            probePostEvent: { CGPreflightPostEventAccess() },
+            readHandoff: { readInheritedHandoff(descriptor: TCCResponsibility.handoffDescriptor) },
+            writeReceipt: { writeInheritedReceipt($0, descriptor: TCCResponsibility.receiptDescriptor) },
             ownPID: { getpid() },
             parentPID: { getppid() },
             makeToken: { UUID().uuidString },
@@ -65,6 +100,37 @@ enum PermissionRequestCommand {
             },
             labelForPath: { TCCResponsibility.publicLabel(forExecutablePath: $0) }
         ) }
+    }
+
+    private static func isPipe(_ descriptor: Int32) -> Bool {
+        var info = stat()
+        return fstat(descriptor, &info) == 0 && (info.st_mode & S_IFMT) == S_IFIFO
+    }
+
+    private static func readInheritedHandoff(descriptor: Int32) -> String? {
+        guard isPipe(descriptor) else { return nil }
+        var collected = [UInt8]()
+        var chunk = [UInt8](repeating: 0, count: 128)
+        while collected.count <= 512 {
+            // The parent wrote and closed its end before spawning, so data or EOF is already there;
+            // the timeout only keeps an unrelated inherited pipe from hanging this command.
+            var waiting = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            guard poll(&waiting, 1, 2000) > 0 else { return nil }
+            let count = read(descriptor, &chunk, chunk.count)
+            if count > 0 { collected += chunk.prefix(count) } else if count == 0 || errno != EINTR { break }
+        }
+        return collected.isEmpty || collected.count > 512 ? nil : String(decoding: collected, as: UTF8.self)
+    }
+
+    private static func writeInheritedReceipt(_ data: Data, descriptor: Int32) -> Bool {
+        guard isPipe(descriptor) else { return false }
+        let bytes = [UInt8](data)
+        var written = 0
+        while written < bytes.count {
+            let count = bytes[written...].withUnsafeBufferPointer { write(descriptor, $0.baseAddress, $0.count) }
+            if count > 0 { written += count } else if count < 0 && errno == EINTR { continue } else { return false }
+        }
+        return true
     }
 
     static func run(arguments: [String], runtime: Runtime = .production, writeStderr: (String) -> Void) -> Int32 {
@@ -98,11 +164,35 @@ enum PermissionRequestCommand {
             writeStderr("Usage: LogicProMCP --request-permissions [<path to the LogicProMCP executable>]\n")
             return 1
         }
+        // Refused before anything is spawned: an arbitrary program would exit 0 having asked for nothing.
+        guard (target as NSString).lastPathComponent == TCCResponsibility.productExecutableName else {
+            writeStderr(
+                "The target is not a \(TCCResponsibility.productExecutableName) executable; no permission was requested.\n"
+            )
+            return 1
+        }
         writeStderr("Requesting for: \(runtime.labelForPath(target))\n")
-        let provenance = "\(runtime.ownPID()):\(runtime.makeToken())"
-        switch runtime.runDisclaimed(target, [disclaimedChildFlag], [provenanceVariable: provenance]) {
+        let handoff = "\(runtime.ownPID()):\(runtime.makeToken())"
+        let run = runtime.runDisclaimed(target, [disclaimedChildFlag], handoff)
+        switch run.outcome {
         case let .exited(code):
-            return code
+            guard let receipt = validReceipt(run.receipt, handoff: handoff) else {
+                writeStderr(
+                    "The request process finished without a valid receipt from LogicProMCP, so no permission request "
+                        + "is confirmed. Run \(flag) with the path of the LogicProMCP executable your client launches.\n"
+                )
+                return 1
+            }
+            func state(_ granted: Bool) -> String { granted ? "granted" : "not granted" }
+            writeStderr(
+                """
+                Receipt from LogicProMCP: Accessibility \(state(receipt.before.accessibility)) -> \(state(receipt.after.accessibility)), \
+                PostEvent \(state(receipt.before.postEvent)) -> \(state(receipt.after.postEvent)).
+
+                """
+            )
+            // Success needs the child's exit status AND the receipt's own report of both grants.
+            return code == 0 && receipt.after.accessibility && receipt.after.postEvent ? 0 : 1
         case .disclaimUnavailable:
             writeStderr(
                 "This macOS does not expose the responsibility-disclaim spawn attribute; no permission was requested, "
@@ -116,17 +206,29 @@ enum PermissionRequestCommand {
         }
     }
 
-    /// The child proves it was started by `--request-permissions` (the parent's pid and a token it
-    /// minted) and that it is its own TCC principal, before either prompting API can run.
-    private static func provenanceIsValid(runtime: Runtime) -> Bool {
-        guard let value = runtime.environment()[provenanceVariable] else { return false }
-        let parts = value.split(separator: ":", maxSplits: 1).map(String.init)
+    /// Well-formed means: it decodes, has the current version, echoes this run's handoff, and says
+    /// the child ran the request path as its own responsible process.
+    static func validReceipt(_ data: Data, handoff: String) -> Receipt? {
+        guard let receipt = try? JSONDecoder().decode(Receipt.self, from: data),
+              receipt.version == Receipt.currentVersion,
+              receipt.handoff == handoff,
+              receipt.requested,
+              receipt.selfResponsible else { return nil }
+        return receipt
+    }
+
+    /// The child proves it was started by `--request-permissions`: it reads the parent's value from
+    /// the inherited pipe (the value names the parent's pid, which must be its actual parent).
+    private static func handoffIsValid(_ handoff: String?, runtime: Runtime) -> Bool {
+        guard let handoff else { return false }
+        let parts = handoff.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2, let parent = pid_t(parts[0]), !parts[1].isEmpty else { return false }
         return parent == runtime.parentPID()
     }
 
     private static func requestAsDisclaimedChild(runtime: Runtime, writeStderr: (String) -> Void) -> Int32 {
-        guard provenanceIsValid(runtime: runtime) else {
+        let handoff = runtime.readHandoff()
+        guard handoffIsValid(handoff, runtime: runtime), let handoff else {
             writeStderr(
                 "\(disclaimedChildFlag) is internal and is started only by \(flag); "
                     + "no permission was requested. Run \(flag) instead.\n"
@@ -141,8 +243,18 @@ enum PermissionRequestCommand {
             )
             return 1
         }
+        let before = Receipt.Probe(accessibility: runtime.probeAccessibility(), postEvent: runtime.probePostEvent())
         let accessibility = runtime.requestAccessibility()
         let postEvent = runtime.requestPostEvent()
+        let after = Receipt.Probe(accessibility: runtime.probeAccessibility(), postEvent: runtime.probePostEvent())
+        let receipt = Receipt(
+            version: Receipt.currentVersion, handoff: handoff, requested: true,
+            selfResponsible: true, before: before, after: after
+        )
+        guard let encoded = try? JSONEncoder().encode(receipt), runtime.writeReceipt(encoded) else {
+            writeStderr("The request ran but its receipt could not be delivered to \(flag).\n")
+            return 1
+        }
         writeStderr(
             """
             Requested for: \(principal.displayName)
