@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   instead of requiring it to be the export panel's only outline (#1553), so List-view browser
   outlines without that row are ignored. Duplicate matches, unreadable censuses, failed selection
   echo, and failed volume-root listing confirmation still refuse without claiming selection.
+- Workflow catalog: new read-only `logic.workflow.audio.sample_source_prep` ("Sample Source Preparation"). It chains `logic_audio` `analyze_file`, `analyze_spectrum` and `recommend_eq` on a caller-supplied file to check format, length, channel count, level, silence and spectral balance before sampling, stem splitting or remixing. Logic need not be running and nothing is written. Its declared response fields are tested against the real dispatcher replies on a generated WAV.
 
 ---
 

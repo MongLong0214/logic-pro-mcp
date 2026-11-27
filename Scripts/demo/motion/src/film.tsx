@@ -384,7 +384,6 @@ export const LaunchFilm: React.FC = () => {
               ))}
             </div>
             <div style={{ position: "absolute", top: vertical ? 1400 : 770, display: "flex", flexDirection: vertical ? "column" : "row", gap: 28, alignItems: "center", opacity: prog(lt, 1.2, 1.6) }}>
-              <div style={{ background: C.acid, color: C.ink, fontFamily: SANS, fontWeight: 600, fontSize: 52, padding: "18px 50px", borderRadius: 999 }}>★  Star on GitHub</div>
               <Mono size={vertical ? 34 : 40} color={C.paper}>github.com/MongLong0214/logic-pro-mcp</Mono>
             </div>
             <div style={{ position: "absolute", bottom: vertical ? 300 : 130, opacity: prog(lt, 1.6, 2.0) }}><Mono size={46} color={C.acid}>logicpromcp.com</Mono></div>
