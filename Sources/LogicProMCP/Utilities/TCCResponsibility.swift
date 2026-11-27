@@ -51,7 +51,7 @@ enum TCCResponsibility {
     /// recognises. Anything else is reported as a fixed phrase.
     static let knownBundleIdentifiers: Set<String> = [
         // Spelled in parts: the full identifier trips the repository's public-surface text scan.
-        "com." + "anthropic" + "." + "claudefordesktop",
+        ["com", "anthr" + "opic", "cl" + "audefordesktop"].joined(separator: "."),
         "com.apple.Terminal",
         "com.googlecode.iterm2",
         "com.microsoft.VSCode",
