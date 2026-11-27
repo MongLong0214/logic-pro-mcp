@@ -510,7 +510,10 @@ jobs:
   native-logic-e2e:
     name: native-logic-e2e
     needs: [change-scope, release-build, product-validation]
-    if: always()
+    # Not always(): a job that always runs cannot be cancelled, so a superseded run sat in its
+    # native wait for up to 180 minutes and held the concurrency group, leaving the new run
+    # pending. `build` still requires this job's result to be success.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 190
     permissions:
@@ -533,8 +536,9 @@ jobs:
           set -euo pipefail
           test "$RELEASE_BUILD" = success
           test "$PRODUCT_VALIDATION" = success
-          # Exit 3 from the consumer means "no native status yet": keep this job (and so
-          # the run) active until the maintainer's Scripts/ci-native-qualify.sh posts it.
+          # Exit 3 from the consumer means "no native result yet" (no status, or pending, for
+          # this attempt): keep this job (and so the run) active until the maintainer's
+          # Scripts/ci-native-qualify.sh posts its result.
           deadline=$((SECONDS + NATIVE_WAIT_MINUTES * 60))
           while true; do
             gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/status?per_page=100" \
@@ -574,15 +578,21 @@ jobs:
           receipt = f"Native PASS a={expected_attempt} id={artifact_id} d={digest[7:]}"
           if len(receipt) > 140:
               raise SystemExit("native receipt exceeds GitHub's commit-status description limit")
-          exact = [row for row in rows if row.get("context") == "logic-native-e2e"]
+          # Only statuses for THIS run attempt count: an older attempt's status (any state) is
+          # ignored, never accepted and never a reason to fail. Newest first, as the API returns.
+          exact = [row for row in rows
+                   if row.get("context") == "logic-native-e2e"
+                   and row.get("target_url") == expected_target]
           if not exact:
               print("missing exact native status; run Scripts/ci-native-qualify.sh "
                     f"for candidate {expected_sha} and run {run_id} on the trusted Logic host",
                     file=sys.stderr)
               raise SystemExit(3)
           latest = exact[0]
-          if latest.get("target_url") != expected_target:
-              raise SystemExit("native status belongs to another CI run attempt")
+          if latest.get("state") == "pending":
+              print("native qualification is still running for this run attempt; waiting",
+                    file=sys.stderr)
+              raise SystemExit(3)
           if latest.get("state") != "success":
               raise SystemExit(f"native status is {latest.get('state')!r}, not success")
           if latest.get("description") != receipt:

@@ -57,7 +57,10 @@ test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$SHA"
 test -z "$(git -C "$CANDIDATE_ROOT" status --porcelain)"
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/logic-pro-mcp-native-ci.XXXXXX")"
-target_url="https://github.com/$REPO/actions/runs/$RUN_ID"
+# Results are posted only once the run attempt is known; `target_url` stays empty until then.
+target_url=""
+receipt=""
+identity_confirmed=0
 succeeded=0
 
 trusted_api() {
@@ -133,9 +136,29 @@ post_status() {
     target_url "$target_url" >/dev/null
 }
 
+# True when a trusted success carrying this receipt is already published for this exact target.
+# A success whose response was lost must not be followed by a failure.
+success_already_published() {
+  trusted_api GET "repos/$REPO/commits/$SHA/statuses?per_page=100" \
+    > "$work/statuses-recheck.json" 2>/dev/null || return 1
+  python3 - "$work/statuses-recheck.json" "$CONTEXT" "$target_url" "$receipt" <<'PY'
+import json, sys
+rows = json.load(open(sys.argv[1], encoding="utf-8"))
+context, target, receipt = sys.argv[2:5]
+for row in rows if isinstance(rows, list) else []:
+    creator = row.get("creator") or {}
+    if (row.get("context") == context and row.get("target_url") == target
+            and row.get("state") == "success" and row.get("description") == receipt
+            and creator.get("login") == "MongLong0214" and creator.get("id") == 97578200):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 finish() {
   local status="$?"
-  if [ "$succeeded" -ne 1 ]; then
+  if [ "$succeeded" -ne 1 ] && [ "$identity_confirmed" -eq 1 ] \
+      && ! success_already_published; then
     post_status failure "Exact artifact failed native Logic qualification" || true
   fi
   rm -rf "$work"
@@ -146,7 +169,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 validate_run() {
-  python3 - "$1" "$SHA" "$RUN_ID" "$REPO" "$2" "$CANDIDATE_ROOT" "${3:-}" <<'PY'
+  python3 - "$1" "$SHA" "$RUN_ID" "$REPO" "$2" "$CANDIDATE_ROOT" "${3:-}" "${4:-}" <<'PY'
 import json, subprocess, sys
 run = json.load(open(sys.argv[1], encoding="utf-8"))
 expected_sha, expected_id, expected_repo = sys.argv[2], int(sys.argv[3]), sys.argv[4]
@@ -158,8 +181,18 @@ if run.get("event") != "pull_request":
     raise SystemExit("native CI qualification requires a pull_request run")
 if run.get("path") != ".github/workflows/ci.yml":
     raise SystemExit("native CI qualification requires the exact ci.yml workflow")
-if run.get("status") != "in_progress" or run.get("conclusion") is not None:
+# The run must be active when qualification starts. At the end a run that already completed is
+# accepted (argv[8] == "allow-ended"): the status below is bound to the exact SHA, attempt,
+# artifact id and digest, which the consumer validates, and a rerun of the consumer job reads it.
+ended = run.get("status") != "in_progress" or run.get("conclusion") is not None
+if ended and sys.argv[8] != "allow-ended":
     raise SystemExit("native CI qualification requires an active non-cancelled run")
+if ended and run.get("status") != "completed":
+    raise SystemExit("native CI qualification requires an in-progress or completed run")
+if ended:
+    print("NOTE: the CI run had already ended (status=%s, conclusion=%s) before this result was "
+          "published; re-run the native-logic-e2e job to consume it."
+          % (run.get("status"), run.get("conclusion")))
 run_attempt = run.get("run_attempt")
 if isinstance(run_attempt, bool) or not isinstance(run_attempt, int) or run_attempt < 1:
     raise SystemExit("CI run attempt is not a positive integer")
@@ -278,6 +311,7 @@ artifact_hash="${artifact_digest#sha256:}"
 target_url="https://github.com/$REPO/actions/runs/$RUN_ID/attempts/$run_attempt"
 receipt="Native PASS a=$run_attempt id=$artifact_id d=$artifact_hash"
 test "${#receipt}" -le 140
+identity_confirmed=1
 post_status pending "Native RUN a=$run_attempt id=$artifact_id d=$artifact_hash"
 
 mkdir "$work/runtime"
@@ -342,7 +376,7 @@ test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$SHA"
 test -z "$(git -C "$CANDIDATE_ROOT" status --porcelain)"
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
 resolve_run_pull_request "$work/run-success.json"
-validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt"
+validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" allow-ended
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts-success.json"
 validate_artifacts "$work/artifacts-success.json" "$work/artifact-success.json"

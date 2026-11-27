@@ -574,6 +574,43 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Current run-attempt artifact passed native Logic qualification", result.stdout)
 
+    def run_native_consumer(self, rows):
+        sha, run_id, attempt, digest = "a" * 40, "123", "2", "b" * 64
+        target = f"https://github.com/MongLong0214/logic-pro-mcp/actions/runs/{run_id}/attempts/{attempt}"
+        artifacts = {"artifacts": [{"name": f"release-runtime-{run_id}-{attempt}",
+                                    "expired": False, "id": 42, "digest": f"sha256:{digest}"}]}
+        creator = {"login": "MongLong0214", "id": 97578200}
+        pages = [[{"context": "logic-native-e2e", "creator": creator,
+                   "target_url": target.replace("/attempts/2", f"/attempts/{a}") if a else target,
+                   "state": state, "description": f"Native PASS a={a or attempt} id=42 d={digest}"}
+                  for a, state in rows]]
+        with tempfile.TemporaryDirectory() as directory:
+            paths = [os.path.join(directory, name) for name in ("s.json", "p.json", "a.json")]
+            for path, body in zip(paths, ({"sha": sha}, pages, artifacts)):
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(body, handle)
+            return subprocess.run(
+                ["python3", "-", *paths, sha, target, attempt, run_id],
+                input=native_consumer_script(read(".github/workflows/ci.yml")),
+                text=True, capture_output=True, check=False)
+
+    def test_native_consumer_waits_on_pending_for_this_attempt(self):
+        result = self.run_native_consumer([(None, "pending")])
+        self.assertEqual(result.returncode, 3, result.stderr)
+
+    def test_native_consumer_ignores_other_attempts_statuses(self):
+        # Newest first: an old attempt's failure sits above this attempt's pending/missing status.
+        self.assertEqual(self.run_native_consumer([("1", "failure")]).returncode, 3)
+        self.assertEqual(self.run_native_consumer([("1", "success")]).returncode, 3)
+        result = self.run_native_consumer([("1", "failure"), (None, "success")])
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_native_consumer_fails_at_once_on_failure_for_this_attempt(self):
+        for state in ("failure", "error"):
+            result = self.run_native_consumer([(None, state), (None, "pending")])
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("not success", result.stderr)
+
     def test_combined_status_rejects_a_wrong_top_level_sha(self):
         workflow = read(".github/workflows/ci.yml")
         script = native_consumer_script(workflow)
