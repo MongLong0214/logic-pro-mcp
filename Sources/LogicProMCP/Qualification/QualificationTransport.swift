@@ -3358,8 +3358,8 @@ struct QualificationTransport: Sendable {
             params: [:], phase: "\(phase).refresh")
         let data = try resourceReadback(
             session, id: id + 1, uri: "logic://transport/state", phase: phase)
-        let raw = String(decoding: data, as: UTF8.self)
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        var raw = String(decoding: data, as: UTF8.self)
+        guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               object["source"] as? String == "ax_live",
               object["unverified"] as? Bool != true,
               object["ax_occluded"] as? Bool != true,
@@ -3368,6 +3368,15 @@ struct QualificationTransport: Sendable {
               let playing = state["isPlaying"] as? Bool else {
             throw QualificationTransportError.protocolViolation(
                 "\(phase): logic://transport/state did not report observed isPlaying")
+        }
+        // In Beats the bar shows no tempo, so a live read of it has none. The tempo read live in the
+        // original mode stands in, named as such; a read that has its own live tempo keeps it.
+        if playing, object["observed_tempo"] as? Double == nil,
+           let reference = session.beatsTempoReference {
+            object["observed_tempo"] = reference
+            object["observed_tempo_source"] = "original_display_mode_before_beats"
+            raw = String(decoding: try JSONSerialization.data(withJSONObject: object,
+                options: [.sortedKeys, .withoutEscapingSlashes]), as: UTF8.self)
         }
         return (playing, raw)
     }
@@ -4361,6 +4370,15 @@ struct QualificationTransport: Sendable {
             return refusal(detail)
         }
         let switched = !ControlBarDisplayMode.isBeatsMode(original)
+        // The tempo is read live here, in the mode found, because Beats does not show it.
+        var tempoReference: Double?
+        if switched, requiresStationaryStart {
+            let read = try observedPlaying(session, id: nextID, phase: "phase_b.display_mode_tempo")
+            nextID += 2
+            tempoReference = (try? JSONSerialization.jsonObject(with: Data(read.raw.utf8)))
+                .flatMap { ($0 as? [String: Any])?["observed_tempo"] as? Double }
+        }
+        defer { session.beatsTempoReference = nil }
         if switched {
             // Just before the menu is opened to switch, both readings must still say the original:
             // a switch leases whatever is checked then, and putting that back is not the original.
@@ -4385,11 +4403,42 @@ struct QualificationTransport: Sendable {
         let outcome: Result<(record: QualificationMutationRestoreRecord, nextID: Int), Error>
         do {
             try awaitFourComponentOrigin(session, nextID: &nextID)
+            // The stand-in is for a bar that shows no tempo in Beats. A bar that does show it in
+            // Beats must keep supplying it live, so a tempo that goes missing later still refuses.
+            if let reference = tempoReference {
+                let inBeats = try observedPlaying(session, id: nextID, phase: "phase_b.display_mode_tempo_in_beats")
+                nextID += 2
+                let hidden = (try? JSONSerialization.jsonObject(with: Data(inBeats.raw.utf8)))
+                    .flatMap { ($0 as? [String: Any])?["observed_tempo"] as? Double } == nil
+                if hidden { session.beatsTempoReference = reference }
+            }
             outcome = .success(try cycle(nextID))
         } catch {
             outcome = .failure(error)
         }
+        session.beatsTempoReference = nil
         var problem = giveBack()
+        // The stand-in tempo is credited only if the original mode reads the same tempo again.
+        var finalID = nextID
+        if case .success(let done) = outcome, problem == nil, let tempoReference {
+            finalID = done.nextID
+            // The bar republishes the tempo a moment after the mode comes back.
+            var tempo: Double?
+            let deadline = Date().addingTimeInterval(ControlBarDisplayMode.positionComponentsTimeout)
+            repeat {
+                let again = try? observedPlaying(
+                    session, id: finalID, phase: "phase_b.display_mode_tempo_after")
+                finalID += 2
+                tempo = again.flatMap { try? JSONSerialization.jsonObject(with: Data($0.raw.utf8)) }
+                    .flatMap { ($0 as? [String: Any])?["observed_tempo"] as? Double }
+                if tempo != nil { break }
+                uiSettleSleep(ControlBarDisplayMode.positionComponentsPollInterval)
+            } while Date() < deadline
+            if tempo != tempoReference {
+                problem = "tempo reads \(tempo.map { "\($0)" } ?? "nothing") in \(original) after the cycle, "
+                    + "expected \(tempoReference) read before it"
+            }
+        }
         if problem == nil, !switched {
             // Nothing was switched, so nothing is given back, and another party's change is not
             // overwritten. The mode is still read again: a changed or unreadable mode is no credit.
@@ -4426,7 +4475,7 @@ struct QualificationTransport: Sendable {
         }
         switch (outcome, problem) {
         case (.success(let cycleResult), nil):
-            return cycleResult
+            return (cycleResult.record, max(cycleResult.nextID, finalID))
         case (.success, let problem?):
             throw refusal("\(problem); the cycle's credit is withheld")
         case (.failure(let error), nil):
@@ -7908,6 +7957,10 @@ final class QualificationSubprocessSession: @unchecked Sendable {
     private var started = false
     private var shutdownOutcome: ShutdownOutcome?
     private var framesTranscript: [QualificationWireFrame] = []
+    /// The tempo read live in the control bar's original display mode, held only while a cycle runs
+    /// with the bar in Beats, which shows the position and not the tempo
+    /// (`QualificationTransport.withBeatsPositionDisplay`).
+    var beatsTempoReference: Double?
 
     init(
         request: QualificationDriveRequest,

@@ -2929,6 +2929,44 @@ struct QualificationRunnerTests {
         }
     }
 
+    /// The failure seen live on the real Logic (PR 1625 native run): the whole play, stop and pause
+    /// cycle runs with the control bar in Beats, and Beats shows the position only, so the tempo that
+    /// sizes the stillness gap is not published while the cycle reads motion. The tempo is read live
+    /// in the mode found, before the switch, and read live again after the mode is given back; the
+    /// cycle keeps its full motion readback and is credited only when the two tempos agree.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aCycleInBeatsWhoseTempoIsHiddenThereUsesTheTempoReadInTheOriginalModeAndVerifiesItAfter(
+        command: String
+    ) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "paused",
+            displayMode: "Beats & Project", recoveryFlags: "tempo_hidden_in_beats")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.status == .passed, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(records == 1)
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
+    }
+
+    /// The same Beats-hidden tempo with no tempo read in the original mode: nothing can size the gap,
+    /// and "tempo unavailable" stays a refusal. A cycle already in Beats has no original-mode tempo.
+    @Test(arguments: ["play", "stop", "pause"])
+    func aCycleStartedInBeatsWhoseTempoIsHiddenStillRefusesTempoUnavailable(command: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "paused",
+            displayMode: "Beats", recoveryFlags: "tempo_hidden_in_beats")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beats)
+        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
+        #expect(observed.status != .passed)
+        #expect(records == 0)
+        #expect(try #require(observed.mutationRestoreRefusal).contains("tempo unavailable"),
+                "\(observed.mutationRestoreRefusal ?? "no refusal")")
+    }
+
     /// If the stop cannot be confirmed by a read, nothing else is attempted: no seek, and the run
     /// halts. A later stop of the whole run is not evidence for this case.
     @Test func aPauseWhoseStopIsNotConfirmedHaltsTheRunWithoutASeek() throws {
@@ -7513,6 +7551,9 @@ struct QualificationRunnerTests {
                         # cannot be told from a stationary playhead (`transport motion tempo unavailable`).
                         tempo_field='\"observed_tempo\":120,'
                         if has_flag tempo_missing && [ "$transport_writes" -ge 1 ] && [ "$playing" = true ]; then tempo_field=''; fi
+                        # Logic's LCD in plain Beats shows the position only: the tempo slider is not
+                        # exposed there, so the resource has no observed tempo in any state.
+                        if has_flag tempo_hidden_in_beats && [ -f display-mode ] && [ "$(cat display-mode)" = Beats ]; then tempo_field=''; fi
                         # What production emits: `state.position` and `positionReadback` carry the same
                         # value, and with the control bar in Beats mode all four components
                         # (AXValueExtractors tick tests). The faults are the other shapes the resource
