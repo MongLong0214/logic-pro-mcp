@@ -5873,11 +5873,7 @@ struct QualificationRunnerTests {
                     QualificationFaultInjection.Mode.partialState.rawValue,
             ],
             drive: { request in
-                let observed = try QualificationTransport(
-                    uiObserver: unchangedUIForTests,
-                    requestTimeout: 30,
-                    shutdownGrace: 1
-                ).drive(request)
+                let observed = try Self.realServerTransport().drive(request)
                 let baseline = Self.driveResult(specs: [spec])
                 return QualificationDriveResult(
                     handshake: baseline.handshake,
@@ -5925,8 +5921,58 @@ struct QualificationRunnerTests {
         #expect(qualification.exitCode == 1)
         #expect(responsePayload.contains(#"\"error\":\"readback_unavailable\""#))
         #expect(operationCase.status == .failed)
+        // The status alone cannot tell the seam's fault from the origin guard refusing a drive with
+        // no position display (PR 1625: 3.8 s instead of ~11 s). The CAUSE is pinned here: the
+        // Phase B cycle ran to its verified restore (so the guard did not refuse), and the failure
+        // reason carries no position refusal. The reason is in the message so the next native log
+        // shows which one occurred.
+        let reason = operationCase.reason ?? "the case carries no reason"
+        let restore = try #require(operationCase.restore,
+                "Phase B did not reach a recorded cycle, so the fault was not the only cause: \(reason)")
+        #expect(restore.verified, "\(reason)")
+        #expect(!reason.contains("the playhead position did not read"), "\(reason)")
+        #expect(!reason.contains("phase_b.pre_state"), "\(reason)")
+        #expect(!reason.contains("phase_b recipe"), "\(reason)")
     }
     #endif
+
+    /// The offline mirror of `runnerRejectsPartialStateObservedFromRealServer`. A server whose
+    /// no-write probe answers `readback_unavailable` (what the debug seam injects) is driven twice.
+    /// With no position display the origin guard refuses the cycle before anything is sent; with the
+    /// shipped construction the cycle runs and the fault is the only thing that fails the case.
+    @Test func partialStateFaultIsToldApartFromTheMissingDisplayRefusal() throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        func drive(display: Bool) throws -> QualificationOperationResult {
+            let fixture = try SlowHandshakeFixture(
+                transportNativePause: true, initialTransportMotion: "stopped",
+                displayMode: QualificationPositionDisplayFake.beatsAndProject,
+                recoveryFlags: "probe_partial_state")
+            defer { fixture.remove() }
+            let fake = try QualificationPositionDisplayFake(
+                directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+            let result = try Self.realServerTransport(
+                positionDisplay: display ? fake.display : nil,
+                handshakeTimeout: 2, requestTimeout: 2, uiSettleSleep: { _ in }
+            ).drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+            return try #require(result.operationResults[spec.id.rawValue])
+        }
+
+        let displayLess = try drive(display: false)
+        #expect(displayLess.error == "readback_unavailable")
+        let refusal = try #require(displayLess.mutationRestoreRefusal)
+        #expect(refusal.contains("the playhead position did not read"), "\(refusal)")
+        #expect(displayLess.mutationRestore == nil)
+        #expect(displayLess.status == .failed)
+
+        let shipped = try drive(display: true)
+        #expect(shipped.error == "readback_unavailable")
+        #expect(shipped.mutationRestoreRefusal == nil, "\(shipped.mutationRestoreRefusal ?? "")")
+        #expect(shipped.mutationRestore != nil)
+        #expect(shipped.failureReason == nil, "\(shipped.failureReason ?? "")")
+        #expect(!shipped.expectedZeroWriteRefusalObserved)
+        #expect(shipped.status == .failed)
+    }
 
     @Test func handshakeStillFailsClosedBeyondStartupBudget() throws {
         let fixture = try SlowHandshakeFixture()
@@ -7691,7 +7737,11 @@ struct QualificationRunnerTests {
                         fi
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true,\\"logic_pro_variants\\":[{\\"variant\\":\\"desktop\\",\\"bundle_id\\":\\"com.apple.logic10\\",\\"installed\\":true,\\"running\\":true},{\\"variant\\":\\"creator_studio\\",\\"bundle_id\\":\\"com.apple.mobilelogic\\",\\"installed\\":false,\\"running\\":false}]}"}]}}\n' "$id" ;;
                       *'__adr001b_no_write_probe'*)
-                        printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"invalid_params\\",\\"write_attempted\\":false}"}]}}\n' "$id" ;;
+                        if has_flag probe_partial_state; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"readback_unavailable\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                        else
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"invalid_params\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                        fi ;;
                       *'"command":"export_support_bundle"'*)
                         support_root=${LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE:?}
                         leaf=$(printf '%s' "$request" | /usr/bin/sed -n 's/.*"dir":"\([^"]*\)".*/\1/p')
