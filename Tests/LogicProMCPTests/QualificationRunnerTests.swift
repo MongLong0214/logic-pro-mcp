@@ -2472,6 +2472,20 @@ struct QualificationRunnerTests {
 
     // MARK: State B: the dialog submitted, the dispatcher's immediate read failed
 
+    /// A display mode that is not confirmed back ends the drive: it throws `recoveryUnconfirmed`
+    /// naming the display mode, so no operation result exists to be credited.
+    private func expectDriveAbortedOverTheDisplayMode(
+        _ outcome: Result<QualificationDriveResult, Error>
+    ) throws {
+        guard case .failure(let error) = outcome else {
+            Issue.record("the drive returned a result although the display mode was not confirmed back")
+            return
+        }
+        let transportError = try #require(error as? QualificationTransportError, "\(error)")
+        #expect(transportError.requiresDriveAbort, "\(transportError)")
+        #expect("\(transportError)".contains("display mode"), "\(transportError)")
+    }
+
     private func driveGoto(
         _ fixture: SlowHandshakeFixture, command: String, display: QualificationPositionDisplay? = nil
     ) throws -> (observed: QualificationOperationResult, records: Int) {
@@ -2685,11 +2699,9 @@ struct QualificationRunnerTests {
         defer { fixture.remove() }
         let fake = try QualificationPositionDisplayFake(
             directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
-        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
-        #expect(observed.mutationRestore == nil)
-        #expect(records == 0)
-        #expect(observed.status != .passed)
-        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        // Nothing is credited: the drive ends with `recoveryUnconfirmed` and returns no result.
+        try expectDriveAbortedOverTheDisplayMode(
+            try driveTransportOperations(fixture, commands: [command], display: fake.display))
         let recipe = try recipeRequests(fixture)
         for change in ["play", "stop", "pause", "goto_position", "goto_bar"] {
             #expect(!recipe.contains { $0.contains("\"command\":\"\(change)\"") },
@@ -2708,11 +2720,8 @@ struct QualificationRunnerTests {
         let fake = try QualificationPositionDisplayFake(
             directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
             fault: .laterRestoreNotApplied)
-        let (observed, records) = try driveGoto(fixture, command: command, display: fake.display)
-        #expect(observed.mutationRestore == nil)
-        #expect(records == 0)
-        #expect(observed.status != .passed)
-        #expect(try #require(observed.mutationRestoreRefusal).contains("display mode"), "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        try expectDriveAbortedOverTheDisplayMode(
+            try driveTransportOperations(fixture, commands: [command], display: fake.display))
         let events = displayEvents(fixture)
         #expect(QualificationPositionDisplayFake.containsInOrder(
             ["mode_restore", "mode_read=Beats & Project", command, "mode_switch", "goto_position",
@@ -8523,3 +8532,54 @@ extension QualificationRunnerTests {
         #expect(reason.contains("transport.fast_forward: ui_invariant: observation_unavailable"))
     }
 }
+
+// MARK: A display mode that is not confirmed back ends the drive
+
+extension QualificationRunnerTests {
+    /// The requests the double saw, one JSON object per line, minus the display-mode double's own
+    /// entries: what the drive actually sent.
+    private func sentRequests(_ fixture: SlowHandshakeFixture) -> [String] {
+        ((try? requestLog(fixture)) ?? "").split(separator: "\n")
+            .filter { !$0.contains("\"display_mode\"") }.map(String.init)
+    }
+
+    /// Once a display-mode switch has been attempted and the original mode is not confirmed back,
+    /// the machine is in a state nobody has read. The drive reports `recoveryUnconfirmed` and sends
+    /// nothing for the next operation: its requests are exactly those of the first operation alone.
+    /// A give-back refused after the origin read (nothing recorded yet) and a later give-back that
+    /// reports itself done while the re-read disagrees are the two ways it can happen here.
+    @Test(arguments: [
+        QualificationPositionDisplayFake.Fault.restoreRefused,
+        QualificationPositionDisplayFake.Fault.laterRestoreNotApplied,
+    ])
+    func aDisplayModeNotConfirmedBackEndsTheDriveBeforeTheNextOperationIsSent(
+        fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        func drive(_ commands: [String]) throws -> (outcome: Result<QualificationDriveResult, Error>, sent: [String]) {
+            let fixture = try SlowHandshakeFixture(
+                transportNativePause: true, initialTransportMotion: "paused", displayMode: "Beats & Project")
+            defer { fixture.remove() }
+            let fake = try QualificationPositionDisplayFake(
+                directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
+            let outcome = try driveTransportOperations(fixture, commands: commands, display: fake.display)
+            return (outcome, sentRequests(fixture))
+        }
+        let alone = try drive(["play"])
+        let both = try drive(["play", "stop"])
+        for run in [alone, both] {
+            guard case .failure(let error) = run.outcome else {
+                Issue.record("the drive went on after the display mode was not confirmed back: \(run.sent)")
+                return
+            }
+            let transportError = try #require(error as? QualificationTransportError, "\(error)")
+            #expect(transportError.requiresDriveAbort, "\(transportError)")
+            guard case .recoveryUnconfirmed(let detail) = transportError else {
+                Issue.record("expected recoveryUnconfirmed, got \(transportError)")
+                return
+            }
+            #expect(detail.contains("display mode"), "\(detail)")
+        }
+        #expect(both.sent == alone.sent, "nothing is sent for the second operation: \(both.sent)")
+    }
+}
+
