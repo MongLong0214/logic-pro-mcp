@@ -1062,7 +1062,8 @@ private func makeInstrumentCacheRoot(preset: String) -> LibraryRoot {
         ("track.set_instrument", [:], "Missing path"),
         ("track.set_instrument", ["path": "Bass"], "at least 2 segments"),
         ("plugin.insert", [:], "explicit 'track'"),
-        ("plugin.insert", ["track": "0"], "explicit 'slot'"),
+        ("plugin.insert", ["track": "0"], "measured canon"),
+        ("plugin.insert", ["track": "0", "slot": "x"], "'slot' must be"),
         ("plugin.insert", ["track": "0", "slot": "1"], "unsupported plugin"),
     ]
 

@@ -225,6 +225,37 @@ extension SetupDoctor {
     }
 
 
+    /// #1565: names the two causes behind most "every live operation times out" reports, with the
+    /// fix. A probe that could not read anything passes: no evidence is not a warning.
+    static func logicResponsivenessCheck(runtime: Runtime) -> Check {
+        let liveness = runtime.logicProRunning() ? runtime.logicLiveness() : .unavailable
+        let causes = liveness.likelyCauses
+        var evidence: [String: String] = [:]
+        if let onScreen = liveness.windowOnScreen { evidence["window_on_screen"] = String(onScreen) }
+        if let cpu = liveness.cpuPercent {
+            evidence["logic_cpu_percent"] = String(format: "%.1f", cpu)
+            evidence["main_thread_saturated"] = String(liveness.mainThreadSaturated)
+        }
+        if causes.isEmpty {
+            return check(
+                id: "logic.responsiveness",
+                domain: "logic",
+                status: .pass,
+                summary: "No sign that Logic's window is off this Space or that its main thread is saturated.",
+                evidence: evidence,
+                remediationType: .none
+            )
+        }
+        return check(
+            id: "logic.responsiveness",
+            domain: "logic",
+            status: .warn,
+            summary: causes.joined(separator: "; ") + ".",
+            evidence: evidence,
+            remediationType: .docs
+        )
+    }
+
     static func logicApplicationSummary(running: Bool, visible: Bool) -> String {
         if visible {
             return "Logic Pro is running with a visible window."

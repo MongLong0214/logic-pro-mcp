@@ -363,7 +363,52 @@ extension AXLogicProElements {
     /// etc. as AXCheckBox widgets.
     static func getControlBar(runtime: Runtime = .production) -> AXUIElement? {
         guard let window = mainWindow(runtime: runtime) else { return nil }
+        if PeriodicRead.active {
+            return periodicControlBar(in: window, runtime: runtime.ax)
+        }
         return getControlBar(in: window, runtime: runtime.ax)
+    }
+
+    /// #1565: set by the background poller around its cycle. The periodic transport read must not
+    /// repeat the complete depth-32 window census on every tick (it walks Logic 13's whole Browser
+    /// each time); it reads the control bar it already located. Client reads and write
+    /// verification never set this, so they keep the complete census as their proof.
+    enum PeriodicRead {
+        @TaskLocal static var active = false
+    }
+
+    /// The control bar located by the last complete census, and the window it was found in.
+    final class ControlBarCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var window: AXUIElement?
+        private var bar: AXUIElement?
+        func get() -> (window: AXUIElement, bar: AXUIElement)? {
+            lock.withLock { window.flatMap { w in bar.map { (w, $0) } } }
+        }
+        func set(window: AXUIElement, bar: AXUIElement) { lock.withLock { self.window = window; self.bar = bar } }
+        func clear() { lock.withLock { window = nil; bar = nil } }
+    }
+
+    static let sharedControlBarCache = ControlBarCache()
+
+    /// The cached bar when it is still the same window's labelled group/toolbar (two scalar reads,
+    /// no AXChildren); otherwise one complete locate, which replaces the cache.
+    static func periodicControlBar(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime,
+        cache: ControlBarCache = sharedControlBarCache
+    ) -> AXUIElement? {
+        if let cached = cache.get(), CFEqual(cached.window, window),
+           let role = AXHelpers.getRole(cached.bar, runtime: runtime),
+           role == kAXGroupRole as String || role == kAXToolbarRole as String,
+           AXLocalePolicy.controlBarGroupLabel.matches(
+            AXHelpers.getDescription(cached.bar, runtime: runtime) ?? "", mode: .exactStrict) {
+            return cached.bar
+        }
+        cache.clear()
+        guard let bar = getControlBar(in: window, runtime: runtime) else { return nil }
+        cache.set(window: window, bar: bar)
+        return bar
     }
 
     /// The same discriminator, scoped to the window the caller actually acquired.
@@ -378,6 +423,10 @@ extension AXLogicProElements {
         // find a transport control in. `findControlBarCheckbox` and its siblings all immediately
         // search it for a checkbox, so a candidate holding none cannot be what they meant, whatever
         // it is called.
+        // #1565: a read the server deadline has abandoned is cancelled, and this walk covers the
+        // whole window (Logic 13's Browser included). It must stop at the next node instead of
+        // finishing, or it keeps AccessibilityChannel's actor busy and every later read queues
+        // behind it until it ends. `permittingRead` below is that check.
         var labelled: [AXUIElement] = []
         if runtime.attributeValuesResult != nil {
             // Keep the fresh batched census on healthy trees. Logic 13 can reject a
@@ -387,7 +436,8 @@ extension AXLogicProElements {
             // the complete-traversal bound and ambiguity refusal; no failed branch is skipped.
             let batched = AXHelpers.censusDescendantResult(
                 of: window, role: kAXGroupRole, maxDepth: 32, runtime: runtime,
-                requiresCompleteTraversal: true, batchingRoleAndChildren: true
+                requiresCompleteTraversal: true, batchingRoleAndChildren: true,
+                permittingRead: { !Task.isCancelled }
             )
             let census: AXHelpers.Census
             switch batched {
@@ -422,7 +472,8 @@ extension AXLogicProElements {
                     matching: [kAXGroupRole as String, kAXToolbarRole as String],
                     terminalRoles: [kAXButtonRole as String],
                     maxDepth: 32,
-                    runtime: runtime
+                    runtime: runtime,
+                    permittingRead: { !Task.isCancelled }
                 ) else { return nil }
                 census = observed
             }
@@ -526,7 +577,7 @@ extension AXLogicProElements {
     /// `AXGroup` or `AXToolbar`, so that verified terminal role cannot conceal another candidate.
     /// Container read failures remain unknown and fail the whole census, as do missing roles and a
     /// non-empty tree beyond the depth bound.
-    private static func completeControlBarCensus(
+    static func completeControlBarCensus(
         of root: AXUIElement,
         matching roles: Set<String>,
         terminalRoles: Set<String>,

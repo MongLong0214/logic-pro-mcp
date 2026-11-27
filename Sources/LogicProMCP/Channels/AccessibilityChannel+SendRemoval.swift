@@ -88,7 +88,7 @@ extension AccessibilityChannel {
     }
 
     static func restoreChangedSendObservation(_ changed: ChangedSendObservation,
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming? = nil) async -> CheckedOutputReading {
         await restoreAssignedSendThroughRetainedOccupied(changed, runtime: runtime, timing: timing)
     }
 
@@ -139,7 +139,7 @@ extension AccessibilityChannel {
     /// Explicit internal inverse consumes a native request-local removal proof,
     /// never a freshly published reference or a caller's JSON assertion.
     static func restoreRemovedSendObservation(_ removed: RemovedSendObservation,
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming? = nil) async -> CheckedOutputReading {
         await restoreAssignedSendThroughRetainedEmpty(removed, runtime: runtime, timing: timing)
     }
 
@@ -224,7 +224,7 @@ extension AccessibilityChannel {
     /// of the new send's level, bypass or mode is inferred from the empty slot.
     static func finishFreshSendCreation(original: AXMixerStripBinding.Binding,
         population: [AXUIElement], peerSlots: [[SendSlotObservation]], extras initial: [String: Any],
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming) async -> CheckedOutputReading {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming?) async -> CheckedOutputReading {
         var extras = initial
         func uncertain(_ hint: String) -> CheckedOutputReading {
             extras["hint"] = hint
@@ -321,7 +321,7 @@ extension AccessibilityChannel {
 
     static func finishSendRestoration(_ removed: RemovedSendObservation, original: AXMixerStripBinding.Binding,
         population: [AXUIElement], extras initial: [String: Any], runtime: AXLogicProElements.Runtime,
-        timing: OutputAssignmentTiming) async -> CheckedOutputReading {
+        timing: OutputAssignmentTiming?) async -> CheckedOutputReading {
         var extras = initial
         func uncertain(_ hint: String) -> CheckedOutputReading {
             extras["hint"] = hint
