@@ -45,6 +45,10 @@ enum HonestContract {
         /// `readbackUnavailable` would say the attribute could not be read; here the fact the
         /// client must act on is the open modal, which the reply's `reconciled_modal_kind` names.
         case modalLeftOpen
+        /// The server deadline fired after the operation had already crossed its first write
+        /// boundary (#1565). The write may still land after the reply, so this is neither a clean
+        /// failure (State C) nor a confirmed success: the caller must re-verify with a read.
+        case effectUnknownAfterTimeout
 
         var rawValue: String {
             switch self {
@@ -58,6 +62,7 @@ enum HonestContract {
             case .sagaReconciliationRequired: return "saga_reconciliation_required"
             case .sagaCancellationPending: return "saga_cancellation_pending"
             case .modalLeftOpen: return "modal_left_open"
+            case .effectUnknownAfterTimeout: return "effect_unknown_after_timeout"
             }
         }
     }

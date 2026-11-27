@@ -233,6 +233,7 @@ private func issue26RepositoryRootURL() -> URL {
         "logic.version_support",
         "logic.application_state",
         "logic.blocking_dialog",
+        "logic.responsiveness",
         // #457: keycmd_reference now precedes manual_validation because the approval
         // check declares it as a dependency, and a dependency has to have run before
         // blockingCause can see its status. The order is part of the JSON contract, so

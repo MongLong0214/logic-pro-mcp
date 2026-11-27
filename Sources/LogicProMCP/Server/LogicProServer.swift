@@ -724,7 +724,8 @@ actor LogicProServer {
                     outerAbsoluteDeadline: sagaLifecycleDeadline
                         .map { Self.sagaOuterAbsoluteDeadline(lifecycleDeadline: $0) },
                     mutationGate: sagaControlPath ? nil : mutationGate,
-                    externallyManagedMutation: isSagaExecute
+                    externallyManagedMutation: isSagaExecute,
+                    livenessProbe: LogicLivenessProbe.live
                 ) {
                     if let handler {
                         return await handler(dispatchDependencies, cmdParams)
@@ -752,7 +753,9 @@ actor LogicProServer {
                 // as tool calls. A live-route-backed read on a wedged Logic
                 // session must return a typed operation_timeout body, never leave
                 // the client with no JSON-RPC response.
-                try await Self.runResourceReadWithDeadline(uri: params.uri) {
+                try await Self.runResourceReadWithDeadline(
+                    uri: params.uri, livenessProbe: LogicLivenessProbe.live
+                ) {
                     try await ResourceHandlers.read(
                         uri: params.uri,
                         cache: cache,
@@ -796,7 +799,8 @@ actor LogicProServer {
         mutationMayStillBeRunning: Bool = false,
         mutationGateReclaimableAfterGrace: Bool = true,
         readOnlyPopulationRead: Bool = false,
-        deadlineEffect: DeadlineEffectSnapshot? = nil
+        deadlineEffect: DeadlineEffectSnapshot? = nil,
+        liveness: LogicLiveness = .unavailable
     ) -> CallTool.Result {
         let operation = operationName(tool: tool, command: command)
         var extras: [String: Any] = [
@@ -847,7 +851,6 @@ actor LogicProServer {
                     timeoutHint = "\(operation) reached its deadline before its first Logic write. No MIDI import or later write can start after this response."
                 }
             } else if deadlineEffect.writeAttempted {
-                extras["effect_unknown"] = true
                 timeoutHint = "\(operation) reached its deadline after its first write boundary. The effect is unknown and is not safe to retry; no later routed write can start after this response."
             } else {
                 extras["effect_unknown"] = false
@@ -861,6 +864,20 @@ actor LogicProServer {
             extras["write_attempted"] = false
             extras["navigation_performed"] = false
             extras["safe_to_retry"] = true
+        }
+        extras.merge(liveness.fields) { _, new in new }
+        if deadlineEffect?.writeAttempted == true {
+            // #1565: a write was attempted and may still land, so this is not State C (a clean
+            // failure). It is State B with the outcome unknown; the caller re-verifies with a read.
+            // `success` stays false and the result stays an error: the call did not complete.
+            extras["effect_unknown"] = true
+            extras["success"] = false
+            extras["verified"] = false
+            extras["error"] = HonestContract.FailureError.operationTimeout.rawValue
+            extras["hint"] = timeoutHint
+            extras["recovery_hint"] = "The write may or may not have landed. Re-read the affected state before doing anything else; do not retry blindly."
+            let body = HonestContract.encodeStateB(reason: .effectUnknownAfterTimeout, extras: extras)
+            return toolTextResult(body, isError: true)
         }
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,
@@ -953,6 +970,8 @@ actor LogicProServer {
         outerAbsoluteDeadline: ContinuousClock.Instant? = nil,
         mutationGate: LogicMutationGate? = nil,
         externallyManagedMutation: Bool = false,
+        // #1565: cheap Logic liveness probe, run only when the deadline fires. nil in unit tests.
+        livenessProbe: (@Sendable () -> LogicLiveness)? = nil,
         work: @escaping @Sendable () async -> CallTool.Result
     ) async -> CallTool.Result {
         let deadline = deadlineOverride ?? commandDeadlineSeconds(tool: tool, command: command)
@@ -1055,7 +1074,8 @@ actor LogicProServer {
                         mutationGateReclaimableAfterGrace: !externallyManagedMutation,
                         readOnlyPopulationRead: freshPopulationRead
                             && commandParams["allow_ui_navigation"]?.boolValue != true,
-                        deadlineEffect: mutatingCommand ? timeout.effect : nil
+                        deadlineEffect: mutatingCommand ? timeout.effect : nil,
+                        liveness: livenessProbe?() ?? .unavailable
                     )
                     continuation.resume(returning: result)
                     workTask.cancel()
@@ -1112,11 +1132,13 @@ actor LogicProServer {
     /// Typed `operation_timeout` envelope returned as the resource body when a
     /// read exceeds its deadline — a bounded JSON-RPC response the client can
     /// classify, instead of a hang with no response.
-    static func resourceReadTimeoutResult(uri: String, seconds: Double) -> ReadResource.Result {
+    static func resourceReadTimeoutResult(
+        uri: String, seconds: Double, liveness: LogicLiveness = .unavailable
+    ) -> ReadResource.Result {
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,
             hint: "Resource read \(uri) exceeded the \(Int(seconds))s server-side deadline and was abandoned so the stdio loop stays responsive.",
-            extras: [
+            extras: liveness.fields.merging([
                 "uri": uri,
                 "timeout_sec": seconds,
                 "recovery_hint": "The read reached its finite deadline and terminated without changing Logic; bounded callers may issue a fresh read under their existing policy.",
@@ -1127,7 +1149,7 @@ actor LogicProServer {
                 "human_dependent_transitions": 0,
                 "safe_to_retry": true,
                 "write_attempted": false,
-            ]
+            ] as [String: Any]) { _, new in new }
         )
         return ReadResource.Result(contents: [.text(body, uri: uri, mimeType: "application/json")])
     }
@@ -1141,6 +1163,7 @@ actor LogicProServer {
     static func runResourceReadWithDeadline(
         uri: String,
         deadlineOverride: Double? = nil,
+        livenessProbe: (@Sendable () -> LogicLiveness)? = nil,
         work: @escaping @Sendable () async throws -> ReadResource.Result
     ) async throws -> ReadResource.Result {
         let deadline = deadlineOverride ?? resourceReadDeadlineSeconds
@@ -1158,7 +1181,9 @@ actor LogicProServer {
             let timeoutTask = DispatchWorkItem {
                 let didWin = race.resume(
                     continuation,
-                    returning: Self.resourceReadTimeoutResult(uri: uri, seconds: deadline)
+                    returning: Self.resourceReadTimeoutResult(
+                        uri: uri, seconds: deadline, liveness: livenessProbe?() ?? .unavailable
+                    )
                 )
                 if didWin {
                     workTask.cancel()
