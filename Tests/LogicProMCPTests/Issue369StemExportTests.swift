@@ -438,6 +438,7 @@ private final class DestinationBrowserFixtureState: @unchecked Sendable {
     private let volumeRootEntriesAfterSelection: [String]?
     private var navigationNowNanos: UInt64 = 0
     private(set) var selectedChildrenWrites: [(listID: Int, selectedGroupID: Int)] = []
+    private(set) var selectedRowsWrites = 0
     private(set) var selectionEchoCount = 0
     private(set) var actions: [(elementID: Int, action: String)] = []
 
@@ -465,6 +466,7 @@ private final class DestinationBrowserFixtureState: @unchecked Sendable {
     func handleWrite(_ element: AXUIElement, _ attribute: String, _ value: CFTypeRef) -> Bool {
         if attribute == (kAXSelectedRowsAttribute as String),
            outlineID == builder.elementID(element) {
+            selectedRowsWrites += 1
             builder.setAttribute(element, attribute, value)
             if let volumeRootEntriesAfterSelection {
                 appendColumn(entries: volumeRootEntriesAfterSelection)
@@ -540,6 +542,23 @@ private final class DestinationBrowserFixtureState: @unchecked Sendable {
     }
 }
 
+private final class OutlineChildrenReadFailure: @unchecked Sendable {
+    private let lock = NSLock()
+    private var reads = 0
+    private let failingRead: Int
+
+    init(failingRead: Int) {
+        self.failingRead = failingRead
+    }
+
+    func shouldFail() -> Bool {
+        lock.withLock {
+            reads += 1
+            return reads == failingRead
+        }
+    }
+}
+
 private struct DestinationBrowserAXFixture {
     let runtime: AXLogicProElements.Runtime
     let state: DestinationBrowserFixtureState
@@ -550,6 +569,9 @@ private struct DestinationBrowserAXFixture {
         acceptsWrite: Bool = true,
         navigationOccurs: Bool = true,
         volumeName: String? = nil,
+        sidebarRowNames: [String]? = nil,
+        additionalOutlineRows: [[String]] = [],
+        unreadableOutlineIndex: Int? = nil,
         volumeRootEntriesAfterSelection: [String]? = nil
     ) {
         let builder = FakeAXRuntimeBuilder()
@@ -576,22 +598,43 @@ private struct DestinationBrowserAXFixture {
             panelChildren.append(option)
         }
         panelChildren += [export, cancel]
-        let outline: AXUIElement?
-        if let volumeName {
-            let outlineElement = builder.element(6)
-            let row = builder.element(7)
-            let text = builder.element(8)
-            builder.setRole(outlineElement, kAXOutlineRole as String)
-            builder.setRole(row, kAXRowRole as String)
-            builder.setRole(text, kAXStaticTextRole as String)
-            builder.setAttribute(text, kAXValueAttribute as String, volumeName)
-            builder.setChildren(row, [text])
-            builder.setChildren(outlineElement, [row])
-            panelChildren.append(outlineElement)
-            outline = outlineElement
-        } else {
-            outline = nil
+        var outlines: [AXUIElement] = []
+        var nextOutlineElementID = 30
+        func makeOutline(rowNames: [String]) -> AXUIElement {
+            let outline = builder.element(nextOutlineElementID)
+            nextOutlineElementID += 1
+            builder.setRole(outline, kAXOutlineRole as String)
+            var rows: [AXUIElement] = []
+            for rowName in rowNames {
+                let row = builder.element(nextOutlineElementID)
+                nextOutlineElementID += 1
+                let text = builder.element(nextOutlineElementID)
+                nextOutlineElementID += 1
+                builder.setRole(row, kAXRowRole as String)
+                builder.setRole(text, kAXStaticTextRole as String)
+                builder.setAttribute(text, kAXValueAttribute as String, rowName)
+                builder.setChildren(row, [text])
+                rows.append(row)
+            }
+            builder.setChildren(outline, rows)
+            return outline
         }
+
+        if let volumeName {
+            outlines.append(makeOutline(rowNames: sidebarRowNames ?? [volumeName]))
+        }
+        for rowNames in additionalOutlineRows {
+            outlines.append(makeOutline(rowNames: rowNames))
+        }
+        panelChildren.append(contentsOf: outlines)
+        let outline = outlines.first
+        let unreadableOutline = unreadableOutlineIndex.flatMap { index in
+            outlines.indices.contains(index) ? outlines[index] : nil
+        }
+        // Panel identity and the initial browser-path census each walk the
+        // outline once. Fail the next children read so the fixture targets the
+        // volume-outline census rather than making the panel itself disappear.
+        let outlineReadFailure = OutlineChildrenReadFailure(failingRead: 3)
         builder.setChildren(panel, panelChildren)
         builder.setAttribute(app, kAXWindowsAttribute as String, [panel])
 
@@ -608,6 +651,14 @@ private struct DestinationBrowserAXFixture {
         self.state = state
         runtime = builder.makeLogicRuntime(
             appElement: app,
+            childrenResultHandler: { element in
+                if let unreadableOutline,
+                   CFEqual(element, unreadableOutline),
+                   outlineReadFailure.shouldFail() {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                return nil
+            },
             setAttributeHandler: { element, attribute, value in
                 state.handleWrite(element, attribute, value)
             },
@@ -990,6 +1041,95 @@ struct Issue369StemExportTests {
         )
         let refusedWrongRootListing = result == expected
         #expect(refusedWrongRootListing)
+    }
+
+    @Test("a unique volume sidebar is selected when a list-view browser outline has no matching row")
+    func volumeSidebarIgnoresUnrelatedListViewOutline() throws {
+        let root = URL(fileURLWithPath: "/")
+        let values = try root.resourceValues(forKeys: [.volumeNameKey])
+        let volumeName = try #require(values.volumeName)
+        let fixture = DestinationBrowserAXFixture(
+            initialEntries: [],
+            childrenByPath: [:],
+            volumeName: volumeName,
+            additionalOutlineRows: [["Name", "Size", "Kind"]],
+            volumeRootEntriesAfterSelection: ["/Users"]
+        )
+
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: "/")
+
+        let selectedSidebar = result == .selected
+        #expect(selectedSidebar)
+        #expect(fixture.state.selectedRowsWrites == 1)
+    }
+
+    @Test("a list-view outline with the same display name remains ambiguous")
+    func volumeSidebarRefusesMatchingDecoyOutline() throws {
+        let root = URL(fileURLWithPath: "/")
+        let values = try root.resourceValues(forKeys: [.volumeNameKey])
+        let volumeName = try #require(values.volumeName)
+        let fixture = DestinationBrowserAXFixture(
+            initialEntries: [],
+            childrenByPath: [:],
+            volumeName: volumeName,
+            additionalOutlineRows: [[volumeName]],
+            volumeRootEntriesAfterSelection: ["/Users"]
+        )
+
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: "/")
+
+        let expected = ProjectStemExportPanelDriver.DestinationSelection.refused(
+            "stem_destination_volume_outline_not_uniquely_resolvable"
+        )
+        let refusedAmbiguousOutlines = result == expected
+        #expect(refusedAmbiguousOutlines)
+        #expect(fixture.state.selectedRowsWrites == 0)
+    }
+
+    @Test("duplicate matching rows in one sidebar remain ambiguous")
+    func volumeSidebarRefusesDuplicateMatchingRows() throws {
+        let root = URL(fileURLWithPath: "/")
+        let values = try root.resourceValues(forKeys: [.volumeNameKey])
+        let volumeName = try #require(values.volumeName)
+        let fixture = DestinationBrowserAXFixture(
+            initialEntries: [],
+            childrenByPath: [:],
+            volumeName: volumeName,
+            sidebarRowNames: [volumeName, volumeName],
+            volumeRootEntriesAfterSelection: ["/Users"]
+        )
+
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: "/")
+
+        let expected = ProjectStemExportPanelDriver.DestinationSelection.refused(
+            "stem_destination_volume_row_not_uniquely_resolvable:\(volumeName)"
+        )
+        let refusedDuplicateRows = result == expected
+        #expect(refusedDuplicateRows)
+        #expect(fixture.state.selectedRowsWrites == 0)
+    }
+
+    @Test("an unreadable outline census refuses without selecting")
+    func volumeSidebarRefusesUnreadableOutline() throws {
+        let root = URL(fileURLWithPath: "/")
+        let values = try root.resourceValues(forKeys: [.volumeNameKey])
+        let volumeName = try #require(values.volumeName)
+        let fixture = DestinationBrowserAXFixture(
+            initialEntries: [],
+            childrenByPath: [:],
+            volumeName: volumeName,
+            unreadableOutlineIndex: 0,
+            volumeRootEntriesAfterSelection: ["/Users"]
+        )
+
+        let result = fixture.makeSurface().selectDestinationBrowserElement(at: "/")
+
+        let expected = ProjectStemExportPanelDriver.DestinationSelection.refused(
+            "readback_unavailable: stem_destination_volume_outline_census_unreadable"
+        )
+        let refusedUnreadableOutline = result == expected
+        #expect(refusedUnreadableOutline, "observed \(result)")
+        #expect(fixture.state.selectedRowsWrites == 0)
     }
 
     @Test("the destination popup is identified by carrying a title, not by traversal order")

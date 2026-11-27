@@ -301,6 +301,9 @@ enum SetupDoctor {
         let logicProHasVisibleWindow: () -> Bool
         let runCommand: (String, [String]) -> CommandResult
         let readClaudeRegistration: () -> ClaudeRegistration
+        // #1565: cheap Logic window/CPU probe. Defaults to "not probed" so tests never read
+        // whichever Logic happens to be running; `.production` supplies the live probe.
+        var logicLiveness: () -> LogicLiveness = { .unavailable }
         // v2 seams. Defaults keep every existing `Runtime(...)` construction site
         // compiling; `.production` and the test helper supply real/fake impls.
         var macOSVersion: () -> OperatingSystemVersion? = { ProcessInfo.processInfo.operatingSystemVersion }
@@ -359,7 +362,8 @@ enum SetupDoctor {
             },
             readClaudeRegistration: {
                 SetupDoctor.readProductionClaudeRegistration()
-            }
+            },
+            logicLiveness: { LogicLivenessProbe.live() }
         )
     }
 

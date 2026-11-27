@@ -23,6 +23,7 @@ extension SetupDoctor {
         case logicVersionSupport = "logic.version_support"
         case logicApplicationState = "logic.application_state"
         case logicBlockingDialog = "logic.blocking_dialog"
+        case logicResponsiveness = "logic.responsiveness"
         case channelsManualValidation = "channels.manual_validation"
         case channelsKeycmdReference = "channels.keycmd_reference"
         case channelsMCUWiringHint = "channels.mcu_wiring_hint"
@@ -113,6 +114,7 @@ extension SetupDoctor {
         .init(.logicVersionSupport, dependencies: [.logicInstallation], capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-logicversion-support"),
         .init(.logicApplicationState, capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-logicapplication-state"),
         .init(.logicBlockingDialog, dependencies: [.logicApplicationState, .permissionsAccessibility], capabilityGroups: ["track_management", "mixer_ax", "verified_plugin_applyback"], remediationAnchor: "docs/SETUP.md#doctor-logicblocking-dialog"),
+        .init(.logicResponsiveness, remediationAnchor: "docs/SETUP.md#doctor-logicresponsiveness"),
         .init(.channelsKeycmdReference, capabilityGroups: ["keycmd_only_ops"], remediationAnchor: "docs/SETUP.md#doctor-channelskeycmd-reference", profileRule: "keycmd|full"),
         // #457: neither a reference file nor a legacy assertion configures or
         // verifies Logic, so this terminal check has no actionable dependency.
