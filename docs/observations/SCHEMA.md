@@ -99,6 +99,9 @@ true of a different application.
    `--check` compares existing records against it. `app`, `version`, `build` and `os` are
    required, and `Scripts/observations-status.py` reports every record whose `version`,
    `build` or `os` differs from what is installed.
+   `Scripts/locale_labels.py` also binds every measured label cell to the record's `version` and `build`
+   (`unknown` where the record states none) and to a digest of the record and its evidence; the Logic the
+   ledger is judged against is declared once, in `AXLocalePolicy.swift` (ADR-019 D9).
 
    This rule is written the strong way because of what happened without it: on 2026-09-04 all
    nine records in the tree claimed `macOS 26.6` on a machine that has run `macOS 26.3` since

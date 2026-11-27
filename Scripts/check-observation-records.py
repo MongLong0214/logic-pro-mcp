@@ -16,6 +16,7 @@ properties keep it usable, and each is a real failure this repository has had:
   * `id` must equal the filename stem, so a record can be cited and then found.
 """
 import glob
+import importlib.util
 import json
 import os
 import shlex
@@ -50,29 +51,34 @@ LABELS_DOC = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 
 
 def declared_logic_build(repo_dir):
-    """The build every reading in this repository is understood to describe, or a reason it is not
-    readable.
+    """The Logic every reading in this repository is judged against, or a reason it is not readable.
+
+    Declared in ONE place: `AXLocalePolicy.currentLogicVersion` / `currentLogicBuild` in Swift. It was
+    a JSON file (`docs/observations/LOGIC-BUILD.json`) until the ledger gained a version axis; two
+    declarations of the current Logic is two places for it to be wrong, so that file is gone and
+    `Scripts/locale_labels.py --check` refuses it if it comes back.
 
     Absence is a FAILURE here and silence in `check-observation-ratchets.py`: that guard computes
-    "readings from a superseded build" against this declaration, and with the file missing it has
+    "readings from a superseded build" against this declaration, and with it missing it has
     nothing to compare to, so both dimensions come back empty and the drift is uncounted. A
     dimension that reads clean because its input vanished is the worst of the three ways to be
-    wrong, so the file's existence is asserted where a failure is loud.
+    wrong, so the declaration's existence is asserted where a failure is loud.
     """
-    path = os.path.join(repo_dir, "docs", "observations", "LOGIC-BUILD.json")
-    if not os.path.exists(path):
-        return None, ("docs/observations/LOGIC-BUILD.json is missing. It declares the Logic build "
-                      "every reading describes, and check-observation-ratchets.py counts drift "
-                      "against it -- without the file that count is silently zero")
+    spec = importlib.util.spec_from_file_location(
+        "locale_release_for_records", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                   "locale_release.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    swift = os.path.join(repo_dir, module.SWIFT_RELATIVE)
     try:
-        with open(path, encoding="utf-8") as handle:
-            doc = json.load(handle)
+        declared = module.declared_logic(swift)
     except ValueError as exc:
-        return None, f"docs/observations/LOGIC-BUILD.json: {exc}"
-    for key in ("app", "version", "build"):
-        if not str(doc.get(key) or "").strip():
-            return None, f"docs/observations/LOGIC-BUILD.json: `{key}` is missing or empty"
-    return doc, None
+        return None, str(exc)
+    if declared is None:
+        return None, ("AXLocalePolicy.swift declares no `currentLogicVersion`/`currentLogicBuild`. "
+                      "It declares the Logic every reading describes, and check-observation-ratchets.py "
+                      "counts drift against it -- without it that count is silently zero")
+    return declared, None
 
 
 def known_surfaces():

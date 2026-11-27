@@ -53,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
       - name: Classify changed paths
         id: scope
@@ -94,6 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Verify pinned Apple corpus, citations and every declared locale
@@ -113,6 +115,7 @@ jobs:
           python3 Scripts/check-locale-labels-json.py
           python3 Scripts/check-observation-records.py
           python3 Scripts/check-observation-ratchets.py
+          python3 Scripts/check-observation-size.py
 
       - name: Mutation drives prove tampering, stale canon and wrong locale maps fail
         run: |
@@ -128,7 +131,16 @@ jobs:
             Scripts/test_labelsets_are_derived.py
             Scripts/test_new_labelsets_name_a_row.py
             Scripts/test_locale_detection_is_derived.py
+            Scripts/test_locale_campaign.py
+            Scripts/test_locale_census.py
+            Scripts/test_locale_rules.py
+            Scripts/test_locale_campaign_script.py
+            Scripts/test_observation_size.py
+            Scripts/test_lfs_checkout.py
+            Scripts/test_logic_build_drift_agent.py
+            Scripts/test_locale_nav.py
             Scripts/test_locale_labels_json.py
+            Scripts/test_locale_version_axis.py
             Scripts/test_policy_literals_against_canon.py
             Scripts/test_observation_records.py
             Scripts/test_observation_ratchets.py
@@ -147,6 +159,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Cache SwiftPM downloads
@@ -216,6 +229,7 @@ jobs:
             Scripts/test_live_e2e_bridge.py
             Scripts/test_ci_coverage_gate.py
             Scripts/test_ci_test_shard_manifest.py
+            Scripts/test_ci_incremental_build.py
             Scripts/run-helper-suites.py
           )
           pids=()
@@ -237,9 +251,14 @@ jobs:
     timeout-minutes: 130
     env:
       DEVELOPER_DIR: /Library/Developer/CommandLineTools
+      # The one definition of the build, used for the cache key and for the build itself, so a
+      # changed flag cannot keep using a cache made with the old ones. The same line is in
+      # test-build-cache.yml, which seeds the cache from main; a contract test keeps them equal.
+      TEST_BUILD_COMMAND: swift build --build-tests --enable-code-coverage -Xswiftc -suppress-warnings
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
 
       # Whether the Formula's version is published, and whether its sha256 is that release's,
@@ -269,6 +288,30 @@ jobs:
           uname -m
           sw_vers
 
+      # Incremental test build. `.build` is restored from the newest cache that main saved
+      # (test-build-cache.yml, which runs on every push to main that changes a build input) and
+      # is never saved from here: GitHub lets a pull request read main's caches but not another
+      # pull request's, and a cache per push would push main's out of the 10 GB limit. The key
+      # names the runner image, the exact toolchain, the exact build command and the package
+      # lock, so none of those can reuse another's products. Scripts/ci-incremental-build.sh
+      # then restores each unchanged file's recorded mtime (a fresh checkout stamps everything
+      # "now", which makes SwiftPM recompile all 508 test files) and lets `swift build` decide
+      # the rest; if that build fails on a restored cache it is retried from a clean `.build`.
+      - name: Name the incremental build cache
+        id: build-cache
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # the command is deliberately split into words
+          echo "prefix=$(bash Scripts/ci-incremental-build.sh key $TEST_BUILD_COMMAND)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the incremental build cache
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .build
+          key: ${{ steps.build-cache.outputs.prefix }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ steps.build-cache.outputs.prefix }}-${{ hashFiles('Package.resolved', 'Package.swift') }}-
+
       - name: Build one coverage runtime and exact shard manifests
         run: |
           set -euo pipefail
@@ -276,7 +319,8 @@ jobs:
           PROFRAW_DIR="$RUNNER_TEMP/logicpromcp-build-profraw"
           mkdir -p "$artifact" "$PROFRAW_DIR"
           export LLVM_PROFILE_FILE="$PROFRAW_DIR/%m-%p.profraw"
-          swift build --build-tests --enable-code-coverage -Xswiftc -suppress-warnings
+          # shellcheck disable=SC2086 # the command is deliberately split into words
+          bash Scripts/ci-incremental-build.sh build $TEST_BUILD_COMMAND
           git diff --exit-code Package.resolved
           swift test list --skip-build > "$artifact/inventory-raw.txt"
           LC_ALL=C sort "$artifact/inventory-raw.txt" > "$artifact/inventory.txt"
@@ -319,6 +363,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Use Command Line Tools
@@ -445,6 +490,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         if: ${{ needs.change-scope.outputs.full-validation == 'true' && needs.release-build.result == 'success' && needs.test-build.result == 'success' && needs.test-shards.result == 'success' }}
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Use Command Line Tools

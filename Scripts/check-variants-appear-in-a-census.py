@@ -24,6 +24,7 @@ was the Mixer's. That ratio is why this prints rather than fails.
 """
 import difflib
 import glob
+import importlib.util
 import json
 import os
 import re
@@ -31,6 +32,16 @@ import sys
 import unicodedata
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _census_evidence():
+    """`Scripts/census_evidence.py`, which reads census evidence whether it is JSON Lines or JSON."""
+    spec = importlib.util.spec_from_file_location(
+        "census_evidence_for_guard", os.path.join(os.path.dirname(os.path.abspath(__file__)), "census_evidence.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 OBS = os.path.join(REPO, "docs", "observations")
 LABELS = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 NEAR = 0.86          # measured; below this the list is noise, above it every hit was worth reading
@@ -213,9 +224,9 @@ def _affix_of(text, bag, mode="exact"):
 def census_strings():
     """{locale: {every string that locale's censuses carried}}."""
     out = {}
-    for path in sorted(glob.glob(os.path.join(OBS, "evidence", "*.census.json"))):
+    for path in sorted(glob.glob(os.path.join(OBS, "evidence", "*.census.json*"))):
         try:
-            doc = json.load(open(path, encoding="utf-8"))
+            doc = _census_evidence().load(path)
         except (OSError, ValueError):
             continue
         loc = (doc.get("host") or {}).get("locale")

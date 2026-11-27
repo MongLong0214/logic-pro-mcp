@@ -11,8 +11,23 @@ Swift cannot hold: **where each variant was measured**. Swift stays the compiled
 the build is unaffected; the JSON is generated from it and checked against it, and everything that
 cannot import Swift reads the JSON instead of guessing.
 
-    Scripts/locale_labels.py --write     regenerate the JSON from AXLocalePolicy.swift
-    Scripts/locale_labels.py --check     exit 1 if they disagree
+    Scripts/locale_labels.py --write     regenerate the JSON from AXLocalePolicy.swift (refuses while a
+                                         measurement is not bound to a record that exists and matches it)
+    Scripts/locale_labels.py --write --rebind
+                                         the reviewed act: re-bind digests to records as they are now,
+                                         and drop readings whose record no longer exists
+    Scripts/locale_labels.py --write --bind-record ID
+                                         bind a block that has no digest yet to this record (the census
+                                         records `locale-regenerate.py` has just cited)
+    Scripts/locale_labels.py --check     exit 1 unless every generated artifact is BYTE-identical to what
+                                         this would write, every measured cell is bound to its record, and
+                                         the current Logic is declared once
+    Scripts/locale_labels.py --report    per locale, how many cells are measured on the declared Logic
+
+SCHEMA 3 adds the version axis: the Logic release is declared once, in Swift (`AXLocalePolicy.
+currentLogicVersion`/`currentLogicBuild`, projected as `logic`), and each measurement carries the version
+and build of the record that read it, bound by a digest. See the block headed THE VERSION AXIS below and
+ADR-019 D9.
 
 `provenance` (schema 2; `measured` in schema 1) is where "the variants list grows when a locale is
 observed, not when one is translated" stops being a comment and becomes data: each variant names
@@ -21,9 +36,11 @@ string that was read. `coverage` says, per supported locale, what is KNOWN about
 `measured` (a record in that locale saw one of its strings), `identifier` (addressed by a
 locale-free AXIdentifier, and a record saw it), or `unmeasured`, the only one that is a gap. ADR-019.
 """
+import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import textwrap
 
@@ -341,26 +358,26 @@ def _locale_code(locale: str) -> str:
     return _LPROJ.get(locale) or locale.split("-")[0]
 
 
-def _apple_ships(entry: dict, locale: str) -> bool:
-    """Whether Apple's own corpus holds one of this label's strings in this locale, up to case.
+#: The rules a `derived` cell can name. A derived cell is not a measurement: it says Apple's own corpus
+#: holds one of this label's strings in this locale, and `coverage_derived` names which corpus, which
+#: locale file, which rule and which string, so the claim can be re-derived rather than believed.
+DERIVED_RULES = ("ships_up_to_case", "composed_value")
 
-    Offline: `docs/canon/ledger/` is committed. A repository without the canon axis gets False for
+
+def _apple_derivation(entry: dict, locale: str):
+    """What Apple's own corpus says about this label in this locale, as `source:lproj:rule:string`.
+
+    `None` when it says nothing. The answer names the corpus (`source`), the `.lproj` the string was
+    found in, the rule that decided it counts, and the string itself -- so a `derived` cell can be
+    audited and re-derived instead of being a bare word. First match in manifest order, so the answer
+    is deterministic.
+
+    Offline: `docs/canon/ledger/` is committed. A repository without the canon axis gets None for
     everything, which leaves the old behaviour exactly as it was.
     """
-    if "canon" not in _CANON_CACHE:
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(
-                "logic_canon_for_labels", os.path.join(REPO, "Scripts", "logic_canon.py"))
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            _CANON_CACHE["canon"] = module
-            _CANON_CACHE["manifest"] = module.load_manifest()
-        except Exception:
-            _CANON_CACHE["canon"] = None
+    if _load_canon() is None:
+        return None
     canon = _CANON_CACHE.get("canon")
-    if canon is None:
-        return False
     code = _locale_code(locale)
     strings = [entry.get("canonical")] + list(entry.get("variants") or [])
     # A string Logic COMPOSES is Apple's too. `Show %@` with a noun means `Afficher Bibliothèque`
@@ -385,7 +402,7 @@ def _apple_ships(entry: dict, locale: str) -> bool:
             if not text:
                 continue
             if text in composed:
-                return True
+                return f"{source}:{code}:composed_value:{text}"
             # Up to case, because that is how every match mode the ledger records compares. Asked
             # byte for byte, `mixer` read as unshipped in German, where Logic's row is `Mixer` and
             # the product matches it (#981). Decoration still counts: `Mixer:` is not `mixer`.
@@ -394,8 +411,13 @@ def _apple_ships(entry: dict, locale: str) -> bool:
             # A missing or malformed ledger file raises rather than reading as "Apple ships
             # nothing", the way a mistyped locale code once did here.
             if canon.ships_up_to_case(source, code, text):
-                return True
-    return False
+                return f"{source}:{code}:ships_up_to_case:{text}"
+    return None
+
+
+def _apple_ships(entry: dict, locale: str) -> bool:
+    """Whether Apple's own corpus holds one of this label's strings in this locale, up to case."""
+    return _apple_derivation(entry, locale) is not None
 
 
 # Swift string escapes this projection has to decode. `\\u{...}` matters more than it looks: the
@@ -697,6 +719,405 @@ _PREFIX = swift_prefix()
 _TEMPLATE = swift_template()
 
 
+# ---------------------------------------------------------------------------------------------------
+# THE VERSION AXIS (schema 3)
+#
+# The ledger used to say WHAT was read and WHERE, and never WHICH LOGIC. A Logic update therefore left
+# every reading still marked `measured`, and nothing could say that the string had been read on a
+# release nobody runs any more. Three rules close that, and each is mechanical:
+#
+#   1. ONE declaration of the current release: `AXLocalePolicy.currentLogicVersion` / `...Build` in
+#      Swift. The JSON projects it (`logic`); `restatement_problems` refuses a second statement.
+#   2. Every `measured` / `identifier` cell is bound to the observation record that read it by the
+#      record's version, its build and a SHA-256 over the record's bytes and the evidence files it
+#      cites. Not by a path alone: editing or deleting the record changes the digest, and a cell whose
+#      record is missing, unreadable or changed never reads as `measured`. Unreadable fails closed.
+#   3. A cell's CURRENCY is computed, not written: `current` only when a verified reading names the
+#      declared release; `superseded` when it names another; `unknown_version` when the record states
+#      none (never guessed); `unverified` when no reading could be verified. `derived` and
+#      `unmeasured` are not measurements and are never `current`.
+# ---------------------------------------------------------------------------------------------------
+SCHEMA = 3
+OBS_DIR = os.environ.get("LPM_OBSERVATIONS_DIR") or os.path.join(REPO, "docs", "observations")
+UNKNOWN = "unknown"
+#: Cell classes, best first. Only `current` is a measurement on the declared Logic. `retired` is
+#: excused and is neither a gap nor a reading; everything else is "not measured on the current version".
+CURRENCY_CLASSES = ("current", "superseded", "unknown_version", "unverified", "derived",
+                    "unmeasured", "retired")
+def _release_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "locale_release_for_labels", os.path.join(REPO, "Scripts", "locale_release.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def declared_logic(swift_path=SWIFT):
+    """`{"app", "version", "build"}` the Swift declares as the current Logic, or None without one.
+
+    The parser is `Scripts/locale_release.py`, shared with every other reader of the declaration.
+    """
+    return _release_module().declared_logic(swift_path)
+
+
+def current_logic():
+    """The declared release, or a refusal: a ledger with no declared Logic cannot be classified."""
+    try:
+        declared = declared_logic()
+    except ValueError as exc:
+        raise SystemExit(str(exc))
+    if declared is None:
+        raise SystemExit(f"{SWIFT} declares no `currentLogicVersion`/`currentLogicBuild`")
+    return declared
+
+
+_DIGEST_CACHE = {}
+
+
+def record_facts(record_id, obs_dir=None):
+    """What an observation record states and its digest, or why it cannot be read.
+
+    `status` is `ok`, `missing` or `unreadable`; anything but `ok` carries nothing else. The digest
+    covers the record's own bytes AND the bytes of every evidence file it cites, in the order it cites
+    them: the rows a string is read from live in the evidence file, so a digest over the record alone
+    would let the evidence be rewritten under an unchanged record. A cited file that is absent makes
+    the record `unreadable` -- a record whose evidence is gone has nothing left to bind to.
+
+    Version and build are the record's `host`; absent, or `host.binding == "unknown"`, they are
+    `unknown` and are never inferred from the date, the filename or the neighbouring records.
+    """
+    obs_dir = obs_dir or OBS_DIR
+    if (not record_id or not isinstance(record_id, str) or "/" in record_id
+            or record_id in (".", "..")):
+        return {"status": "missing"}
+    path = os.path.join(obs_dir, f"{record_id}.json")
+    try:
+        with open(path, "rb") as handle:
+            raw = handle.read()
+    except OSError:
+        return {"status": "missing"}
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        return {"status": "unreadable"}
+    if not isinstance(doc, dict):
+        return {"status": "unreadable"}
+    evidence = doc.get("evidence") or []
+    if not isinstance(evidence, list):
+        return {"status": "unreadable"}
+    signature = [hashlib.sha256(raw).hexdigest()]
+    paths = []
+    for rel in evidence:
+        if not isinstance(rel, str) or not rel or os.path.isabs(rel):
+            return {"status": "unreadable"}
+        full = os.path.normpath(os.path.join(obs_dir, rel))
+        if os.path.commonpath([full, os.path.normpath(obs_dir)]) != os.path.normpath(obs_dir):
+            return {"status": "unreadable"}
+        try:
+            stat = os.stat(full)
+        except OSError:
+            return {"status": "unreadable"}
+        paths.append((rel, full))
+        signature.append((rel, stat.st_mtime_ns, stat.st_size))
+    key = (path, tuple(map(str, signature)))
+    digest = _DIGEST_CACHE.get(key)
+    if digest is None:
+        h = hashlib.sha256()
+        h.update(raw)
+        for rel, full in paths:
+            try:
+                with open(full, "rb") as handle:
+                    body = handle.read()
+            except OSError:
+                return {"status": "unreadable"}
+            h.update(b"\0" + rel.encode("utf-8") + b"\0" + body)
+        digest = _DIGEST_CACHE[key] = h.hexdigest()
+    host = doc.get("host") if isinstance(doc.get("host"), dict) else {}
+    unbound = host.get("binding") == UNKNOWN
+    version = "" if unbound else str(host.get("version") or "").strip()
+    build = "" if unbound else str(host.get("build") or "").strip()
+    return {"status": "ok", "sha256": digest, "locale": host.get("locale"),
+            "version": version or UNKNOWN, "build": build or UNKNOWN}
+
+
+_STRINGS_CACHE = {}
+
+
+def _census_evidence():
+    """`Scripts/census_evidence.py`: the reader for evidence that is JSON Lines as well as JSON."""
+    if "census_evidence" not in _CANON_CACHE:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "census_evidence_for_labels", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                       "census_evidence.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _CANON_CACHE["census_evidence"] = module
+    return _CANON_CACHE["census_evidence"]
+
+
+def _walk_strings(node, into):
+    if isinstance(node, str):
+        into.add(node)
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            if isinstance(key, str):
+                into.add(key)
+            _walk_strings(value, into)
+    elif isinstance(node, list):
+        for value in node:
+            _walk_strings(value, into)
+
+
+def record_strings(record_id, obs_dir=None):
+    """Every string value in a record and in the evidence files it cites, or None if unreadable.
+
+    This is what lets a cell's `observed` be held to "the exact string": it has to be one of the values
+    the record or its evidence actually carries, character for character.
+    """
+    obs_dir = obs_dir or OBS_DIR
+    facts = record_facts(record_id, obs_dir)
+    if facts["status"] != "ok":
+        return None
+    key = (os.path.join(obs_dir, f"{record_id}.json"), facts["sha256"])
+    if key not in _STRINGS_CACHE:
+        found = set()
+        try:
+            with open(key[0], encoding="utf-8") as handle:
+                doc = json.load(handle)
+            _walk_strings(doc, found)
+            for rel in doc.get("evidence") or []:
+                _walk_strings(_census_evidence().load(os.path.join(obs_dir, rel)), found)
+        except (OSError, ValueError):
+            return None
+        _STRINGS_CACHE[key] = frozenset(found)
+    return _STRINGS_CACHE[key]
+
+
+def binding_problems(record_id, locale, sha, version, build, obs_dir=None, observed=None):
+    """Why a reading's claim about its record is not true. Empty means it is bound and verified.
+
+    Checked against the record AS IT IS NOW: it must exist and be readable, its bytes (and its
+    evidence's) must hash to the digest the cell carries, it must have been taken in the locale the
+    cell claims, and it must state the version and build the cell carries. With `observed`, the exact
+    string the cell quotes must be a value the record or its evidence carries.
+    """
+    facts = record_facts(record_id, obs_dir)
+    if facts["status"] != "ok":
+        return [f"record {record_id!r} is {facts['status']}"]
+    out = []
+    if not sha:
+        out.append(f"carries no record_sha256 for {record_id!r}")
+    elif sha != facts["sha256"]:
+        out.append(f"record_sha256 does not match {record_id!r}: the record or its evidence changed "
+                   f"after the cell was bound")
+    if facts["locale"] != locale:
+        out.append(f"{record_id!r} was taken in {facts['locale']!r}, not {locale!r}")
+    if (version, build) != (facts["version"], facts["build"]):
+        out.append(f"cell says Logic {version} ({build}) but {record_id!r} says "
+                   f"{facts['version']} ({facts['build']})")
+    if observed is not None and observed not in (record_strings(record_id, obs_dir) or ()):
+        out.append(f"{observed!r} is not a string {record_id!r} or its evidence carries")
+    return out
+
+
+def cell_evidence(entry, loc):
+    """`[(record, sha, version, build)]` a cell's measurement rests on, as the JSON states them."""
+    found = []
+    variants = entry.get("variants") or []
+    for variant, block in (entry.get("provenance") or {}).items():
+        if isinstance(block, dict) and block.get("locale") == loc and variant in variants:
+            found.append((block.get("record"), block.get("record_sha256"),
+                          block.get("logic_version"), block.get("logic_build"),
+                          block.get("observed")))
+    cited = (entry.get("coverage_records") or {}).get(loc)
+    if cited:
+        found.append((cited, (entry.get("coverage_record_sha256") or {}).get(loc),
+                      (entry.get("coverage_logic_version") or {}).get(loc),
+                      (entry.get("coverage_logic_build") or {}).get(loc), None))
+    return found
+
+
+def classify_cell(entry, loc, current, obs_dir=None):
+    """One cell's class, recomputed from the record NOW. Never trusts a stored class.
+
+    A cell claiming `measured`/`identifier` is `current` only if some reading verifies against its
+    record and names the declared release. A claim whose record is gone, unreadable or changed is
+    `unverified`: it does not read as measured, and it is not silently demoted to `derived` either,
+    because nobody has shown Apple's corpus holds the string.
+    """
+    state = (entry.get("coverage") or {}).get(loc, "unmeasured")
+    if state in ("retired", "derived", "unmeasured"):
+        return state
+    if state not in ("measured", "identifier"):
+        return "unverified"
+    best = "unverified"
+    rank = {"unverified": 0, "unknown_version": 1, "superseded": 2}
+    for record, sha, version, build, observed in cell_evidence(entry, loc):
+        if binding_problems(record, loc, sha, version, build, obs_dir, observed):
+            continue
+        if UNKNOWN in (version, build):
+            kind = "unknown_version"
+        elif (version, build) == (current["version"], current["build"]):
+            return "current"
+        else:
+            kind = "superseded"
+        if rank[kind] > rank[best]:
+            best = kind
+    return best
+
+
+def currency_summary(labels, locales, current, obs_dir=None):
+    """`{locale: {class: count, ..., "not_measured_on_current": n}}` over every label."""
+    out = {}
+    for loc in locales:
+        counts = {cls: 0 for cls in CURRENCY_CLASSES}
+        for entry in labels.values():
+            counts[classify_cell(entry, loc, current, obs_dir)] += 1
+        counts["not_measured_on_current"] = sum(
+            n for cls, n in counts.items() if cls not in ("current", "retired"))
+        out[loc] = counts
+    return out
+
+
+def not_current_cells(labels, locales, current, obs_dir=None):
+    """`{locale: sorted label names}` whose cell is not measured on the declared Logic."""
+    return {loc: sorted(name for name, entry in labels.items()
+                        if classify_cell(entry, loc, current, obs_dir) not in ("current", "retired"))
+            for loc in locales}
+
+
+def derived_problems(name, entry):
+    """A `derived` cell names what it was derived from and the rule, and is never a measurement.
+
+    The names are `coverage_derived[locale] = "<corpus>:<lproj>:<rule>:<string>"`. A cell with no such
+    name, an unknown rule, or a name on a cell that is not `derived` is refused. (Whether the corpus
+    really holds the string is re-derived by `--check`, which compares the regenerated bytes.)
+    """
+    out = []
+    named = entry.get("coverage_derived") or {}
+    cov = entry.get("coverage") or {}
+    for loc, state in cov.items():
+        text = named.get(loc)
+        if state == "derived":
+            parts = str(text or "").split(":", 3)
+            if len(parts) != 4 or not all(parts) or parts[2] not in DERIVED_RULES:
+                out.append(f"{name}: coverage[{loc}] is 'derived' but names no corpus, locale, rule "
+                           f"and string under coverage_derived[{loc}] (rules: {DERIVED_RULES})")
+        elif loc in named:
+            out.append(f"{name}: coverage_derived[{loc}] names a derivation for a cell that is "
+                       f"{state!r}, not 'derived'")
+    return out
+
+
+#: Where the current Logic may be STATED. The declaration is Swift's; these are measurements or
+#: projections of it, which describe a release rather than declare which one is current.
+_RESTATEMENT_EXEMPT = ("docs/observations/", "docs/canon/", "docs/locale/ui-labels.json",
+                       "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift", ".git/", ".build/",
+                       "artifacts/", "CHANGELOG.md", "Scripts/demo/")
+
+
+def _tracked_files(repo):
+    try:
+        out = subprocess.run(["git", "-C", repo, "ls-files", "-z"], capture_output=True, timeout=60)
+        if out.returncode == 0 and out.stdout:
+            return [p for p in out.stdout.decode("utf-8", "replace").split("\0") if p]
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    found = []
+    for root, dirs, files in os.walk(repo):
+        dirs[:] = [d for d in dirs if d not in (".git", ".build")]
+        for f in files:
+            found.append(os.path.relpath(os.path.join(root, f), repo))
+    return found
+
+
+def restatement_problems(repo=REPO):
+    """Every place other than the Swift that states which Logic is current.
+
+    One declaration is the point: a second one is where the ledger and the product disagree about
+    what "current" means. So the legacy `docs/observations/LOGIC-BUILD.json` may not exist, the Swift
+    must declare exactly once, and no other tracked file may carry the declared build number as a
+    token or name the declared version after `Logic`. Records, evidence, the canon's pins and this
+    file's own projection are measurements OF a release and are exempt.
+    """
+    out = []
+    swift = os.path.join(repo, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+    try:
+        declared = declared_logic(swift)
+    except ValueError as exc:
+        return [str(exc)]
+    if os.path.exists(os.path.join(repo, "docs", "observations", "LOGIC-BUILD.json")):
+        out.append("docs/observations/LOGIC-BUILD.json exists: it is a second declaration of the "
+                   "current Logic. Delete it; the declaration is AXLocalePolicy.currentLogicVersion")
+    if declared is None:
+        return out + ["AXLocalePolicy.swift declares no currentLogicVersion/currentLogicBuild"]
+    b, v = re.escape(declared["build"]), re.escape(declared["version"])
+    # Three SHAPES of restatement, because a bare number is not one: `element(7801)` in a test is a
+    # fixture id, and a measurement note saying "Logic 13.0 build 7801 exposes ..." is a true fact about
+    # a release, not a declaration of which is current. What drifts is (1) a key or constant that
+    # holds the build, (2) one that holds the version, (3) a sentence that calls the version current.
+    shapes = (
+        ("build", re.compile(r"(?i)\b(?:build|logic\w*|release)\w*[\"']?\s*[:=]\s*[\"']?" + b
+                             + r"(?![\w.])")),
+        ("version", re.compile(r"(?i)\b(?:version|logic\w*)[\"']?\s*[:=]\s*[\"']?" + v
+                               + r"(?![\w.])")),
+        ("version (as the current one)", re.compile(
+            r"(?i)\b(?:current|supported|target|latest|declared)\b[^\n.|]{0,60}\b\*{0,2}" + v
+            + r"\*{0,2}(?![\w.])|\bLogic(?: Pro)?\s+" + v + r"\*{0,2}\s+is\s+the\s+"
+            + r"(?:current|supported|target)")),
+    )
+    for rel in sorted(_tracked_files(repo)):
+        norm = rel.replace(os.sep, "/")
+        if any(norm.startswith(p) or norm == p for p in _RESTATEMENT_EXEMPT):
+            continue
+        # Fixtures pick a version string to exercise code with; they do not declare the current one.
+        # A sentence calling a version current is still refused there.
+        fixture = norm.startswith("Tests/")
+        full = os.path.join(repo, rel)
+        try:
+            if os.path.getsize(full) > 4_000_000:
+                continue
+            with open(full, encoding="utf-8") as handle:
+                text = handle.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for kind, pattern in shapes:
+            if fixture and kind in ("build", "version"):
+                continue
+            hit = pattern.search(text)
+            if hit:
+                line = text.count("\n", 0, hit.start()) + 1
+                out.append(f"{norm}:{line} restates the current Logic {kind} "
+                           f"({declared['version']} / {declared['build']}), which is declared only "
+                           f"in AXLocalePolicy.swift")
+    return out
+
+
+def binding_report(doc, obs_dir=None):
+    """Every claim in `doc` whose record is missing, changed or contradicts it. Empty is clean."""
+    out = []
+    for name, entry in sorted((doc.get("labels") or {}).items()):
+        for variant, block in sorted((entry.get("provenance") or {}).items()):
+            if not isinstance(block, dict):
+                out.append(f"{name}→{variant}: provenance is not an object")
+                continue
+            for why in binding_problems(block.get("record"), block.get("locale"),
+                                        block.get("record_sha256"), block.get("logic_version"),
+                                        block.get("logic_build"), obs_dir, block.get("observed")):
+                out.append(f"{name}→{variant}: {why}")
+        for loc, record in sorted((entry.get("coverage_records") or {}).items()):
+            if (entry.get("coverage") or {}).get(loc) not in ("measured", "identifier"):
+                continue
+            for why in binding_problems(record, loc,
+                                        (entry.get("coverage_record_sha256") or {}).get(loc),
+                                        (entry.get("coverage_logic_version") or {}).get(loc),
+                                        (entry.get("coverage_logic_build") or {}).get(loc), obs_dir):
+                out.append(f"{name}[{loc}]: {why}")
+    return out
+
+
 # Fields a person wrote by hand, which the Swift projection cannot regenerate.
 CARRIED = ("roles", "retired", "evidence_scope")
 # `match` is not carried by the loop below — it is derived from the Swift where the Swift can speak,
@@ -708,7 +1129,7 @@ CARRIED = ("roles", "retired", "evidence_scope")
 AUTHOR_TYPED = CARRIED + ("match",)
 
 
-def build(existing=None, dropped=None):
+def build(existing=None, dropped=None, unbound=None, rebind=False, bind_records=()):
     """The JSON document: the Swift projection, with `provenance` and `coverage` carried forward.
 
     Swift owns the strings. The JSON owns what is known ABOUT them, and that must survive every
@@ -721,9 +1142,34 @@ def build(existing=None, dropped=None):
     `measured` is DERIVED whenever a variant with provenance in that locale is in the list, so it
     cannot drift from the evidence; otherwise it, like `identifier`, is carried only together with
     the record under `coverage_records` that showed it.
+
+    SCHEMA 3. Every measurement is also bound to the record that read it: `logic_version` and
+    `logic_build` come from the record's own `host` on every run (never carried, so a hand edit is
+    erased), and `record_sha256` is CARRIED -- it is the one thing that cannot be re-derived without
+    defeating its purpose. A document older than schema 3 is bound once, by this run (the migration).
+    From then on a cell with no digest, a changed record or a missing one does not read as `measured`;
+    each such claim is appended to `unbound`, and `main()` refuses to write while any is open. With
+    `rebind=True` (the explicit, reviewed act) digests are recomputed from the records as they are, and
+    a block whose record no longer exists is dropped. `bind_records` names records whose digest MAY be
+    bound where a cell has none: the census records a regeneration has just filed and cited, and nothing
+    else, so a block that arrives without a digest is bound only to a record somebody named.
     """
     existing = existing if existing is not None else load_json()
     previous = (existing.get("labels") or {})
+    try:
+        was_schema = int(existing.get("schema") or 1)
+    except (TypeError, ValueError):
+        was_schema = 1
+    bind_missing = rebind or was_schema < SCHEMA
+    current = current_logic()
+    unbound = unbound if unbound is not None else []
+
+    def bound_sha(prior_sha, facts, record_id=None):
+        if facts["status"] != "ok":
+            return prior_sha
+        if rebind:
+            return facts["sha256"]
+        return prior_sha or (facts["sha256"] if bind_missing or record_id in bind_records else None)
     labels = {}
     for name, entry in sorted(from_swift().items()):
         prior = previous.get(name) or {}
@@ -731,11 +1177,42 @@ def build(existing=None, dropped=None):
         provenance = prior.get("provenance") or prior.get("measured") or {}
         # Provenance survives regeneration, but only for variants that still exist.
         provenance = {k: v for k, v in provenance.items() if k in entry["variants"]}
+        verified_locales = set()
+        bound = {}
+        for variant, block in provenance.items():
+            block = dict(block)
+            facts = record_facts(block.get("record"))
+            if facts["status"] != "ok" and rebind:
+                unbound.append(f"{name}\u2192{variant}: record {block.get('record')!r} is "
+                               f"{facts['status']}; --rebind drops this reading")
+                continue
+            if facts["status"] == "ok":
+                block["logic_version"], block["logic_build"] = facts["version"], facts["build"]
+            else:
+                block.setdefault("logic_version", UNKNOWN)
+                block.setdefault("logic_build", UNKNOWN)
+            sha = bound_sha(block.get("record_sha256"), facts, block.get("record"))
+            if sha:
+                block["record_sha256"] = sha
+            else:
+                block.pop("record_sha256", None)
+            block = dict(sorted(block.items()))
+            problems = binding_problems(block.get("record"), block.get("locale"),
+                                        block.get("record_sha256"), block.get("logic_version"),
+                                        block.get("logic_build"), observed=block.get("observed"))
+            if problems:
+                unbound.extend(f"{name}\u2192{variant}: {why}" for why in problems)
+            else:
+                verified_locales.add(str(block.get("locale")))
+            bound[variant] = block
+        provenance = bound
         if provenance:
             entry["provenance"] = provenance
         prior_coverage = prior.get("coverage") or {}
         cited = prior.get("coverage_records") or {}
-        present_in = {str((b or {}).get("locale")) for b in provenance.values()}
+        # Only a block that VERIFIES makes its locale `measured`. A claim whose record is missing,
+        # changed or contradicts it is reported in `unbound` and measures nothing.
+        present_in = verified_locales
         # Author-typed constraints, carried verbatim. `roles` can only ever REFUSE evidence — a
         # wrong one costs a false RED that someone fixes, never a false GREEN — so it is safe for a
         # human to write where the AX role is not derivable from Swift. `retired` excuses a label
@@ -787,18 +1264,38 @@ def build(existing=None, dropped=None):
             entry["match"] = prior.get("match") or "exact"
         retired = bool((entry.get("retired") or {}).get("reason"))
         coverage = {}
+        derived_from = {}
+        cited_facts, cited_sha = {}, {}
         for locale in SUPPORTED_LOCALES:
             if retired:
                 coverage[locale] = "retired"
             elif locale in present_in:
                 coverage[locale] = "measured"
             elif prior_coverage.get(locale) in ("measured", "identifier") and cited.get(locale):
-                # A claim of measurement is carried only with the record that showed it. One nobody
-                # cited would otherwise ride through every regeneration as if it were evidence —
-                # the guard would refuse it, but the projection should not emit it.
-                coverage[locale] = prior_coverage[locale]
-            elif _apple_ships(entry, locale):
+                # A claim of measurement is carried only with the record that showed it, and only
+                # while that record still VERIFIES against the digest it was bound with. One nobody
+                # cited -- or one that was edited or deleted -- would otherwise ride through every
+                # regeneration as if it were evidence.
+                facts = record_facts(cited[locale])
+                sha = bound_sha((prior.get("coverage_record_sha256") or {}).get(locale), facts,
+                                cited[locale])
+                problems = binding_problems(
+                    cited[locale], locale, sha,
+                    facts.get("version"), facts.get("build"))
+                if problems:
+                    unbound.extend(f"{name}[{locale}]: {why}" for why in problems)
+                    # NOT measured, whatever the stale JSON said. It falls to what is actually
+                    # shown -- Apple's corpus, or nothing -- and `unbound` carries the complaint.
+                    derivation = _apple_derivation(entry, locale)
+                    coverage[locale] = "derived" if derivation else "unmeasured"
+                    if derivation:
+                        derived_from[locale] = derivation
+                else:
+                    coverage[locale] = prior_coverage[locale]
+                    cited_facts[locale], cited_sha[locale] = facts, sha
+            elif (derivation := _apple_derivation(entry, locale)) is not None:
                 coverage[locale] = "derived"
+                derived_from[locale] = derivation
             else:
                 coverage[locale] = "unmeasured"
         entry["coverage"] = coverage
@@ -821,6 +1318,21 @@ def build(existing=None, dropped=None):
             kept = carried_map(field)
             if kept:
                 entry[field] = kept
+        # What each cited coverage record said about the release, and the digest it is bound by.
+        cited_versions = {loc: cited_facts[loc]["version"] for loc in cited_facts
+                          if loc in (entry.get("coverage_records") or {})}
+        if cited_versions:
+            entry["coverage_logic_version"] = cited_versions
+            entry["coverage_logic_build"] = {loc: cited_facts[loc]["build"] for loc in cited_versions}
+            entry["coverage_record_sha256"] = {loc: cited_sha[loc] for loc in cited_versions
+                                               if cited_sha.get(loc)}
+        if derived_from:
+            entry["coverage_derived"] = derived_from
+        class_of = {loc: classify_cell(entry, loc, current) for loc in SUPPORTED_LOCALES}
+        measured_class = {loc: cls for loc, cls in class_of.items()
+                          if coverage[loc] in ("measured", "identifier")}
+        if measured_class:
+            entry["coverage_currency"] = measured_class
         labels[name] = entry
     # Every label that WAS in the document, carried author-typed metadata, and is no longer in the
     # Swift. Renaming a symbol lands here, and so does deleting one; either way the scope, the
@@ -842,18 +1354,31 @@ def build(existing=None, dropped=None):
             lost = {f: prior[f] for f in AUTHOR_TYPED if prior.get(f)}
             if lost:
                 dropped[name] = lost
+    canon_manifest = (_CANON_CACHE.get("manifest") or {}) if _load_canon() else {}
+    pin = canon_manifest.get("logic") or {}
     return {
-        "schema": 2,
+        "schema": SCHEMA,
         "generated_from": "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift",
         "how_to_regenerate": "Scripts/locale_labels.py --write",
         "note": (
             "Swift is the compiled source of truth; this is its projection for everything that "
             "cannot import Swift. `provenance` records where a variant was READ — the observation "
             "record, its locale, the date and the exact string — and `coverage` says per locale "
-            "what is known about the label. `unmeasured` is the only value that is a gap. ADR-019."
+            "what is known about the label. `unmeasured` is the only value that is a gap. ADR-019. "
+            "`logic` is the Logic release this ledger is judged against, projected from "
+            "AXLocalePolicy.currentLogicVersion/Build (the one declaration). Each measured cell is "
+            "bound to its observation record by `record_sha256` and carries the `logic_version` and "
+            "`logic_build` that record states (`unknown` when it states none); `coverage_currency` "
+            "says whether that is the declared release, and `currency` counts every cell per "
+            "locale. `coverage_derived` names what a derived cell was derived from: "
+            "`<corpus>:<lproj>:<rule>:<string>`, read from `canon_logic`'s corpus, never a measurement."
         ),
+        "logic": current,
+        "canon_logic": {"version": pin.get("version"), "build": pin.get("build")},
         "supported_locales": list(SUPPORTED_LOCALES),
         "coverage_values": list(COVERAGE_VALUES),
+        "currency_classes": list(CURRENCY_CLASSES),
+        "currency": currency_summary(labels, SUPPORTED_LOCALES, current),
         "labels": labels,
     }
 
@@ -886,16 +1411,105 @@ INDENT = 1
 
 
 def render(doc):
-    """The document's exact text, including its trailing newline."""
-    return json.dumps(doc, ensure_ascii=False, indent=INDENT) + "\n"
+    """The document's exact text, including its trailing newline.
+
+    Compact: a leaf (a provenance block, a coverage map, a list of variants) is one line and structure
+    keeps one line per key, so the ledger's size is its number of facts and not its number of fields.
+    """
+    return _compact().dumps(doc, INDENT)
+
+
+def _compact():
+    if "compact_json" not in _CANON_CACHE:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "compact_json_for_labels", os.path.join(os.path.dirname(os.path.abspath(__file__)), "compact_json.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _CANON_CACHE["compact_json"] = module
+    return _CANON_CACHE["compact_json"]
+
+
+def stale_artifacts(doc, json_path=None, py_path=None, swift_path=None):
+    """Repo-relative paths of generated artifacts whose BYTES differ from what the generator renders.
+
+    BYTES, and the whole file. Until 2026-09-19 `--check` compared the JSON's parsed `labels` alone, so
+    a hand edit anywhere else -- the declared `logic`, the per-locale `currency` counts, a note, a
+    stray space -- was invisible. A generated file is exactly what its generator writes or it is stale.
+    """
+    stale = []
+    for path, rendered in ((json_path or JSON_PATH, render(doc)),
+                           (py_path or PY_PATH, render_python(doc)),
+                           (swift_path or SWIFT_PATH, render_swift(doc))):
+        try:
+            with open(path, encoding="utf-8", newline="") as fh:
+                on_disk = fh.read()
+        except OSError:
+            on_disk = None
+        if on_disk != rendered:
+            stale.append(os.path.relpath(path, REPO))
+    return stale
+
+
+def check_problems(doc, unbound, on_disk, repo=REPO, obs_dir=None):
+    """Every claim the ledger makes that its records, its Swift or its own rules do not support.
+
+    `unbound` is what `build()` could not bind; `on_disk` is the document as committed, whose digests
+    are checked directly so a cell cannot pass by being regenerated into agreement with a changed
+    record.
+    """
+    problems = [f"UNBOUND {line}" for line in unbound]
+    problems += [f"RESTATED {line}" for line in restatement_problems(repo)]
+    for name, entry in sorted(doc["labels"].items()):
+        problems += [f"DERIVED {line}" for line in derived_problems(name, entry)]
+    problems += [f"UNBOUND {line}" for line in binding_report(on_disk, obs_dir)]
+    return sorted(set(problems))
+
+
+def _report_currency(doc, stream=sys.stdout):
+    """Per locale: how many cells are measured on the declared Logic, and what the rest are."""
+    logic = doc.get("logic") or {}
+    print(f"declared current Logic: {logic.get('version')} ({logic.get('build')}) "
+          f"-- AXLocalePolicy.currentLogicVersion/Build; derived cells come from a canon pinned to "
+          f"{(doc.get('canon_logic') or {}).get('version')} ({(doc.get('canon_logic') or {}).get('build')})",
+          file=stream)
+    head = ("locale", "current", "superseded", "unknown_version", "unverified", "derived",
+            "unmeasured", "retired", "NOT_MEASURED_ON_CURRENT")
+    print("  ".join(f"{h:>10}" if i else f"{h:<8}" for i, h in enumerate(head)), file=stream)
+    totals = {k: 0 for k in head[1:-1]}
+    not_current = 0
+    for loc, counts in (doc.get("currency") or {}).items():
+        print("  ".join([f"{loc:<8}"] + [f"{counts.get(k, 0):>10}" for k in head[1:-1]]
+                        + [f"{counts.get('not_measured_on_current', 0):>10}"]), file=stream)
+        for k in totals:
+            totals[k] += counts.get(k, 0)
+        not_current += counts.get("not_measured_on_current", 0)
+    print("  ".join([f"{'total':<8}"] + [f"{totals[k]:>10}" for k in head[1:-1]]
+                    + [f"{not_current:>10}"]), file=stream)
 
 
 def main():
     args = sys.argv[1:]
     dropped = {}
-    doc = build(dropped=dropped)
+    unbound = []
+    rebind = "--rebind" in args
+    bind_records = {args[i + 1] for i, a in enumerate(args[:-1]) if a == "--bind-record"}
+    doc = build(dropped=dropped, unbound=unbound, rebind=rebind, bind_records=bind_records)
     report_dropped(dropped)
+    if "--report" in args:
+        _report_currency(doc)
+        return 0
     if "--write" in args:
+        if unbound and not rebind:
+            for line in unbound:
+                print(f"UNBOUND {line}", file=sys.stderr)
+            print(f"{len(unbound)} measurement(s) are not bound to a record that exists and matches "
+                  f"them, so nothing was written and none of them reads as measured. If the record "
+                  f"was edited on purpose, review the change and run `Scripts/locale_labels.py "
+                  f"--write --rebind`.", file=sys.stderr)
+            return 1
+        for line in unbound:
+            print(f"REBIND {line}", file=sys.stderr)
         os.makedirs(os.path.dirname(JSON_PATH), exist_ok=True)
         with open(JSON_PATH, "w", encoding="utf-8") as fh:
             fh.write(render(doc))
@@ -909,30 +1523,19 @@ def main():
               f"Sources/LogicProMCP/Accessibility/AXLocaleValues.swift")
         return 0
     if "--check" in args:
-        # EVERY generated artifact, not just the JSON. Until 2026-09-19 this compared the JSON
-        # alone and reported "labels agree", so the shipped Python table could be stale and nothing
-        # said so. A projection nobody checks is the fourth copy this file exists to end, and
-        # adding a second unchecked one to fix a locale bug would have been the same mistake with a
-        # Swift extension.
-        stale = []
-        on_disk = load_json()
-        if (on_disk.get("labels") or {}) != doc["labels"]:
-            stale.append("docs/locale/ui-labels.json")
-        for path, rendered in ((PY_PATH, render_python(doc)), (SWIFT_PATH, render_swift(doc))):
-            try:
-                with open(path, encoding="utf-8") as fh:
-                    current = fh.read()
-            except OSError:
-                current = None
-            if current != rendered:
-                stale.append(os.path.relpath(path, REPO))
+        stale = stale_artifacts(doc)
+        problems = check_problems(doc, unbound, load_json())
         if stale:
             for path in stale:
-                print(f"{path} disagrees with AXLocalePolicy.swift")
+                print(f"{path} disagrees with what AXLocalePolicy.swift and the records generate")
             print("Regenerate with `Scripts/locale_labels.py --write`.")
+        for line in problems:
+            print(line)
+        if stale or problems:
             return 1
         print(f"{len(doc['labels'])} labels agree, and {len(SHIPPED_LABELS) + len(LOCALE_KEYED)} "
-              f"generated table(s) match what this run would write")
+              f"generated table(s) match what this run would write; every measured cell is bound "
+              f"to its record, and the current Logic is declared once")
         return 0
     sys.stdout.write(render(doc))
     return 0

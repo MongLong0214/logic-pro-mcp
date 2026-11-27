@@ -21,6 +21,12 @@ The gaps, and where each is read from:
     manual_reverify            docs/observations/*.json    reverify.kind == "manual"
     records_without_evidence   docs/observations/*.json    records citing no evidence file
     surfaces_without_records   SURFACES.md vs records      surfaces no record names
+    cells_not_measured_on_current_version[loc]
+                               docs/locale/ui-labels.json  label cells with no VERIFIED reading on the
+                                                           Logic AXLocalePolicy declares as current
+    canon_pinned_to_a_superseded_logic
+                               docs/canon/MANIFEST.json    the canon's Logic pin when it is behind the
+                                                           declared one (derived cells rest on it)
 
 Exit 0 when every count equals its ceiling, 1 otherwise, 2 if an input cannot be read.
 """
@@ -39,6 +45,18 @@ LABELS = os.path.join(REPO, "docs", "locale", "ui-labels.json")
 OBS = os.path.join(REPO, "docs", "observations")
 SURFACES = os.path.join(OBS, "SURFACES.md")
 
+
+
+def _labels_module():
+    """`Scripts/locale_labels.py`, which owns the declaration of the current Logic and the rule that
+    classifies a cell against it. Loaded from this script's own directory, never from a fixture tree."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "locale_labels_for_ratchets", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                    "locale_labels.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _derivable_variants(repo: str) -> set:
@@ -123,32 +141,50 @@ def live_state(repo=REPO):
             if (entry.get("coverage") or {}).get(loc, "unmeasured") == "unmeasured":
                 unmeasured[loc].add(name)
 
-    # WHICH LOGIC EVERY READING DESCRIBES. Records carry a `host` block and label provenance names
-    # its own host, and until now nothing compared either to anything — CI has no Logic installed,
-    # so there was no build to compare AGAINST. `LOGIC-BUILD.json` is that build, declared rather
-    # than detected. Bumping it turns every reading taken on the old one into a counted gap, and
-    # because these are sets that may only shrink, the bump forces a decision about each reading
-    # instead of letting the whole corpus quietly describe a build nobody runs.
-    declared = {}
-    try:
-        with open(os.path.join(repo, "docs", "observations", "LOGIC-BUILD.json"),
-                  encoding="utf-8") as handle:
-            declared = json.load(handle)
-    except (OSError, ValueError):
-        declared = {}
+    # WHICH LOGIC EVERY READING DESCRIBES. Records carry a `host` block and label provenance carries the
+    # `logic_version`/`logic_build` of the record it cites, and each is compared to the ONE declaration:
+    # `AXLocalePolicy.currentLogicVersion`/`currentLogicBuild`. CI has no Logic installed, so the
+    # release is declared rather than detected. Bumping it turns every reading taken on the old one
+    # into a counted gap, and because these are sets that may only shrink, the bump forces a decision
+    # about each reading instead of letting the whole corpus quietly describe a build nobody runs.
+    labels_mod = _labels_module()
+    swift = os.path.join(repo, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
+    declared = labels_mod.declared_logic(swift) or {}   # ValueError (two declarations) is loud on purpose
     target = (str(declared.get("version") or ""), str(declared.get("build") or ""))
 
     superseded_labels = set()
     if target != ("", ""):
         for name, entry in entries.items():
             for variant, prov in (entry.get("provenance") or {}).items():
-                host = (prov or {}).get("host") if isinstance(prov, dict) else None
-                # `Logic Pro 12.3 (6674) on macOS 26.3 (25D125)` — free text, so it is matched
-                # strictly. A reading whose host is absent or unparseable is counted too: it cannot
-                # be shown to describe the declared build, and "cannot be shown" is the gap.
-                seen = re.match(r"^\s*Logic Pro\s+([0-9][0-9.]*)\s+\(([^)]+)\)", str(host or ""))
-                if not seen or (seen.group(1), seen.group(2)) != target:
+                # A reading whose version is absent or `unknown` is counted too: it cannot be shown
+                # to describe the declared release, and "cannot be shown" is the gap.
+                prov = prov if isinstance(prov, dict) else {}
+                if (str(prov.get("logic_version") or ""), str(prov.get("logic_build") or "")) != target:
                     superseded_labels.add(f"{name}\u2192{variant}")
+
+    # CELLS, per locale: every label x locale with no VERIFIED reading on the declared release. Derived
+    # and unmeasured cells are in it by definition -- Apple's corpus is not a reading of this Logic --
+    # and so is a `measured` cell whose record is missing, changed or contradicts it (fail closed:
+    # unreadable is not absent, and it never reads as measured). Recomputed from the records here, not
+    # read from the JSON's own `coverage_currency`, so a hand-edited class changes nothing.
+    cells_not_current = {loc: set() for loc in locales}
+    if target != ("", ""):
+        current = {"version": target[0], "build": target[1]}
+        obs_for_cells = os.path.join(repo, "docs", "observations")
+        for loc, names in labels_mod.not_current_cells(entries, locales, current, obs_for_cells).items():
+            cells_not_current[loc] = set(names)
+
+    # The canon the `derived` cells rest on is pinned to ITS OWN Logic. Behind the declared release it
+    # is a counted gap that shrinks when the corpus is re-ingested; ahead of it, the declaration is
+    # the thing that is stale and `check-canon-citations.py` refuses.
+    canon_behind = set()
+    try:
+        with open(os.path.join(repo, "docs", "canon", "MANIFEST.json"), encoding="utf-8") as handle:
+            pin = json.load(handle).get("logic") or {}
+    except (OSError, ValueError):
+        pin = {}
+    if target != ("", "") and pin and (str(pin.get("version")), str(pin.get("build"))) != target:
+        canon_behind.add(f"{pin.get('version')} ({pin.get('build')})")
 
     obs_dir = os.path.join(repo, "docs", "observations")
     records = [json.load(open(path, encoding="utf-8"))
@@ -200,6 +236,8 @@ def live_state(repo=REPO):
         "records_from_a_superseded_build": superseded_records,
         "label_readings_from_a_superseded_build": superseded_labels,
         "surfaces_without_records": bare,
+        "cells_not_measured_on_current_version": cells_not_current,
+        "canon_pinned_to_a_superseded_logic": canon_behind,
     }
 
 
@@ -410,8 +448,62 @@ def compare(live, ratchets, base=None):
     return grew, shrank, missing, understated, vanished
 
 
+
+
+def rebaselined(repo, reason, today=None, live=None, base=None):
+    """The ratchets document after an EXPLICIT baseline change, or raises ValueError.
+
+    `allowed` becomes what is live, and every member that is growth against the merge base is recorded
+    under `raised.<key>` with its date, `reason` and the exact member list -- the same entry
+    `_raise_authorizes` demands by hand. This is the one reviewed act a Logic update needs: bumping the
+    declared release turns every older reading into growth on several keys at once, and writing those
+    entries by hand is how a baseline gets raised carelessly. The diff it produces is the review.
+    Closing a gap needs no reason and needs no raise: it only removes the member.
+    """
+    today = today or datetime.date.today().isoformat()
+    if len("".join(c for c in str(reason) if c.isprintable() and not c.isspace())) < 8:
+        raise ValueError("a baseline change needs a reason with substance")
+    path = os.path.join(repo, "docs", "observations", "RATCHETS.json")
+    with open(path, encoding="utf-8") as handle:
+        doc = json.load(handle)
+    live = live if live is not None else live_state(repo)
+    if base is None:
+        base, _ = base_allowed(repo)
+    file_allowed = dict(_flatten(doc.get("allowed") or {}))
+    raised = doc.setdefault("raised", {})
+    allowed = {}
+    for key, values in _flatten(live):
+        parts = key.split(".")
+        node = allowed
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = sorted(values)
+        permitted = set((base or {}).get(key, ())) if base else set(file_allowed.get(key, ()))
+        added = sorted(set(values) - permitted)
+        if added:
+            raised[key] = {"date": today, "reason": reason, "members": added}
+    doc["allowed"] = allowed
+    return doc
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["--rebaseline"]:
+        if len(argv) < 2:
+            print("usage: check-observation-ratchets.py --rebaseline \"why this baseline moves\" [repo]")
+            return 2
+        target = os.path.abspath(argv[2]) if len(argv) > 2 else REPO
+        try:
+            doc = rebaselined(target, argv[1])
+        except (OSError, ValueError) as exc:
+            print(f"cannot rebaseline: {exc}")
+            return 2
+        with open(os.path.join(target, "docs", "observations", "RATCHETS.json"), "w",
+                  encoding="utf-8") as handle:
+            handle.write(json.dumps(doc, indent=2, ensure_ascii=False, sort_keys=True) + "\n")
+        print("RATCHETS.json rewritten: `allowed` now equals the live sets, and every member that is "
+              "growth against the merge base is under `raised` with your reason. Review that diff.")
+        return 0
     repo = os.path.abspath(argv[0]) if argv else REPO
     try:
         ratchets = json.load(open(os.path.join(repo, "docs", "observations", "RATCHETS.json"), encoding="utf-8"))
