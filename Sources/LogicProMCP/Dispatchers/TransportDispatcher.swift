@@ -879,9 +879,12 @@ struct TransportDispatcher: OperationTraceDispatching {
             return toolTextResult(result)
         }
         guard let observedTransport = await liveTransportState(router: router, cache: cache) else {
+            // `post_write_readback` is additive evidence that THIS read, the one after the write,
+            // is what failed. A failed pre-write read with a good post-write read takes the path
+            // below and never carries it.
             return toolTextResult(
                 HonestContract.addExtras(
-                    ["verification_source": "transport_state"],
+                    ["verification_source": "transport_state", "post_write_readback": "unavailable"],
                     into: result.message
                 ),
                 isError: true

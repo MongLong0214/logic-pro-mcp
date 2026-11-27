@@ -49,7 +49,17 @@ package struct QualificationRunner: Sendable {
         static func transportDrive(
             uiObserver: @escaping @Sendable () -> QualificationUIObservation?
         ) -> @Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult {
-            { request in try QualificationTransport(uiObserver: uiObserver).drive(request) }
+            { request in
+                try shippedTransport(uiObserver: uiObserver).drive(request)
+            }
+        }
+
+        /// The transport `--qualify` drives with: Logic's default control bar shows bar and beat
+        /// only, so the transport, marker and bar cycles run with the shipped position display.
+        static func shippedTransport(
+            uiObserver: @escaping @Sendable () -> QualificationUIObservation?
+        ) -> QualificationTransport {
+            QualificationTransport(uiObserver: uiObserver, positionDisplay: .production)
         }
     }
 

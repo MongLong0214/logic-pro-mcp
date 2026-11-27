@@ -24,7 +24,13 @@ import Testing
             closeAfterCreate: Bool = false,
             refreshPolls: String = "when_open",
             ghostPolls: Int = 0,
-            barWriteOvershoot: Bool = false
+            barWriteOvershoot: Bool = false,
+            startBeat: Int = 1,
+            refuseGotoPosition: Bool = false,
+            defaultPosition: Bool = false,
+            transportShape: String = "live_full",
+            gotoReply: String = "ok",
+            displayMode: String? = nil
         ) throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-marker-cleanup-\(UUID().uuidString)", isDirectory: true)
@@ -42,7 +48,19 @@ import Testing
             if barWriteOvershoot {
                 script = script.replacingOccurrences(of: "bar_overshoot=false", with: "bar_overshoot=true")
             }
+            script = script.replacingOccurrences(of: "start_beat=1", with: "start_beat=\(startBeat)")
+            if refuseGotoPosition {
+                script = script.replacingOccurrences(of: "refuse_goto_position=false", with: "refuse_goto_position=true")
+            }
+            if defaultPosition {
+                script = script.replacingOccurrences(of: "default_position=false", with: "default_position=true")
+            }
+            script = script.replacingOccurrences(of: "transport_shape=live_full", with: "transport_shape=\(transportShape)")
+            script = script.replacingOccurrences(of: "goto_reply=ok", with: "goto_reply=\(gotoReply)")
             try Data(script.utf8).write(to: executableURL)
+            if let displayMode {
+                try Data((displayMode + "\n").utf8).write(to: directory.appendingPathComponent("display-mode"))
+            }
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
         }
 
@@ -57,6 +75,8 @@ import Testing
         var writes: [String] { lines("writes") }
         /// The playhead's bar as the double holds it. Every recipe starts at bar 1.
         var bar: Int? { lines("bar").first.flatMap { Int($0) } }
+        /// The playhead's beat within the bar. Every recipe starts at beat `startBeat`.
+        var beat: Int? { lines("beat").first.flatMap { Int($0) } }
 
         func remove() { try? FileManager.default.removeItem(at: directory) }
 
@@ -87,6 +107,19 @@ import Testing
         # `bar_overshoot=true`: the first bar write lands one bar past the request, so the
         # cycle's readback disagrees and it refuses with the playhead moved.
         bar_overshoot=false
+        # `refuse_goto_position=true`: every goto_position is refused, so only goto_bar can move the
+        # playhead, and it lands on a bar's first beat.
+        refuse_goto_position=false
+        default_position=false
+        # `goto_reply=submitted_read_failed`: a `goto_position` moves the playhead and answers what the
+        # dispatcher answers when the dialog was submitted and its own immediate read failed (State B,
+        # error, `dialog_submission_attempted`). `submitted_unknown` is the same move with the
+        # submission indeterminate.
+        goto_reply=ok
+        # What else the resource can publish for the position: `cache` (the live read failed and the
+        # cache answers, StateReaders.swift:98), `unverified` (a live source flagged unverified) and
+        # `prefix` (a readback that stops at bar and beat, AXValueExtractors.swift:754).
+        transport_shape=live_full
         echo 0 > ghost-left
         : > ghost
         created=false
@@ -96,7 +129,9 @@ import Testing
         : > cache
         echo false > cache-readable
         echo null > cache-epoch
+        start_beat=1
         echo 1 > bar
+        echo $start_beat > beat
         [ "$list_open_initially" = true ] && touch list-open
         now_epoch() { /usr/bin/perl -MTime::HiRes=time -e 'printf "%.3f", time'; }
         iso_of() { /usr/bin/perl -MPOSIX=strftime -e '$t = shift; printf "%s.%03dZ", strftime("%Y-%m-%dT%H:%M:%S", gmtime(int $t)), int(($t - int $t) * 1000)' "$1"; }
@@ -163,7 +198,21 @@ import Testing
                 if [ "$readable" = true ] && [ ! -s cache ]; then empty=true; else empty=false; fi
                 printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://markers","text":"{\\"cache_age_sec\\":%s,\\"fetched_at\\":%s,\\"ax_occluded\\":false,%s\\"readable\\":%s,\\"source\\":\\"%s\\",\\"verified_empty\\":%s,\\"data\\":[%s]}"}]}}\n' "$id" "$age" "$fetched" "$extra" "$readable" "$source" "$empty" "$(rows_json cache)" ;;
               *'"uri":"logic://transport/state"'*)
-                printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"data\\":{\\"state\\":{\\"isPlaying\\":false,\\"isRecording\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1.1.1\\"}}}"}]}}\n' "$id" "$(cat bar)" ;;
+                shape_source=ax_live; shape_unverified=; shape_value="$(cat bar).$(cat beat).1.1"
+                shape_components='[\"bar\",\"beat\",\"subdivision\",\"tick\"]'
+                case "$transport_shape" in
+                  cache) shape_source=cache; shape_unverified='\"unverified\":true,' ;;
+                  unverified) shape_unverified='\"unverified\":true,' ;;
+                  prefix) shape_value="$(cat bar).$(cat beat)"; shape_components='[\"bar\",\"beat\"]' ;;
+                esac
+                # The display mode decides how much of the position the control bar shows: Logic's
+                # default Beats & Project shows bar and beat, Beats shows all four.
+                if [ -f display-mode ] && [ "$(cat display-mode)" != Beats ]; then
+                    shape_value="$(cat bar).$(cat beat)"; shape_components='[\"bar\",\"beat\"]'
+                fi
+                if [ "$default_position" = true ]; then readback_json=
+                else readback_json=",\\\"positionReadback\\\":{\\\"value\\\":\\\"$shape_value\\\",\\\"observedComponents\\\":$shape_components}"; fi
+                printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",%s\\"cache_age_sec\\":0,\\"data\\":{\\"state\\":{\\"isPlaying\\":false,\\"isRecording\\":false,\\"tempo\\":120,\\"position\\":\\"%s\\"%s}}}"}]}}\n' "$id" "$shape_source" "$shape_unverified" "$shape_value" "$readback_json" ;;
               *'"command":"create_marker"'*)
                 created=true
                 open_list
@@ -200,22 +249,43 @@ import Testing
                 else refuse element_not_found; fi
                 release_list ;;
               *'"command":"goto_bar"'*|*'"command":"goto_position"'*)
-                to=$(param_int bar)
+                to=$(param_int bar); by_position=false
                 if [ -n "$to" ]; then
                     if [ "$bar_overshoot" = true ]; then to=$((to + 1)); bar_overshoot=false; fi
                     printf 'goto_bar %s\n' "$to" >> writes
+                    echo 1 > beat
                 else
+                    if [ "$refuse_goto_position" = true ]; then refuse write_refused; continue; fi
                     at=$(param_string position)
                     to=${at%%.*}
+                    rest=${at#*.}
                     printf 'goto_position %s\n' "$at" >> writes
+                    echo "${rest%%.*}" > beat
+                    by_position=true
                 fi
                 printf '%s\n' "$to" > bar
+                if [ "$by_position" = true ] && [ "$goto_reply" != ok ]; then
+                    submitted='\"state\":\"B\",\"success\":true,\"verified\":false,\"reason\":\"readback_unavailable\",\"requested\":\"'$at'\",\"via\":\"dialog\",\"dialog_cleanup\":\"closed\",\"dialog_submission_attempted\":true,\"write_attempted\":true,\"menu_actuation_attempted\":true,\"verification_source\":\"transport_state\"'
+                    # `finalizeGotoPositionResult` marks a failed POST-write read with
+                    # `post_write_readback: unavailable`. A failed PRE-write read with a matching
+                    # post-write read carries `observed` and `verification_withheld` instead.
+                    if [ "$goto_reply" = submitted_prewrite_failed ]; then
+                        submitted=$submitted',\"verification_withheld\":\"observed_effect_unavailable\",\"observed\":\"'$at'\"'
+                    else
+                        submitted=$submitted',\"post_write_readback\":\"unavailable\"'
+                    fi
+                    if [ "$goto_reply" = submitted_unknown ]; then
+                        submitted='\"state\":\"B\",\"success\":true,\"verified\":false,\"reason\":\"readback_unavailable\",\"operation\":\"transport.goto_position\",\"method\":\"dialog\",\"dialog_cleanup\":\"unobserved\",\"dialog_submission_indeterminate\":true,\"dialog_input_target\":\"unknown\",\"fallback_unsafe\":true,\"terminal\":true,\"safe_to_retry\":false,\"verification_source\":\"transport_state\"'
+                    fi
+                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{%s}"}]}}\n' "$id" "$submitted"
+                    continue
+                fi
                 ok ;;
               *'"command":"goto_marker"'*)
                 # The product resolves a marker name against its cached list.
                 name=$(param_string name)
                 row=$(/usr/bin/grep "^$name|" cache | /usr/bin/head -1)
-                if [ -n "$row" ]; then at=${row#*|}; printf '%s\n' "${at%%.*}" > bar; ok
+                if [ -n "$row" ]; then at=${row#*|}; printf '%s\n' "${at%%.*}" > bar; echo 1 > beat; ok
                 else refuse element_not_found; fi ;;
               *) refuse unsupported_by_fixture ;;
             esac
@@ -223,10 +293,13 @@ import Testing
         """#
     }
 
-    private func drive(_ fixture: Fixture, _ operation: OperationID) throws -> QualificationOperationResult? {
+    private func drive(
+        _ fixture: Fixture, _ operation: OperationID, display: QualificationPositionDisplay? = nil
+    ) throws -> QualificationOperationResult? {
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
         let result = try QualificationTransport(
-            uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2
+            uiObserver: unchangedUIForTests, positionDisplay: display, handshakeTimeout: 2,
+            requestTimeout: 2, shutdownGrace: 2, uiSettleSleep: { _ in }
         ).drive(.init(
             executableURL: fixture.executableURL,
             environment: ["HANDSHAKE_DELAY": "0"],
@@ -328,5 +401,259 @@ import Testing
         #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
         #expect(observed?.mutationRestore != nil, "\(observed?.mutationRestoreRefusal ?? "no refusal")")
         #expect(observed?.mutationRestoreRefusal == nil)
+    }
+
+    /// The cycle's own return is a `goto_bar`, which lands on a bar's first beat. From a start off
+    /// that beat the exact origin is put back by a `goto_position` — and when that is refused the
+    /// playhead is left at 1.1, a position this cycle never started from. The refusal must reach
+    /// the caller, and no cycle record may be kept.
+    @Test func aRefusedExactOriginMoveAfterTheBarReturnIsNotACredit() throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, refuseGotoPosition: true)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, .navigateGotoMarker)
+
+        #expect(observed?.mutationRestore == nil, "a playhead left off its origin earns no cycle record: \(fixture.writes)")
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("playhead"), "the failed restore is named: \(refusal)")
+        #expect(fixture.live == Self.originals, "the probe is still removed: live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    /// Positive control for the case above: the same start off the bar's first beat, with the exact
+    /// move accepted, completes the cycle and leaves the playhead where it started.
+    @Test func anExactOriginMoveAfterTheBarReturnCompletesTheCycle() throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, .navigateGotoMarker)
+
+        #expect(observed?.mutationRestore != nil, "\(observed?.mutationRestoreRefusal ?? "no refusal")")
+        #expect(fixture.bar == 1 && fixture.beat == 2, "the playhead is back at 1.2: bar \(fixture.bar.map(String.init) ?? "unread") beat \(fixture.beat.map(String.init) ?? "unread")")
+        #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    /// With the position controls unreadable the resource publishes the display default `1.1.1.1`
+    /// and no `positionReadback`. That is no origin: the marker and bar recipes refuse before the
+    /// first position-changing call.
+    @Test(arguments: [OperationID.navigateGotoMarker])
+    func aDefaultPositionWithNoReadbackIsRefusedBeforeTheFirstMove(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, defaultPosition: true)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("position"), "the unreadable origin is named: \(refusal)")
+        let moves = fixture.writes.filter { $0.contains("goto_bar") || $0.contains("goto_position") || $0.hasPrefix("create") }
+        #expect(moves.isEmpty, "nothing moved or created: \(fixture.writes)")
+    }
+
+    /// The origin must come from a live, verified read. When the live read fails the resource answers
+    /// from its cache, `unverified: true`, and that snapshot can still carry a complete readback of
+    /// where the playhead WAS. A readback that stops at bar and beat is no better: the recipe could
+    /// not put the subdivision and tick back. Each is refused before the first move.
+    @Test(arguments: [OperationID.navigateGotoMarker, .navigateGotoBar, .transportGotoPosition],
+          ["cache", "unverified", "prefix"])
+    func anOriginThatIsNotALiveVerifiedFullReadbackIsRefusedBeforeTheFirstMove(
+        operation: OperationID, shape: String
+    ) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, transportShape: shape)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("position"), "the unreadable origin is named: \(refusal)")
+        let moves = fixture.writes.filter { $0.contains("goto_bar") || $0.contains("goto_position") || $0.hasPrefix("create") }
+        #expect(moves.isEmpty, "nothing moved or created: \(fixture.writes)")
+        #expect(fixture.bar == 1 && fixture.beat == 2, "the playhead did not move: \(fixture.writes)")
+    }
+
+    // MARK: State B: the dialog submitted, the dispatcher's immediate read failed
+
+    static let playheadOperations: [OperationID] = [.navigateGotoMarker, .navigateGotoBar, .transportGotoPosition]
+
+    /// Go To Position can submit and close its dialog and the dispatcher's own read can then fail:
+    /// State B, `isError`, `dialog_submission_attempted`. The playhead landed; the independent exact
+    /// readback decides the restore, so the cycle is credited and the playhead is where it started.
+    @Test(arguments: playheadOperations)
+    func aSubmittedDialogWhoseImmediateReadFailedIsDecidedByTheExactReadback(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, gotoReply: "submitted_read_failed")
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(fixture.writes.contains { $0.hasPrefix("goto_position") }, "the exact restore was attempted: \(fixture.writes)")
+        #expect(observed?.mutationRestore != nil, "\(observed?.mutationRestoreRefusal ?? "no refusal")")
+        #expect(fixture.bar == 1 && fixture.beat == 2, "bar \(fixture.bar.map(String.init) ?? "unread") beat \(fixture.beat.map(String.init) ?? "unread")")
+        #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    /// An error reply that does not prove the submission stays a failed restore although the playhead
+    /// then reads back exactly.
+    @Test(arguments: playheadOperations)
+    func anErrorReplyWithAnIndeterminateSubmissionIsStillAFailedRestore(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, gotoReply: "submitted_unknown")
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(fixture.writes.contains { $0.hasPrefix("goto_position") }, "the exact restore was attempted: \(fixture.writes)")
+        #expect(observed?.mutationRestore == nil, "a restore the server did not confirm earns no cycle record")
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("playhead"), "the failed restore is named: \(refusal)")
+    }
+
+    // MARK: Display mode: Logic's default shows bar and beat only
+
+    static let displayOrder: [OperationID: String] = [
+        .navigateGotoMarker: "goto_marker", .navigateGotoBar: "goto_bar", .transportGotoPosition: "goto_position",
+    ]
+
+    /// Logic's default control bar is Beats & Project, which publishes bar and beat, so every
+    /// marker and bar cycle used to refuse. The cycle reads the mode, switches to Beats, confirms,
+    /// captures the origin, runs, puts the playhead back and verifies it while still in Beats, and
+    /// only then gives the mode back and reads it again.
+    @Test(arguments: playheadOperations)
+    func aBeatsAndProjectStartIsSwitchedToBeatsAndGivenBackAfterThePlayheadIsRestored(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        let observed = try drive(fixture, operation, display: fake.display)
+
+        #expect(observed?.mutationRestore != nil, "\(observed?.mutationRestoreRefusal ?? "no refusal")")
+        let events = QualificationPositionDisplayFake.events(in: fixture.directory)
+        let beatsAndProject = "mode_read=Beats & Project"
+        let command = Self.displayOrder[operation] ?? "?"
+        #expect(QualificationPositionDisplayFake.containsInOrder([
+            beatsAndProject, "mode_switch", "mode_read=Beats", "transport_read", command,
+            "goto_position", "transport_read", "mode_restore", beatsAndProject,
+        ], in: events), "\(events)")
+        #expect(QualificationPositionDisplayFake.closingModeCalls(in: events) == ["mode_restore", beatsAndProject], "\(events)")
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
+        #expect(fixture.bar == 1 && fixture.beat == 2, "bar \(fixture.bar.map(String.init) ?? "unread") beat \(fixture.beat.map(String.init) ?? "unread")")
+        #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    /// A mode that cannot be read, a switch that cannot be performed, and a switch that reports
+    /// itself done without changing the mode stop the cycle before it stages or moves anything.
+    @Test(arguments: playheadOperations,
+          [QualificationPositionDisplayFake.Fault.unreadable, .switchUnavailable, .switchNotApplied])
+    func aModeThatCannotBeReadOrSwitchedToBeatsStartsNothing(
+        operation: OperationID, fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
+        let observed = try drive(fixture, operation, display: fake.display)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("display mode"), "\(refusal)")
+        #expect(fixture.writes.isEmpty, "nothing moved or created: \(fixture.writes)")
+        #expect(fixture.bar == 1 && fixture.beat == 2)
+    }
+
+    /// The four-component origin cannot be captured even in Beats: nothing starts and the mode is
+    /// still given back.
+    @Test(arguments: playheadOperations)
+    func anOriginThatCannotBeCapturedInBeatsStillGivesTheModeBack(operation: OperationID) throws {
+        let fixture = try Fixture(
+            listOpenInitially: true, startBeat: 2, transportShape: "prefix", displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        let observed = try drive(fixture, operation, display: fake.display)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("position"), "the unreadable origin is named: \(refusal)")
+        #expect(fixture.writes.isEmpty, "nothing moved or created: \(fixture.writes)")
+        let events = QualificationPositionDisplayFake.events(in: fixture.directory)
+        #expect(QualificationPositionDisplayFake.closingModeCalls(in: events) == ["mode_restore", "mode_read=Beats & Project"], "\(events)")
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
+    }
+
+    /// A mode that is not confirmed restored is never a credited cycle, although the marker is
+    /// removed and the playhead is back where it started.
+    @Test(arguments: playheadOperations,
+          [QualificationPositionDisplayFake.Fault.restoreRefused, .restoreNotApplied])
+    func aDisplayModeThatIsNotConfirmedRestoredIsNotRecordedAsSuccess(
+        operation: OperationID, fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
+        let observed = try drive(fixture, operation, display: fake.display)
+
+        #expect(observed?.mutationRestore == nil, "a mode left changed earns no cycle record")
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("display mode"), "\(refusal)")
+        let events = QualificationPositionDisplayFake.events(in: fixture.directory)
+        #expect(QualificationPositionDisplayFake.containsInOrder(
+            ["mode_switch", "goto_position", "transport_read", "mode_restore"], in: events),
+            "the playhead is restored and verified before the mode: \(events)")
+        #expect(fixture.bar == 1 && fixture.beat == 2)
+        #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    // MARK: Round 5: one setting read two ways, a read that only half failed
+
+    /// B. The dispatcher's PRE-write read failed and the POST-write read worked: `observed` and
+    /// `verification_withheld: observed_effect_unavailable`, no `post_write_readback`. The landing was
+    /// read, so there is nothing for a follow-up to decide; the seek is a failed restore.
+    @Test(arguments: playheadOperations)
+    func aSubmittedDialogWhoseOnlyPreWriteReadFailedIsNotDecidedByTheFollowUp(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, gotoReply: "submitted_prewrite_failed")
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(fixture.writes.contains { $0.hasPrefix("goto_position") }, "the exact restore was attempted: \(fixture.writes)")
+        #expect(observed?.mutationRestore == nil, "a restore the server did not confirm earns no cycle record")
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("playhead"), "the failed restore is named: \(refusal)")
+    }
+
+    /// v-1. Already in Beats: nothing is switched, so nothing is restored, but the mode is read
+    /// again before the cycle is credited. A mode that changed or stopped reading is a failure, and
+    /// the change is not overwritten.
+    @Test(arguments: playheadOperations,
+          [QualificationPositionDisplayFake.Fault.changedByOthersAfterFirstRead, .unreadableAfterFirstRead])
+    func aBeatsStartWhoseModeChangesOrStopsReadingIsNotRecordedAsSuccess(
+        operation: OperationID, fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beats, fault: fault)
+        let observed = try drive(fixture, operation, display: fake.display)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("display mode"), "\(refusal)")
+        let events = QualificationPositionDisplayFake.events(in: fixture.directory)
+        #expect(!events.contains("mode_switch") && !events.contains("mode_restore"),
+                "this call never switched, so it never writes the mode: \(events)")
+        #expect(fake.mode == QualificationPositionDisplayFake.beats)
+    }
+
+    /// v-3. The popup says Beats & Project and the checked item says Time & Project: nothing is
+    /// switched, moved or created.
+    @Test(arguments: playheadOperations)
+    func aPopupTitleThatDisagreesWithTheCheckedItemStartsNothing(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+            fault: .checkedItemConflicts)
+        let observed = try drive(fixture, operation, display: fake.display)
+
+        #expect(observed?.mutationRestore == nil)
+        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
+        #expect(refusal.contains("display mode"), "\(refusal)")
+        let events = QualificationPositionDisplayFake.events(in: fixture.directory)
+        #expect(!events.contains("mode_switch") && !events.contains("mode_restore"), "\(events)")
+        #expect(fixture.writes.isEmpty, "nothing moved or created: \(fixture.writes)")
+        #expect(fixture.bar == 1 && fixture.beat == 2)
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
     }
 }
