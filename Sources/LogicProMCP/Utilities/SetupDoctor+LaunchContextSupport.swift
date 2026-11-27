@@ -19,6 +19,24 @@ extension SetupDoctor {
         cfBundleIdentifier: String?,
         termProgram: String?
     ) -> LaunchContextInfo {
+        let raw = classifyRawLaunchContext(
+            ancestryBundleIDs: ancestryBundleIDs,
+            ancestryProcessNames: ancestryProcessNames,
+            cfBundleIdentifier: cfBundleIdentifier,
+            termProgram: termProgram
+        )
+        // Whatever the environment or ancestry supplied is reduced to the fixed category (#1596).
+        let isITerm = raw.context == "terminal" && raw.responsibleHint.localizedCaseInsensitiveContains("iTerm")
+        return LaunchContextInfo(context: raw.context, responsibleHint: isITerm ? "iterm" : raw.context)
+    }
+
+
+    private static func classifyRawLaunchContext(
+        ancestryBundleIDs: [String],
+        ancestryProcessNames: [String] = [],
+        cfBundleIdentifier: String?,
+        termProgram: String?
+    ) -> LaunchContextInfo {
         for bundleID in ancestryBundleIDs {
             if let result = launchContextSignal(bundleID) { return result }
         }
@@ -31,10 +49,7 @@ extension SetupDoctor {
         if let termProgram, !termProgram.isEmpty {
             if termProgram.localizedCaseInsensitiveContains("Terminal")
                 || termProgram.localizedCaseInsensitiveContains("iTerm") {
-                return LaunchContextInfo(
-                    context: "terminal",
-                    responsibleHint: termProgram.localizedCaseInsensitiveContains("iTerm") ? "iterm" : "terminal"
-                )
+                return LaunchContextInfo(context: "terminal", responsibleHint: termProgram)
             }
         }
         return LaunchContextInfo(context: "unknown", responsibleHint: "unknown")
@@ -47,31 +62,28 @@ extension SetupDoctor {
         if value.localizedCaseInsensitiveContains("Claude.app")
             || value.localizedCaseInsensitiveContains("claude_desktop")
             || value.localizedCaseInsensitiveContains("com.anthropic.claude") {
-            return LaunchContextInfo(context: "claude_desktop", responsibleHint: "claude_desktop")
+            return LaunchContextInfo(context: "claude_desktop", responsibleHint: pathBasenameOrValue(value))
         }
         if value.localizedCaseInsensitiveContains("claude") {
-            return LaunchContextInfo(context: "claude_code", responsibleHint: "claude_code")
+            return LaunchContextInfo(context: "claude_code", responsibleHint: pathBasenameOrValue(value))
         }
         if value.localizedCaseInsensitiveContains("cursor") {
-            return LaunchContextInfo(context: "cursor", responsibleHint: "cursor")
+            return LaunchContextInfo(context: "cursor", responsibleHint: pathBasenameOrValue(value))
         }
         if value.localizedCaseInsensitiveContains("Visual Studio Code")
             || value.localizedCaseInsensitiveContains("vscode")
             || value.localizedCaseInsensitiveContains("com.microsoft.VSCode") {
-            return LaunchContextInfo(context: "vscode", responsibleHint: "vscode")
+            return LaunchContextInfo(context: "vscode", responsibleHint: pathBasenameOrValue(value))
         }
         if value.localizedCaseInsensitiveContains("windsurf") {
-            return LaunchContextInfo(context: "custom", responsibleHint: "windsurf")
+            return LaunchContextInfo(context: "custom", responsibleHint: pathBasenameOrValue(value))
         }
         if value.localizedCaseInsensitiveContains("zed") {
-            return LaunchContextInfo(context: "custom", responsibleHint: "zed")
+            return LaunchContextInfo(context: "custom", responsibleHint: pathBasenameOrValue(value))
         }
         if value.localizedCaseInsensitiveContains("Terminal")
             || value.localizedCaseInsensitiveContains("iTerm") {
-            return LaunchContextInfo(
-                context: "terminal",
-                responsibleHint: value.localizedCaseInsensitiveContains("iTerm") ? "iterm" : "terminal"
-            )
+            return LaunchContextInfo(context: "terminal", responsibleHint: pathBasenameOrValue(value))
         }
         return nil
     }
@@ -127,16 +139,17 @@ extension SetupDoctor {
     }
 
 
-    /// Fixed vocabulary for `responsible_hint` in public doctor output. Whatever the environment or
-    /// the process ancestry supplied (TERM_PROGRAM, a bundle id, a process name) is never echoed:
-    /// a value outside this set becomes "unknown" (#1596).
-    static let publicResponsibleHints: Set<String> = [
-        "terminal", "iterm", "claude_desktop", "claude_code", "cursor", "vscode", "windsurf", "zed", "unknown",
-    ]
+    private static func pathBasenameOrValue(_ value: String) -> String {
+        value.contains("/") ? URL(fileURLWithPath: value).lastPathComponent : value
+    }
 
-    static func publicResponsibleHint(_ raw: String) -> String {
-        let normalized = raw.lowercased()
-        if publicResponsibleHints.contains(normalized) { return normalized }
-        return "unknown"
+
+    /// The `responsible_hint` shown in public doctor output: the classifier's own context category
+    /// (or `iterm` for a terminal), never the raw TERM_PROGRAM, process name or bundle identifier.
+    /// A hint that is not that fixed category becomes "unknown".
+    static func publicResponsibleHint(_ info: LaunchContextInfo) -> String {
+        let hint = info.responsibleHint.lowercased()
+        if info.context == "terminal", hint == "iterm" { return "iterm" }
+        return hint == info.context.lowercased() ? info.context : "unknown"
     }
 }

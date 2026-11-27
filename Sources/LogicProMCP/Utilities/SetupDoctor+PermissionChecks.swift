@@ -95,7 +95,7 @@ extension SetupDoctor {
         }
         var launchEvidence = principalEvidence(
             permissionStatus,
-            ["launch_context": context.context, "responsible_hint": publicResponsibleHint(context.responsibleHint)]
+            ["launch_context": context.context, "responsible_hint": publicResponsibleHint(context)]
         )
         if let permissionStatus, permissionStatus.principal == nil {
             launchEvidence["tcc_principal"] = "unresolved"

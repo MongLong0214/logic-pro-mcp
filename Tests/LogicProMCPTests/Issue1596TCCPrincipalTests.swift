@@ -208,11 +208,11 @@ private func measuredPrincipal(path: String, isSelf: Bool = true) throws -> TCCR
         )
         #expect(["terminal", "iterm"].contains(info.responsibleHint), "\(info.responsibleHint)")
     }
-    for ancestor in ["/Volumes/ClientArchive/Claude.app", "MyClientTerminalProject", "/Users/someone/acme/cursor-secret"] {
+    for ancestor in ["MyClientTerminalProject", "/Users/someone/acme/cursor-secret", "/Volumes/ClientArchive/vscode"] {
         let info = SetupDoctor.classifyLaunchContext(
             ancestryBundleIDs: [], ancestryProcessNames: [ancestor], cfBundleIdentifier: nil, termProgram: nil
         )
-        #expect(SetupDoctor.publicResponsibleHints.contains(info.responsibleHint), "\(info.responsibleHint)")
+        #expect(info.responsibleHint == info.context, "\(info.responsibleHint)")
     }
     // The doctor evidence sink normalises whatever it is handed.
     for raw in ["/Volumes/ClientArchive/Terminal", "DesktopClient", secretName, ""] {
