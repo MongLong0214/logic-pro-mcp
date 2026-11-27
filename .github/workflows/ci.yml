@@ -510,7 +510,10 @@ jobs:
   native-logic-e2e:
     name: native-logic-e2e
     needs: [change-scope, release-build, product-validation]
-    if: always()
+    # Not always(): a job that always runs cannot be cancelled, so a superseded run sat in its
+    # native wait for up to 180 minutes and held the concurrency group, leaving the new run
+    # pending. `build` still requires this job's result to be success.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 190
     permissions:
