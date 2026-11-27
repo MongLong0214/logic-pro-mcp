@@ -5733,11 +5733,7 @@ struct QualificationRunnerTests {
                 "LOGIC_PRO_MCP_FAULT_INJECT_STEP": "0",
             ],
             drive: { request in
-                let observed = try QualificationTransport(
-                    uiObserver: unchangedUIForTests,
-                    requestTimeout: 30,
-                    shutdownGrace: 1
-                ).drive(request)
+                let observed = try Self.realServerTransport().drive(request)
                 let baseline = Self.driveResult(specs: [spec])
                 return QualificationDriveResult(
                     handshake: baseline.handshake,
@@ -5801,7 +5797,54 @@ struct QualificationRunnerTests {
         // What a fault-induced failure looks like is `.failed`, which the sibling test
         // `runnerRejectsPartialStateObservedFromRealServer` asserts. So the honest claim here is
         // that this is NOT that.
-        #expect(operationCase.status != .failed)
+        #expect(
+            operationCase.status != .failed,
+            "transport.play failed: \(operationCase.reason ?? "the case carries no reason")"
+        )
+    }
+
+    /// The transport the real-server fault-env drive uses. It is built like the shipped one
+    /// (`QualificationRunner.Dependencies.shippedTransport`): the transport cycles need the control
+    /// bar's position display, and a transport without it cannot read the exact playhead origin of
+    /// Logic's default Beats & Project bar, so its `transport.play` cycle refuses and the case fails
+    /// before the fault env is ever the subject (PR 1625, third native run).
+    static func realServerTransport(
+        positionDisplay: QualificationPositionDisplay? = .production,
+        handshakeTimeout: TimeInterval = 45,
+        requestTimeout: TimeInterval = 30,
+        uiSettleSleep: @escaping @Sendable (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    ) -> QualificationTransport {
+        QualificationTransport(
+            uiObserver: unchangedUIForTests,
+            positionDisplay: positionDisplay,
+            handshakeTimeout: handshakeTimeout,
+            requestTimeout: requestTimeout,
+            shutdownGrace: 1,
+            uiSettleSleep: uiSettleSleep
+        )
+    }
+
+    /// The fault-env live test passed on every other PR and failed in 3.5 s on PR 1625: its drive
+    /// built a transport with no position display, and the transport cycles now refuse a start whose
+    /// exact playhead origin cannot be read. Its transport must carry the shipped display, and a
+    /// default Beats & Project bar must then cycle `transport.play` through to a pass.
+    @Test func theRealServerFaultEnvDriveUsesTheShippedPositionDisplayAndPassesPlayOnTheDefaultBar() throws {
+        #expect(Self.realServerTransport().positionDisplay != nil,
+                "a drive without the position display refuses every transport cycle on the default bar")
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "stopped",
+            displayMode: QualificationPositionDisplayFake.beatsAndProject)
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        let result = try Self.realServerTransport(
+            positionDisplay: fake.display, handshakeTimeout: 2, requestTimeout: 2, uiSettleSleep: { _ in }
+        ).drive(.init(executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status == .passed, "\(observed.mutationRestoreRefusal ?? "no refusal")")
+        #expect(fake.mode == QualificationPositionDisplayFake.beatsAndProject)
     }
 
     /// FINDING 3 (#399) — debug-gated restoration of the runner-rejection
