@@ -5,12 +5,12 @@
 # Ordinary tests must not drive Logic merely because a release executable exists.
 # This runner prepares the debug tests, stages an already-built release candidate,
 # requires running Logic and its permissions, then runs every real-server test in a
-# fresh test process before the ordinary full
-# suite. The process boundary matters: production CoreMIDI endpoint ownership is
+# fresh test process. The process boundary matters: production CoreMIDI endpoint ownership is
 # intentionally held for a process lifetime, so an earlier unit test in the same
 # test process must not contaminate the release binary's live ownership check.
 # A missing process or permission still stops before testing; no live success is
-# inferred, and the final suite remains unfiltered.
+# inferred. The general suite is not re-run here: hosted CI runs every test of the same
+# candidate (the union of every test-shards shard), and only the live tests need this Mac.
 #
 # Release entrypoints consume staged final artifacts; this runner does not publish.
 # The release contract tests cover the build-before-live ordering without replacing the runtime.
@@ -107,6 +107,5 @@ for live_test in ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
     LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
     verify_candidate_bytes
 done
-swift test --no-parallel
 verify_candidate_bytes
 trap - EXIT INT TERM
