@@ -22,6 +22,14 @@ extension AccessibilityChannel {
         static let immediate = OutputAssignmentTiming(
             popupOpenTimeoutMs: 0, popupCloseTimeoutMs: 0, readbackTimeoutMs: 0, pollIntervalMs: 0
         )
+
+        /// The one rule for an omitted timing. An explicit timing always wins. Otherwise a runtime
+        /// with no live frontmost probe is a synthetic fixture: its fake AX tree offers no
+        /// CoreGraphics popup that could ever appear, so the live wait is only dead time and it
+        /// gets `.immediate`. Production always supplies `observeFrontmost` and keeps `.live`.
+        static func resolving(_ explicit: OutputAssignmentTiming?, for runtime: AXLogicProElements.Runtime) -> OutputAssignmentTiming {
+            explicit ?? (runtime.observeFrontmost == nil ? .immediate : .live)
+        }
     }
 
     /// Which popup entry a destination selects, or why none can be pressed.

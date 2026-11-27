@@ -71,7 +71,7 @@ extension AccessibilityChannel {
     /// this does not qualify a routing graph edge or independent native readback.
     static func getInputBusVerified(
         runtime: AXLogicProElements.Runtime = .production,
-        timing: OutputAssignmentTiming = .live
+        timing: OutputAssignmentTiming? = nil
     ) async -> ChannelResult {
         func refusal(_ hint: String,
                      effects: SessionPopulationObservation.UIEffects? = nil) -> ChannelResult {
@@ -211,7 +211,7 @@ extension AccessibilityChannel {
     /// A checked assigned-send choice, not a routing-graph completeness claim.
     static func getAssignedSendVerified(
         ordinal: Int, runtime: AXLogicProElements.Runtime = .production,
-        timing: OutputAssignmentTiming = .live
+        timing: OutputAssignmentTiming? = nil
     ) async -> ChannelResult {
         (await getCheckedRoutingDestination(params: [:], sendOrdinal: ordinal, runtime: runtime, timing: timing)).result
     }
@@ -219,7 +219,7 @@ extension AccessibilityChannel {
     /// pressed, and a successful observation does not claim focus/viewport restoration.
     static func getOutputVerified(
         params: [String: String], runtime: AXLogicProElements.Runtime = .production,
-        timing: OutputAssignmentTiming = .live
+        timing: OutputAssignmentTiming? = nil
     ) async -> ChannelResult {
         (await getCheckedRoutingDestination(params: params, sendOrdinal: nil, runtime: runtime, timing: timing)).result
     }
@@ -409,7 +409,7 @@ extension AccessibilityChannel {
 
     static func setAssignedSendOutputVerified(params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
-        timing: OutputAssignmentTiming = .live) async -> ChannelResult {
+        timing: OutputAssignmentTiming? = nil) async -> ChannelResult {
         func isSink(_ assignment: OutputAssignment) -> Bool {
             switch assignment { case .stereoOutput, .physical, .bus: true; default: false }
         }
@@ -475,7 +475,7 @@ extension AccessibilityChannel {
     }
 
     static func setSendModeVerified(params: [String: String], runtime: AXLogicProElements.Runtime,
-        timing: OutputAssignmentTiming = .live) async -> ChannelResult {
+        timing: OutputAssignmentTiming? = nil) async -> ChannelResult {
         guard params.keys.allSatisfy({ ["ordinal", "mode", "expected_current"].contains($0) }),
               let ordinal = params["ordinal"].flatMap(Int.init), ordinal >= 0,
               let desired = params["mode"].flatMap(SendMode.init(rawValue:)),
@@ -493,7 +493,7 @@ extension AccessibilityChannel {
 
     static func readRestoredSendObservation(_ restored: CheckedOutputReading,
         original: AXMixerStripBinding.Binding, runtime: AXLogicProElements.Runtime,
-        timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading {
+        timing: OutputAssignmentTiming? = nil) async -> CheckedOutputReading {
         guard let held = restored.restoredSend else {
             return .init(result: .error(HonestContract.encodeStateC(error: .staleTargetReference,
                 hint: "The exact restored source and occupied send control are no longer current.",
@@ -503,7 +503,7 @@ extension AccessibilityChannel {
     }
 
     static func readCreatedSendObservation(_ created: CreatedSendObservation,
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading? {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming? = nil) async -> CheckedOutputReading? {
         guard created.permits(runtime: runtime) else { return nil }
         let reading = await AXMixerStripBinding.$current.withValue(created.source.pair.strip) {
             await getOutputObservation(runtime: runtime, sendOrdinal: created.control.ordinal,
@@ -515,7 +515,7 @@ extension AccessibilityChannel {
     }
 
     static func removeCreatedSendObservation(_ created: CreatedSendObservation,
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming? = nil) async -> CheckedOutputReading {
         guard created.permits(runtime: runtime) else {
             return .init(result: .error(HonestContract.encodeStateC(error: .staleSnapshot,
                 hint: "The exact created Send is no longer owned.", extras: ["write_attempted": false])), assignment: nil)
@@ -531,7 +531,7 @@ extension AccessibilityChannel {
     }
 
     static func readChangedSendObservation(_ changed: ChangedSendObservation,
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming? = nil) async -> CheckedOutputReading {
         guard changed.permits(runtime: runtime) else {
             return .init(result: .error(HonestContract.encodeStateC(error: .staleTargetReference,
                 hint: "The exact changed source and occupied send control are no longer current.",
@@ -547,7 +547,7 @@ extension AccessibilityChannel {
 
     private static func readOccupiedSendObservation(_ held: RestoredSendObservation,
         original: AXMixerStripBinding.Binding, runtime: AXLogicProElements.Runtime,
-        timing: OutputAssignmentTiming) async -> CheckedOutputReading {
+        timing: OutputAssignmentTiming?) async -> CheckedOutputReading {
         let outer = AXHelpers.HelpReadGuard.current
         let readFocus = OwnedTrackStackObservationNavigation.ReadFocusScope()
         return await AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: {
@@ -577,7 +577,7 @@ extension AccessibilityChannel {
     }
 
     static func restoreAssignedSendThroughRetainedEmpty(_ removed: RemovedSendObservation,
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming) async -> CheckedOutputReading {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming?) async -> CheckedOutputReading {
         guard removed.permits(runtime: runtime) else {
             return .init(result: .error(HonestContract.encodeStateC(error: .staleTargetReference,
                 hint: "The original request's removed-send empty binding is no longer current.",
@@ -593,7 +593,7 @@ extension AccessibilityChannel {
     }
 
     static func restoreAssignedSendThroughRetainedOccupied(_ changed: ChangedSendObservation,
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming) async -> CheckedOutputReading {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming?) async -> CheckedOutputReading {
         guard changed.permits(runtime: runtime) else {
             return .init(result: .error(HonestContract.encodeStateC(error: .staleTargetReference,
                 hint: "The exact changed occupied send is no longer owned.", extras: ["write_attempted": false])), assignment: nil)
@@ -609,7 +609,7 @@ extension AccessibilityChannel {
     }
 
     static func removeAssignedSendObservation(ordinal: Int, expected: OutputAssignment,
-        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading {
+        runtime: AXLogicProElements.Runtime, timing: OutputAssignmentTiming? = nil) async -> CheckedOutputReading {
         guard ordinal >= 0, expected != .noOutput,
               (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
             return .init(result: .error(HonestContract.encodeStateC(error: .invalidParams,
@@ -637,7 +637,7 @@ extension AccessibilityChannel {
 
     /// Typed input evidence from the same owned reader, never from a wire receipt.
     static func getInputBusObservation(runtime: AXLogicProElements.Runtime,
-        timing: OutputAssignmentTiming = .live,
+        timing: OutputAssignmentTiming? = nil,
         requiringOriginalInputControl: AXMixerInputSlotBinding? = nil,
         restoringMixerGeometry: HeldSelectionAssociation.MixerViewportGeometry? = nil,
         observingPopupFocus: @escaping @Sendable ((@Sendable () -> Bool)?) -> Void = { _ in },
@@ -659,7 +659,7 @@ extension AccessibilityChannel {
     }
 
     static func getCheckedInputObservation(runtime: AXLogicProElements.Runtime,
-        timing: OutputAssignmentTiming = .live,
+        timing: OutputAssignmentTiming? = nil,
         restoringMixerGeometry: HeldSelectionAssociation.MixerViewportGeometry? = nil,
         observingPopupFocus: @escaping @Sendable ((@Sendable () -> Bool)?) -> Void = { _ in },
         observingRenewedFocus: @escaping @Sendable (HeldSelectionAssociation) -> Void = { _ in },
@@ -680,7 +680,7 @@ extension AccessibilityChannel {
 
     /// Shares the exact owned reader; wire receipt decoding never supplies graph identity.
     static func getOutputObservation(runtime: AXLogicProElements.Runtime, sendOrdinal: Int? = nil,
-                                     timing: OutputAssignmentTiming = .live,
+                                     timing: OutputAssignmentTiming? = nil,
                                      observingSendMode: Bool = false,
                                      requiringSendMode: Bool = true,
                                      requiringOriginalSendControl: AXLogicProElements.AssignedSendMenuControl? = nil,
@@ -695,7 +695,7 @@ extension AccessibilityChannel {
     private static func getCheckedRoutingDestination(
         params: [String: String], sendOrdinal: Int?, inputBusOnly: Bool = false,
         includingNonBusInputs: Bool = false, runtime: AXLogicProElements.Runtime,
-        timing: OutputAssignmentTiming,
+        timing: OutputAssignmentTiming?,
         restoringMixerGeometry: HeldSelectionAssociation.MixerViewportGeometry? = nil,
         observingPopupFocus: @escaping @Sendable ((@Sendable () -> Bool)?) -> Void = { _ in },
         observingRenewedFocus: @escaping @Sendable (HeldSelectionAssociation) -> Void = { _ in },
@@ -708,6 +708,7 @@ extension AccessibilityChannel {
         readingOriginalScope: HeldSelectionAssociation? = nil,
         recoveringRetiredFocusFrom focusBaseline: HeldSelectionAssociation.OriginalHeaderFocusBaseline? = nil
     ) async -> CheckedOutputReading {
+        let timing = OutputAssignmentTiming.resolving(timing, for: runtime)
         let operation = sendReplacement?.modeChange != nil ? "mixer.set_send_mode_verified" : sendReplacement != nil ? "mixer.set_send_output_verified" :
             (inputBusOnly ? "mixer.get_input_bus_verified" : (sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified"))
         var extras: [String: Any] = ["operation": operation, "write_attempted": false,
