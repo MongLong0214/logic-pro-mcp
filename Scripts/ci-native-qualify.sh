@@ -280,11 +280,63 @@ validate_run "$work/run.json" "$work/run-attempt.txt"
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts.json"
 run_attempt="$(cat "$work/run-attempt.txt")"
+
+# `release-build` does not run again in a failed-only rerun, so the artifact it published lives in
+# the most recent earlier attempt of this same run (same run id, same head SHA) in which it ran.
+# Ask the run's jobs API; if release-build ran in THIS attempt only this attempt's artifact counts.
+fetch_run_jobs() {
+  local page=1 count
+  trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/attempts/$run_attempt" > "$work/attempt.json"
+  while [ "$page" -le 20 ]; do
+    trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=all&per_page=100&page=$page" \
+      > "$work/jobs-page-$page.json"
+    count="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["jobs"]))' \
+      "$work/jobs-page-$page.json")"
+    [ "$count" -ge 100 ] || break
+    page=$((page + 1))
+  done
+  [ "$page" -le 20 ] || page=20
+  python3 - "$work" "$page" > "$work/jobs.json" <<'PY'
+import json, sys
+print(json.dumps([json.load(open(f"{sys.argv[1]}/jobs-page-{n}.json", encoding="utf-8"))
+                  for n in range(1, int(sys.argv[2]) + 1)]))
+PY
+}
+select_artifact_attempt() {
+  python3 - "$1" "$run_attempt" "$work/attempt.json" <<'PY'
+import json, sys
+from datetime import datetime
+def when(text):
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+pages = json.load(open(sys.argv[1], encoding="utf-8"))
+current = int(sys.argv[2])
+run_started = when(json.load(open(sys.argv[3], encoding="utf-8")).get("run_started_at"))
+jobs = [job for page in pages for job in page["jobs"] if job.get("name") == "release-build"]
+here = [job for job in jobs if job.get("run_attempt") == current]
+if len(here) != 1:
+    raise SystemExit(f"expected one release-build job for attempt {current}, found {len(here)}")
+if when(here[0].get("started_at")) >= run_started:
+    print(current)
+    raise SystemExit(0)
+origin = [job["run_attempt"] for job in jobs
+          if isinstance(job.get("run_attempt"), int) and not isinstance(job["run_attempt"], bool)
+          and 0 < job["run_attempt"] < current and job.get("conclusion") == "success"
+          and job.get("started_at") == here[0].get("started_at")
+          and job.get("completed_at") == here[0].get("completed_at")]
+if not origin:
+    raise SystemExit("carried-over release-build has no earlier successful attempt that ran it")
+print(min(origin))
+PY
+}
 validate_artifacts() {
-  python3 - "$1" "$RUN_ID" "$run_attempt" "$2" <<'PY'
+  python3 - "$1" "$RUN_ID" "$2" "$3" "$run_attempt" <<'PY'
 import json, re, sys
 body = json.load(open(sys.argv[1], encoding="utf-8"))
 name = f"release-runtime-{sys.argv[2]}-{sys.argv[3]}"
+if sys.argv[3] != sys.argv[5] and any(
+        row.get("name") == f"release-runtime-{sys.argv[2]}-{sys.argv[5]}"
+        for row in body.get("artifacts", [])):
+    raise SystemExit("an artifact exists for this attempt, so an earlier attempt's is not used")
 matches = [row for row in body.get("artifacts", []) if row.get("name") == name]
 if len(matches) != 1:
     raise SystemExit(f"expected one current {name!r} artifact, found {len(matches)}")
@@ -301,7 +353,9 @@ with open(sys.argv[4], "w", encoding="utf-8") as output:
     json.dump({"id": artifact_id, "digest": digest}, output, sort_keys=True)
 PY
 }
-validate_artifacts "$work/artifacts.json" "$work/artifact.json"
+fetch_run_jobs
+artifact_attempt="$(select_artifact_attempt "$work/jobs.json")"
+validate_artifacts "$work/artifacts.json" "$artifact_attempt" "$work/artifact.json"
 
 artifact_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' \
   "$work/artifact.json")"
@@ -379,7 +433,9 @@ resolve_run_pull_request "$work/run-success.json"
 validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" allow-ended
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts-success.json"
-validate_artifacts "$work/artifacts-success.json" "$work/artifact-success.json"
+fetch_run_jobs
+test "$(select_artifact_attempt "$work/jobs.json")" = "$artifact_attempt"
+validate_artifacts "$work/artifacts-success.json" "$artifact_attempt" "$work/artifact-success.json"
 cmp -s "$work/artifact.json" "$work/artifact-success.json"
 post_status success "$receipt"
 succeeded=1
