@@ -57,7 +57,10 @@ test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$SHA"
 test -z "$(git -C "$CANDIDATE_ROOT" status --porcelain)"
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/logic-pro-mcp-native-ci.XXXXXX")"
-target_url="https://github.com/$REPO/actions/runs/$RUN_ID"
+# Results are posted only once the run attempt is known; `target_url` stays empty until then.
+target_url=""
+receipt=""
+identity_confirmed=0
 succeeded=0
 
 trusted_api() {
@@ -133,9 +136,29 @@ post_status() {
     target_url "$target_url" >/dev/null
 }
 
+# True when a trusted success carrying this receipt is already published for this exact target.
+# A success whose response was lost must not be followed by a failure.
+success_already_published() {
+  trusted_api GET "repos/$REPO/commits/$SHA/statuses?per_page=100" \
+    > "$work/statuses-recheck.json" 2>/dev/null || return 1
+  python3 - "$work/statuses-recheck.json" "$CONTEXT" "$target_url" "$receipt" <<'PY'
+import json, sys
+rows = json.load(open(sys.argv[1], encoding="utf-8"))
+context, target, receipt = sys.argv[2:5]
+for row in rows if isinstance(rows, list) else []:
+    creator = row.get("creator") or {}
+    if (row.get("context") == context and row.get("target_url") == target
+            and row.get("state") == "success" and row.get("description") == receipt
+            and creator.get("login") == "MongLong0214" and creator.get("id") == 97578200):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 finish() {
   local status="$?"
-  if [ "$succeeded" -ne 1 ]; then
+  if [ "$succeeded" -ne 1 ] && [ "$identity_confirmed" -eq 1 ] \
+      && ! success_already_published; then
     post_status failure "Exact artifact failed native Logic qualification" || true
   fi
   rm -rf "$work"
@@ -146,7 +169,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 validate_run() {
-  python3 - "$1" "$SHA" "$RUN_ID" "$REPO" "$2" "$CANDIDATE_ROOT" "${3:-}" <<'PY'
+  python3 - "$1" "$SHA" "$RUN_ID" "$REPO" "$2" "$CANDIDATE_ROOT" "${3:-}" "${4:-}" <<'PY'
 import json, subprocess, sys
 run = json.load(open(sys.argv[1], encoding="utf-8"))
 expected_sha, expected_id, expected_repo = sys.argv[2], int(sys.argv[3]), sys.argv[4]
@@ -158,8 +181,18 @@ if run.get("event") != "pull_request":
     raise SystemExit("native CI qualification requires a pull_request run")
 if run.get("path") != ".github/workflows/ci.yml":
     raise SystemExit("native CI qualification requires the exact ci.yml workflow")
-if run.get("status") != "in_progress" or run.get("conclusion") is not None:
+# The run must be active when qualification starts. At the end a run that already completed is
+# accepted (argv[8] == "allow-ended"): the status below is bound to the exact SHA, attempt,
+# artifact id and digest, which the consumer validates, and a rerun of the consumer job reads it.
+ended = run.get("status") != "in_progress" or run.get("conclusion") is not None
+if ended and sys.argv[8] != "allow-ended":
     raise SystemExit("native CI qualification requires an active non-cancelled run")
+if ended and run.get("status") != "completed":
+    raise SystemExit("native CI qualification requires an in-progress or completed run")
+if ended:
+    print("NOTE: the CI run had already ended (status=%s, conclusion=%s) before this result was "
+          "published; re-run the native-logic-e2e job to consume it."
+          % (run.get("status"), run.get("conclusion")))
 run_attempt = run.get("run_attempt")
 if isinstance(run_attempt, bool) or not isinstance(run_attempt, int) or run_attempt < 1:
     raise SystemExit("CI run attempt is not a positive integer")
@@ -247,11 +280,63 @@ validate_run "$work/run.json" "$work/run-attempt.txt"
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts.json"
 run_attempt="$(cat "$work/run-attempt.txt")"
+
+# `release-build` does not run again in a failed-only rerun, so the artifact it published lives in
+# the most recent earlier attempt of this same run (same run id, same head SHA) in which it ran.
+# Ask the run's jobs API; if release-build ran in THIS attempt only this attempt's artifact counts.
+fetch_run_jobs() {
+  local page=1 count
+  trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/attempts/$run_attempt" > "$work/attempt.json"
+  while [ "$page" -le 20 ]; do
+    trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=all&per_page=100&page=$page" \
+      > "$work/jobs-page-$page.json"
+    count="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["jobs"]))' \
+      "$work/jobs-page-$page.json")"
+    [ "$count" -ge 100 ] || break
+    page=$((page + 1))
+  done
+  [ "$page" -le 20 ] || page=20
+  python3 - "$work" "$page" > "$work/jobs.json" <<'PY'
+import json, sys
+print(json.dumps([json.load(open(f"{sys.argv[1]}/jobs-page-{n}.json", encoding="utf-8"))
+                  for n in range(1, int(sys.argv[2]) + 1)]))
+PY
+}
+select_artifact_attempt() {
+  python3 - "$1" "$run_attempt" "$work/attempt.json" <<'PY'
+import json, sys
+from datetime import datetime
+def when(text):
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+pages = json.load(open(sys.argv[1], encoding="utf-8"))
+current = int(sys.argv[2])
+run_started = when(json.load(open(sys.argv[3], encoding="utf-8")).get("run_started_at"))
+jobs = [job for page in pages for job in page["jobs"] if job.get("name") == "release-build"]
+here = [job for job in jobs if job.get("run_attempt") == current]
+if len(here) != 1:
+    raise SystemExit(f"expected one release-build job for attempt {current}, found {len(here)}")
+if when(here[0].get("started_at")) >= run_started:
+    print(current)
+    raise SystemExit(0)
+origin = [job["run_attempt"] for job in jobs
+          if isinstance(job.get("run_attempt"), int) and not isinstance(job["run_attempt"], bool)
+          and 0 < job["run_attempt"] < current and job.get("conclusion") == "success"
+          and job.get("started_at") == here[0].get("started_at")
+          and job.get("completed_at") == here[0].get("completed_at")]
+if not origin:
+    raise SystemExit("carried-over release-build has no earlier successful attempt that ran it")
+print(min(origin))
+PY
+}
 validate_artifacts() {
-  python3 - "$1" "$RUN_ID" "$run_attempt" "$2" <<'PY'
+  python3 - "$1" "$RUN_ID" "$2" "$3" "$run_attempt" <<'PY'
 import json, re, sys
 body = json.load(open(sys.argv[1], encoding="utf-8"))
 name = f"release-runtime-{sys.argv[2]}-{sys.argv[3]}"
+if sys.argv[3] != sys.argv[5] and any(
+        row.get("name") == f"release-runtime-{sys.argv[2]}-{sys.argv[5]}"
+        for row in body.get("artifacts", [])):
+    raise SystemExit("an artifact exists for this attempt, so an earlier attempt's is not used")
 matches = [row for row in body.get("artifacts", []) if row.get("name") == name]
 if len(matches) != 1:
     raise SystemExit(f"expected one current {name!r} artifact, found {len(matches)}")
@@ -268,7 +353,9 @@ with open(sys.argv[4], "w", encoding="utf-8") as output:
     json.dump({"id": artifact_id, "digest": digest}, output, sort_keys=True)
 PY
 }
-validate_artifacts "$work/artifacts.json" "$work/artifact.json"
+fetch_run_jobs
+artifact_attempt="$(select_artifact_attempt "$work/jobs.json")"
+validate_artifacts "$work/artifacts.json" "$artifact_attempt" "$work/artifact.json"
 
 artifact_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' \
   "$work/artifact.json")"
@@ -278,6 +365,7 @@ artifact_hash="${artifact_digest#sha256:}"
 target_url="https://github.com/$REPO/actions/runs/$RUN_ID/attempts/$run_attempt"
 receipt="Native PASS a=$run_attempt id=$artifact_id d=$artifact_hash"
 test "${#receipt}" -le 140
+identity_confirmed=1
 post_status pending "Native RUN a=$run_attempt id=$artifact_id d=$artifact_hash"
 
 mkdir "$work/runtime"
@@ -342,10 +430,12 @@ test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$SHA"
 test -z "$(git -C "$CANDIDATE_ROOT" status --porcelain)"
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
 resolve_run_pull_request "$work/run-success.json"
-validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt"
+validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" allow-ended
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts-success.json"
-validate_artifacts "$work/artifacts-success.json" "$work/artifact-success.json"
+fetch_run_jobs
+test "$(select_artifact_attempt "$work/jobs.json")" = "$artifact_attempt"
+validate_artifacts "$work/artifacts-success.json" "$artifact_attempt" "$work/artifact-success.json"
 cmp -s "$work/artifact.json" "$work/artifact-success.json"
 post_status success "$receipt"
 succeeded=1
