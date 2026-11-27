@@ -286,6 +286,7 @@ run_attempt="$(cat "$work/run-attempt.txt")"
 # Ask the run's jobs API; if release-build ran in THIS attempt only this attempt's artifact counts.
 fetch_run_jobs() {
   local page=1 count
+  trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/attempts/$run_attempt" > "$work/attempt.json"
   while [ "$page" -le 20 ]; do
     trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=all&per_page=100&page=$page" \
       > "$work/jobs-page-$page.json"
@@ -302,20 +303,29 @@ print(json.dumps([json.load(open(f"{sys.argv[1]}/jobs-page-{n}.json", encoding="
 PY
 }
 select_artifact_attempt() {
-  python3 - "$1" "$run_attempt" <<'PY'
+  python3 - "$1" "$run_attempt" "$work/attempt.json" <<'PY'
 import json, sys
+from datetime import datetime
+def when(text):
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
 pages = json.load(open(sys.argv[1], encoding="utf-8"))
 current = int(sys.argv[2])
+run_started = when(json.load(open(sys.argv[3], encoding="utf-8")).get("run_started_at"))
 jobs = [job for page in pages for job in page["jobs"] if job.get("name") == "release-build"]
-if any(job.get("run_attempt") == current for job in jobs):
+here = [job for job in jobs if job.get("run_attempt") == current]
+if len(here) != 1:
+    raise SystemExit(f"expected one release-build job for attempt {current}, found {len(here)}")
+if when(here[0].get("started_at")) >= run_started:
     print(current)
     raise SystemExit(0)
-earlier = [job["run_attempt"] for job in jobs
-           if isinstance(job.get("run_attempt"), int) and not isinstance(job["run_attempt"], bool)
-           and 0 < job["run_attempt"] < current and job.get("conclusion") == "success"]
-if not earlier:
-    raise SystemExit("release-build did not run in this attempt or succeed in an earlier one")
-print(max(earlier))
+origin = [job["run_attempt"] for job in jobs
+          if isinstance(job.get("run_attempt"), int) and not isinstance(job["run_attempt"], bool)
+          and 0 < job["run_attempt"] < current and job.get("conclusion") == "success"
+          and job.get("started_at") == here[0].get("started_at")
+          and job.get("completed_at") == here[0].get("completed_at")]
+if not origin:
+    raise SystemExit("carried-over release-build has no earlier successful attempt that ran it")
+print(min(origin))
 PY
 }
 validate_artifacts() {

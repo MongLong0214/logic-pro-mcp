@@ -19,12 +19,29 @@ def read(path):
         return handle.read()
 
 
-def release_jobs_pages(*attempts):
-    """`gh api --paginate --slurp` output for the run jobs API: one release-build job per
-    (run_attempt, conclusion) given, beside an unrelated job."""
-    jobs = [{"name": "release-build", "run_attempt": a, "conclusion": c} for a, c in attempts]
-    return [{"total_count": len(jobs) + 1,
-             "jobs": [{"name": "test-build", "run_attempt": 1, "conclusion": "success"}, *jobs]}]
+def attempt_started(attempt):
+    """run_started_at of an attempt in the fixtures: each attempt starts an hour after the last."""
+    return f"2026-11-01T{attempt:02d}:00:00Z"
+
+
+def release_jobs_pages(*jobs):
+    """`gh api --paginate --slurp` output for the run jobs API, in the shape GitHub really returns:
+    a release-build job that was NOT re-run still appears under the current run_attempt, with a new
+    id and the ORIGINAL started_at/completed_at. Each job is (run_attempt, origin_attempt,
+    conclusion): origin_attempt is the attempt that really ran it (equal to run_attempt when it
+    ran in that attempt)."""
+    listed = [{"name": "release-build", "id": 1000 + a, "run_attempt": a, "conclusion": c,
+               "started_at": f"2026-11-01T{o:02d}:01:00Z", "completed_at": f"2026-11-01T{o:02d}:11:00Z"}
+              for a, o, c in jobs]
+    return [{"total_count": len(listed) + 1,
+             "jobs": [{"name": "test-build", "run_attempt": 1, "conclusion": "success"}, *listed]}]
+
+
+def write_attempt(directory, attempt):
+    path = os.path.join(directory, "attempt.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"run_attempt": int(attempt), "run_started_at": attempt_started(int(attempt))}, handle)
+    return path
 
 
 def job_body(workflow, name):
@@ -574,10 +591,10 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             with open(artifacts_path, "w", encoding="utf-8") as handle:
                 json.dump(artifacts, handle)
             with open(jobs_path, "w", encoding="utf-8") as handle:
-                json.dump(release_jobs_pages((2, "success")), handle)
+                json.dump(release_jobs_pages((2, 2, "success")), handle)
             result = subprocess.run(
                 ["python3", "-", status_path, status_pages_path, artifacts_path,
-                 sha, target, attempt, run_id, jobs_path],
+                 sha, target, attempt, run_id, jobs_path, write_attempt(directory, attempt)],
                 input=native_consumer_script(read(".github/workflows/ci.yml")),
                 text=True,
                 capture_output=True,
@@ -586,9 +603,9 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Current run-attempt artifact passed native Logic qualification", result.stdout)
 
-    def run_native_consumer(self, rows, release_jobs=((2, "success"),), artifact_attempts=(2,),
+    def run_native_consumer(self, rows, release_jobs=((2, 2, "success"),), artifact_attempts=(2,),
                             receipt_id=42, attempt="2"):
-        """Run the consumer as attempt 2 (or `attempt`). `release_jobs` is the (run_attempt, conclusion) of every
+        """Run the consumer as attempt 2 (or `attempt`). `release_jobs` is the (run_attempt, origin_attempt, conclusion) of every
         release-build job the jobs API lists; `artifact_attempts` the attempts that have an artifact."""
         sha, run_id, digest = "a" * 40, "123", "b" * 64
         target = f"https://github.com/MongLong0214/logic-pro-mcp/actions/runs/{run_id}/attempts/{attempt}"
@@ -607,7 +624,8 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                 with open(path, "w", encoding="utf-8") as handle:
                     json.dump(body, handle)
             return subprocess.run(
-                ["python3", "-", *paths[:3], sha, target, attempt, run_id, paths[3]],
+                ["python3", "-", *paths[:3], sha, target, attempt, run_id, paths[3],
+                 write_attempt(directory, attempt)],
                 input=native_consumer_script(read(".github/workflows/ci.yml")),
                 text=True, capture_output=True, check=False)
 
@@ -629,25 +647,28 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             self.assertIn("not success", result.stderr)
 
     def test_failed_only_rerun_uses_the_earlier_attempts_artifact(self):
-        # Attempt 2 re-ran only native and build: release-build's job and artifact are attempt 1's.
-        # The status is still this attempt's (target .../attempts/2).
+        # Attempt 2 re-ran only native and build: its release-build job is carried over from
+        # attempt 1 (same times), so attempt 1's artifact is used. The status is still attempt 2's.
         result = self.run_native_consumer(
-            [(None, "success")], release_jobs=((1, "success"),),
+            [(None, "success")], release_jobs=((1, 1, "success"), (2, 1, "success")),
             artifact_attempts=(1,), receipt_id=41)
         self.assertEqual(result.returncode, 0, result.stderr)
-        # Attempt 4 failed-only: the most recent earlier attempt that built (3) wins over 1,
-        # and a later attempt than this one is never chosen.
+        # Attempt 4 failed-only after a full rerun (3): the attempt that really ran it is 3.
         result = self.run_native_consumer(
-            [(None, "success")], attempt="4", release_jobs=((1, "success"), (3, "success")),
-            artifact_attempts=(1, 3), receipt_id=43)
+            [(None, "success")], attempt="4",
+            release_jobs=((1, 1, "success"), (2, 1, "success"), (3, 3, "success"), (4, 3, "success")),
+            artifact_attempts=(3,), receipt_id=43)
         self.assertEqual(result.returncode, 0, result.stderr)
+        # Carried through two failed-only reruns: the EARLIEST attempt with those times (1).
         result = self.run_native_consumer(
-            [(None, "success")], release_jobs=((1, "success"), (3, "success")),
-            artifact_attempts=(1, 3), receipt_id=41)
+            [(None, "success")], attempt="3",
+            release_jobs=((1, 1, "success"), (2, 1, "success"), (3, 1, "success")),
+            artifact_attempts=(1,), receipt_id=41)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_failed_only_rerun_still_binds_the_current_attempts_status(self):
-        kwargs = dict(release_jobs=((1, "success"),), artifact_attempts=(1,), receipt_id=41)
+        kwargs = dict(release_jobs=((1, 1, "success"), (2, 1, "success")),
+                      artifact_attempts=(1,), receipt_id=41)
         # An old attempt's success never satisfies this attempt; only this attempt's does.
         self.assertEqual(self.run_native_consumer([("1", "success")], **kwargs).returncode, 3)
         self.assertEqual(self.run_native_consumer([("1", "failure")], **kwargs).returncode, 3)
@@ -657,39 +678,42 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertIn("does not bind the current artifact", result.stderr)
 
     def test_release_build_in_this_attempt_refuses_an_older_artifact(self):
-        # release-build ran in attempt 2, so attempt 1's artifact must not be used, even when
-        # attempt 2 has none (or when attempt 1's exists beside it).
+        # release-build really ran in attempt 2 (its times are attempt 2's), so attempt 1's
+        # artifact must not be used when attempt 2's is missing.
         result = self.run_native_consumer(
-            [(None, "success")], release_jobs=((1, "success"), (2, "success")),
+            [(None, "success")], release_jobs=((1, 1, "success"), (2, 2, "success")),
             artifact_attempts=(1,), receipt_id=41)
         self.assertEqual(result.returncode, 1)
         self.assertIn("expected one current 'release-runtime-123-2' artifact, found 0", result.stderr)
-        result = self.run_native_consumer(
-            [(None, "success")], release_jobs=((1, "success"), (2, "failure")),
-            artifact_attempts=(1,), receipt_id=41)
-        self.assertEqual(result.returncode, 1)
 
     def test_failed_only_rerun_still_needs_exactly_one_candidate_artifact(self):
-        kwargs = dict(release_jobs=((1, "success"),), receipt_id=41)
+        carried = ((1, 1, "success"), (2, 1, "success"))
         for attempts in ((), (1, 1)):
-            result = self.run_native_consumer([(None, "success")], artifact_attempts=attempts, **kwargs)
+            result = self.run_native_consumer(
+                [(None, "success")], release_jobs=carried, artifact_attempts=attempts, receipt_id=41)
             self.assertEqual(result.returncode, 1, attempts)
             self.assertIn("expected one current 'release-runtime-123-1' artifact", result.stderr)
-        # No earlier release-build success: nothing to fall back to.
+        # The attempt that really ran it did not succeed: nothing to fall back to.
         result = self.run_native_consumer(
-            [(None, "success")], release_jobs=((1, "failure"),), artifact_attempts=(1,), receipt_id=41)
+            [(None, "success")], release_jobs=((1, 1, "failure"), (2, 1, "success")),
+            artifact_attempts=(1,), receipt_id=41)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("did not run in this attempt or succeed in an earlier one", result.stderr)
+        self.assertIn("no earlier successful attempt that ran it", result.stderr)
         # A current-attempt artifact beside a fallback is contradictory and refused.
         result = self.run_native_consumer(
-            [(None, "success")], release_jobs=((1, "success"),), artifact_attempts=(1, 2),
-            receipt_id=41)
+            [(None, "success")], release_jobs=carried, artifact_attempts=(1, 2), receipt_id=41)
         self.assertEqual(result.returncode, 1)
         self.assertIn("an artifact exists for this attempt", result.stderr)
+        # No release-build job for this attempt at all.
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=((1, 1, "success"),), artifact_attempts=(1,), receipt_id=41)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("expected one release-build job for attempt 2", result.stderr)
 
     def test_native_producer_picks_the_artifact_attempt_like_the_consumer(self):
         wrapper = read("Scripts/ci-native-qualify.sh")
         self.assertIn("actions/runs/$RUN_ID/jobs?filter=all", wrapper)
+        self.assertIn("actions/runs/$RUN_ID/attempts/$run_attempt", wrapper)
         self.assertIn('select_artifact_attempt "$work/jobs.json"', wrapper)
         self.assertIn('"$artifact_attempt"', wrapper)
         # The status stays bound to the current attempt, not the artifact's.
@@ -701,22 +725,24 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         match = re.search(r'select_artifact_attempt\(\) \{\n  python3 - .*?<<\'PY\'\n(.*?)\nPY\n', wrapper, re.S)
         self.assertTrue(match, "producer attempt selector not found")
 
-        def select(current, *attempts):
+        def select(current, *jobs):
             with tempfile.TemporaryDirectory() as directory:
                 path = os.path.join(directory, "jobs.json")
                 with open(path, "w", encoding="utf-8") as handle:
-                    json.dump(release_jobs_pages(*attempts), handle)
-                return subprocess.run(["python3", "-", path, str(current)], input=match.group(1),
-                                      text=True, capture_output=True, check=False)
+                    json.dump(release_jobs_pages(*jobs), handle)
+                return subprocess.run(
+                    ["python3", "-", path, str(current), write_attempt(directory, current)],
+                    input=match.group(1), text=True, capture_output=True, check=False)
 
-        self.assertEqual(select(2, (1, "success")).stdout.strip(), "1")
-        self.assertEqual(select(4, (1, "success"), (3, "success")).stdout.strip(), "3")
-        # release-build ran in this attempt: only this attempt counts.
-        self.assertEqual(select(2, (1, "success"), (2, "success")).stdout.strip(), "2")
-        self.assertEqual(select(2, (1, "success"), (2, "failure")).stdout.strip(), "2")
-        refused = select(2, (1, "failure"))
-        self.assertNotEqual(refused.returncode, 0)
-        self.assertNotEqual(select(2).returncode, 0)
+        self.assertEqual(select(2, (1, 1, "success"), (2, 1, "success")).stdout.strip(), "1")
+        self.assertEqual(select(4, (1, 1, "success"), (2, 1, "success"), (3, 3, "success"),
+                                (4, 3, "success")).stdout.strip(), "3")
+        self.assertEqual(select(3, (1, 1, "success"), (2, 1, "success"),
+                                (3, 1, "success")).stdout.strip(), "1")
+        # release-build really ran in this attempt: only this attempt counts.
+        self.assertEqual(select(2, (1, 1, "success"), (2, 2, "success")).stdout.strip(), "2")
+        self.assertNotEqual(select(2, (1, 1, "failure"), (2, 1, "success")).returncode, 0)
+        self.assertNotEqual(select(2, (1, 1, "success")).returncode, 0)
 
     def test_combined_status_rejects_a_wrong_top_level_sha(self):
         workflow = read(".github/workflows/ci.yml")
@@ -738,7 +764,7 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                 json.dump({"artifacts": []}, handle)
             result = subprocess.run(
                 ["python3", "-", status_path, status_pages_path, artifacts_path, "a" * 40,
-                 "https://example.invalid/attempt", "1", "123", jobs_path],
+                 "https://example.invalid/attempt", "1", "123", jobs_path, jobs_path],
                 input=script,
                 text=True,
                 capture_output=True,
