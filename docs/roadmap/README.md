@@ -27,7 +27,7 @@ then a reporter needs a build of main.
   unknown outcome and names the likely cause, refs #1565), #1623 (Logic 13 track type in
   `record_sequence`), #1630 (no "emergency fallback" line on packaged installs, fixes #1627), #1561
   (export finds the volume sidebar structurally; **sidebar step only, List view still fails**, see
-  #1553), #1590 (the Logic release is declared once; Logic 13.0 (7801) label census in ko-KR), #1624
+  #1553), #1590 (one place in the Swift names the Logic release; ko-KR label census of Logic 13.0 (7801)), #1624
   (qualification judges each operation against the settled baseline, #1594 M6), and earlier
   #1608/#1609 (read-only sample source preparation) and #1566 (poller cost bound, #668).
 - **Open pull request:** #1625 (R3-01: transport, marker and bar cycles restore the exact playhead and
