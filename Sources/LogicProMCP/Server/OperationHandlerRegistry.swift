@@ -310,6 +310,7 @@ enum OperationHandlerRegistry {
                     dialogPresent: dependencies.dialogPresent,
                     sagaJournal: dependencies.sagaJournal,
                     mutationGate: dependencies.mutationGate,
+                    logicLiveness: LogicLivenessProbe.live,
                     // ADR-002 F5 — production dispatch supplies the live AX
                     // track-header reader so saga-replayed target_ref track/mixer
                     // steps fail closed on an out-of-band reorder.

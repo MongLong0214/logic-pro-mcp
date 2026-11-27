@@ -316,6 +316,10 @@ A measured blocking modal is a terminal unavailable state for this read-only che
 retains bounded dialog identity but suppresses the observed dismissal instruction and exposes no
 operator action in `fix_plan`.
 
+<a id="doctor-logicresponsiveness"></a>
+### `logic.responsiveness`
+Warns, with the fix, when the two usual causes of "every live operation times out at 25 s" are measured. If Logic's window is not on screen on the current Space, move Logic to the same desktop as the app running the server (a window on another desktop or in full screen reads as no window). If Logic's CPU stays above about 85% over a 200 ms sample, its main thread is saturated and AX calls stall: with Logic 13 the usual cause is the open Browser panel, so close it. The same causes appear as `likely_causes` on an `operation_timeout` reply. The check reads the process CPU and the window list only; it never touches Logic's AX tree.
+
 <a id="doctor-channelsmanual-validation"></a>
 ### `channels.manual_validation`
 Required send-only mapped channels terminate as unavailable because setup and outcome readback are

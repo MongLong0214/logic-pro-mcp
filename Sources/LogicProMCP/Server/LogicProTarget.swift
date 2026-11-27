@@ -85,10 +85,17 @@ enum LogicProVariantPolicy {
         if let records = loadManifestRecords() {
             return records
         }
-        fputs(
-            "LogicProVariantPolicy: manifest.json unavailable; using embedded emergency fallback\n",
-            stderr
-        )
+        // #1627: a packaged install (Homebrew) ships no manifest.json, so the built-in records are
+        // its normal source and say nothing. Only a path the user configured and that could not be
+        // used is worth a line.
+        if let configured = ProcessInfo.processInfo.environment[manifestEnvironmentKey]?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !configured.isEmpty {
+            fputs(
+                "LogicProVariantPolicy: \(manifestEnvironmentKey) names a manifest that could not be "
+                    + "used; using the built-in Logic Pro variants\n",
+                stderr
+            )
+        }
         return emergencyFallback()
     }
 
