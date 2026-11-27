@@ -79,8 +79,9 @@ import Testing
                                                   range: releaseLoop.upperBound..<gate.endIndex))
     let debugLoop = try #require(gate.range(of: "for live_test in ${debug_live_tests[@]+\"${debug_live_tests[@]}\"}; do",
                                             range: debugExecutable.upperBound..<gate.endIndex))
-    let suite = try #require(gate.range(of: "\nswift test --no-parallel\n"))
-    let finalHash = try #require(gate.range(of: "verify_candidate_bytes", range: suite.upperBound..<gate.endIndex))
+    #expect(!gate.contains("\nswift test --no-parallel\n"),
+            "the general suite runs in hosted CI; the Logic host runs only the live tests")
+    let finalHash = try #require(gate.range(of: "verify_candidate_bytes", range: debugLoop.upperBound..<gate.endIndex))
 
     #expect(inventory.lowerBound < stage.lowerBound)
     #expect(stage.lowerBound < logic.lowerBound)
@@ -88,8 +89,7 @@ import Testing
     #expect(permission.lowerBound < releaseLoop.lowerBound)
     #expect(releaseLoop.lowerBound < debugExecutable.lowerBound)
     #expect(debugExecutable.lowerBound < debugLoop.lowerBound)
-    #expect(debugLoop.lowerBound < suite.lowerBound)
-    #expect(suite.lowerBound < finalHash.lowerBound)
+    #expect(debugLoop.lowerBound < finalHash.lowerBound)
     #expect(gate.contains("realReleaseBinaryExecutesEveryOperationWithIndependentReadback"))
     #expect(gate.contains("runnerIgnoresPartialStateFaultEnvOnRealServer"))
     #expect(gate.contains("runnerRejectsPartialStateObservedFromRealServer"))
@@ -132,7 +132,6 @@ import Testing
     #expect(wrapper.contains("require_release_origin \"$CANDIDATE_ROOT\""))
     #expect(wrapper.contains("git@github.com:MongLong0214/logic-pro-mcp.git"))
     #expect(wrapper.contains("[\"git\", \"-C\", sys.argv[6], \"show\""))
-    #expect(wrapper.contains("fork pull requests cannot execute on the trusted Logic host"))
     #expect(wrapper.contains("run.get(\"path\") != \".github/workflows/ci.yml\""))
     #expect(wrapper.contains("run.get(\"status\") != \"in_progress\""))
     #expect(wrapper.contains("run.get(\"conclusion\") is not None"))

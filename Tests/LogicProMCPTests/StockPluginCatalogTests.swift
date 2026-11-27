@@ -486,7 +486,10 @@ struct StockPluginCatalogTests {
         #expect(channelEQ?.safeWriteCapabilities == .parameterWriteReadback)
         let nonInsertable = snapshot.entries.first { $0.id == "logic.stock.effect.chromaverb" }
         #expect(nonInsertable?.safeWriteCapabilities == StockPluginSafeWriteCapability.none)
-        #expect(AccessibilityChannel.pluginInsertSpec(named: "ChromaVerb") == nil)
+        // #1618: insertable no longer means write-capable. ChromaVerb inserts; a name with no row in
+        // the plug-in name canon still refuses.
+        #expect(AccessibilityChannel.pluginInsertSpec(named: "ChromaVerb") != nil)
+        #expect(AccessibilityChannel.pluginInsertSpec(named: "ChromaGlow") == nil)
     }
 
     @Test("Compressor threshold percent aliases preserve the legacy raw scale")

@@ -17,9 +17,17 @@ defaults:
     shell: bash
 
 env:
-  # These suites carry most of the measured runtime. SwiftPM applies the expression to an
-  # implementation-qualified name while `swift test list` includes the module prefix.
-  TEST_SHARD_SELECTOR: '\.(QualificationRunnerTests|Issue965FreshPopulationAcquisitionTests|Issue538TrackCreationObservationTests|Issue968ExactTrackNameAdapterTests|QualificationFaultInjectionTests|MIDIReadbackCallSiteLintTests|Issue538ModalWitnessTests)/'
+  # The sorted test inventory is dealt round-robin into this many shards by
+  # Scripts/ci-test-shard-manifest.py, and `test-shards` below runs one matrix job per shard.
+  # The matrix literal must list exactly 0 .. TEST_SHARD_COUNT-1 (an Actions matrix cannot read
+  # `env`); a missing shard fails product-validation and an extra one fails its own job.
+  # Measured on run 45950480151 at 8077 tests: the serial suite took 2572 s in total, one suite
+  # (Issue965HeldSelectionAssociationTests) alone took 808 s, so a split by suite cannot run
+  # faster than 808 s, while dealing tests round-robin spreads that suite over every shard. The
+  # same timings give the slowest of 2 / 3 / 4 / 5 shards as 1305 / 918 / 682 / 560 s. Four
+  # leaves one of the five macOS jobs an account may run at once free; each shard also costs about
+  # two minutes of checkout, artifact download and extraction that does not shrink with it.
+  TEST_SHARD_COUNT: '4'
 
 # Every macOS job below runs on `macos-15`, an arm64 image: the architecture the product ships
 # to and the native Logic host qualifies. The compile and the test run are architecture specific
@@ -179,35 +187,20 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
-  test-build:
-    name: test-build
-    needs: change-scope
-    if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
-    runs-on: macos-15
-    timeout-minutes: 130
-    env:
-      DEVELOPER_DIR: /Library/Developer/CommandLineTools
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-
+      # These offline guards and Python tests do not feed the Swift compile, so they run here, beside
+      # the 34-minute `test-build`, after the release executable is published: a failed guard still
+      # fails this job and so the required `build`, and it neither delays the coverage compile nor
+      # suppresses this job's own compile. They ran at the head of `test-build` before, adding about
+      # 1.1 minutes (guards 0.43, Python tests 0.52) to the critical path.
       - name: Product source guards
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
         run: |
           set -euo pipefail
           bash Scripts/ci-forbid-dead-expect.sh
           bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
 
-      # Whether the Formula's version is published, and whether its sha256 is that release's,
-      # needs GitHub and a token, so it runs here rather than inside the unit suite. Native
-      # qualification runs the unit suite with no GitHub credentials, and a unit test that asked
-      # GitHub failed there with HTTP none. VersionConsistencyTests keeps the offline half.
-      - name: Formula names the newest published release and its hash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash Scripts/ci-verify-formula-sha.sh
-
       - name: Run Python product tests in parallel
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
         run: |
           set -euo pipefail
           tests=(
@@ -235,6 +228,28 @@ jobs:
             wait "$pid" || failed=1
           done
           test "$failed" -eq 0
+
+  test-build:
+    name: test-build
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 130
+    env:
+      DEVELOPER_DIR: /Library/Developer/CommandLineTools
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      # Whether the Formula's version is published, and whether its sha256 is that release's,
+      # needs GitHub and a token, so it runs here rather than inside the unit suite. Native
+      # qualification runs the unit suite with no GitHub credentials, and a unit test that asked
+      # GitHub failed there with HTTP none. VersionConsistencyTests keeps the offline half.
+      - name: Formula names the newest published release and its hash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash Scripts/ci-verify-formula-sha.sh
 
       - name: Cache SwiftPM downloads
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
@@ -268,9 +283,8 @@ jobs:
           rm "$artifact/inventory-raw.txt"
           python3 Scripts/ci-test-shard-manifest.py partition \
             --inventory "$artifact/inventory.txt" \
-            --selector "$TEST_SHARD_SELECTOR" \
-            --selected "$artifact/selected.txt" \
-            --complement "$artifact/complement.txt"
+            --shards "$TEST_SHARD_COUNT" \
+            --output-directory "$artifact"
 
           triple_debug=$(readlink .build/debug)
           test_bundle=".build/$triple_debug/LogicProMCPPackageTests.xctest"
@@ -299,13 +313,9 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 4
       matrix:
-        include:
-          - shard: selected
-            mode: filter
-          - shard: complement
-            mode: skip
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -342,7 +352,6 @@ jobs:
       - name: Run this exact serial shard
         env:
           SHARD: ${{ matrix.shard }}
-          SHARD_MODE: ${{ matrix.mode }}
         run: |
           set -euo pipefail
           runtime="$RUNNER_TEMP/test-runtime"
@@ -351,6 +360,8 @@ jobs:
           PROFRAW_DIR="$RUNNER_TEMP/logicpromcp-profraw-$SHARD"
           COVERAGE_LOG="$out/test.log"
           mkdir -p "$out" "$xunit_dir" "$PROFRAW_DIR"
+          test "$SHARD" -ge 0
+          test "$SHARD" -lt "$TEST_SHARD_COUNT"
           test "$(cat "$runtime/candidate-sha.txt")" = "$GITHUB_SHA"
           test "$(cat "$RUNNER_TEMP/release-runtime/candidate-sha.txt")" = "$GITHUB_SHA"
           tar -xzf "$runtime/runtime.tar.gz" -C "$GITHUB_WORKSPACE"
@@ -364,25 +375,21 @@ jobs:
           swift test list --skip-build > "$RUNNER_TEMP/inventory-$SHARD-raw.txt"
           LC_ALL=C sort "$RUNNER_TEMP/inventory-$SHARD-raw.txt" > "$RUNNER_TEMP/inventory-$SHARD.txt"
           cmp "$runtime/inventory.txt" "$RUNNER_TEMP/inventory-$SHARD.txt"
+          test -s "$runtime/shard-$SHARD.txt"
+          test -s "$runtime/shard-$SHARD.filter"
 
           export LLVM_PROFILE_FILE="$PROFRAW_DIR/%m-%p.profraw"
-          if [ "$SHARD_MODE" = filter ]; then
-            swift test --skip-build --enable-code-coverage --no-parallel \
-              --xunit-output "$xunit_dir/results.xml" --filter "$TEST_SHARD_SELECTOR" \
-              2>&1 | tee "$COVERAGE_LOG"
-          else
-            swift test --skip-build --enable-code-coverage --no-parallel \
-              --xunit-output "$xunit_dir/results.xml" --skip "$TEST_SHARD_SELECTOR" \
-              2>&1 | tee "$COVERAGE_LOG"
-          fi
+          swift test --skip-build --enable-code-coverage --no-parallel \
+            --xunit-output "$xunit_dir/results.xml" --filter "$(cat "$runtime/shard-$SHARD.filter")" \
+            2>&1 | tee "$COVERAGE_LOG"
           python3 Scripts/ci-test-shard-manifest.py verify-xunit \
-            --expected "$runtime/$SHARD.txt" \
+            --expected "$runtime/shard-$SHARD.txt" \
             --xunit-directory "$xunit_dir" \
-            --actual "$out/actual-$SHARD.txt"
+            --actual "$out/actual-shard-$SHARD.txt"
           find .build -type f -path '*/debug/codecov/default.profdata' \
             > "$RUNNER_TEMP/profiles-$SHARD.txt"
           test "$(grep -c . "$RUNNER_TEMP/profiles-$SHARD.txt")" = 1
-          cp "$(cat "$RUNNER_TEMP/profiles-$SHARD.txt")" "$out/$SHARD.profdata"
+          cp "$(cat "$RUNNER_TEMP/profiles-$SHARD.txt")" "$out/shard-$SHARD.profdata"
 
       - name: Keep this shard's evidence
         if: always()
@@ -456,7 +463,7 @@ jobs:
           name: test-runtime-${{ github.run_id }}
           path: ${{ runner.temp }}/test-runtime
 
-      - name: Download both shard results
+      - name: Download every shard result
         if: ${{ needs.change-scope.outputs.full-validation == 'true' && needs.release-build.result == 'success' && needs.test-build.result == 'success' && needs.test-shards.result == 'success' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -472,23 +479,29 @@ jobs:
           shards="$RUNNER_TEMP/test-shards"
           test "$(cat "$runtime/candidate-sha.txt")" = "$GITHUB_SHA"
           tar -xzf "$runtime/runtime.tar.gz" -C "$GITHUB_WORKSPACE"
-          find "$shards" -type f -name actual-selected.txt > "$RUNNER_TEMP/selected-paths.txt"
-          find "$shards" -type f -name actual-complement.txt > "$RUNNER_TEMP/complement-paths.txt"
-          test "$(grep -c . "$RUNNER_TEMP/selected-paths.txt")" = 1
-          test "$(grep -c . "$RUNNER_TEMP/complement-paths.txt")" = 1
-          selected_dir=$(dirname "$(cat "$RUNNER_TEMP/selected-paths.txt")")
-          complement_dir=$(dirname "$(cat "$RUNNER_TEMP/complement-paths.txt")")
+          # Exactly one result and one profile per shard, and nothing else: a shard that did not
+          # run, or a stray extra one, fails here instead of being left out of the union or merge.
+          test "$(find "$shards" -type f -name 'actual-shard-*.txt' | grep -c .)" = "$TEST_SHARD_COUNT"
+          test "$(find "$shards" -type f -name 'shard-*.profdata' | grep -c .)" = "$TEST_SHARD_COUNT"
+          union_args=()
+          profiles=()
+          for ((shard = 0; shard < TEST_SHARD_COUNT; shard++)); do
+            find "$shards" -type f -name "actual-shard-$shard.txt" > "$RUNNER_TEMP/actual-$shard-paths.txt"
+            find "$shards" -type f -name "shard-$shard.profdata" > "$RUNNER_TEMP/profile-$shard-paths.txt"
+            test "$(grep -c . "$RUNNER_TEMP/actual-$shard-paths.txt")" = 1
+            test "$(grep -c . "$RUNNER_TEMP/profile-$shard-paths.txt")" = 1
+            union_args+=(--shard "$(cat "$RUNNER_TEMP/actual-$shard-paths.txt")")
+            profiles+=("$(cat "$RUNNER_TEMP/profile-$shard-paths.txt")")
+          done
           python3 Scripts/ci-test-shard-manifest.py verify-union \
             --inventory "$runtime/inventory.txt" \
-            --selected "$selected_dir/actual-selected.txt" \
-            --complement "$complement_dir/actual-complement.txt"
+            "${union_args[@]}"
 
           triple_debug=$(readlink .build/debug)
           find .build -type d -name codecov -prune -exec rm -rf {} + 2>/dev/null || true
           mkdir -p ".build/$triple_debug/codecov"
           xcrun llvm-profdata merge -sparse \
-            "$selected_dir/selected.profdata" \
-            "$complement_dir/complement.profdata" \
+            "${profiles[@]}" \
             -o ".build/$triple_debug/codecov/default.profdata"
           bash Scripts/ci-coverage-gate.sh
 
@@ -510,7 +523,10 @@ jobs:
   native-logic-e2e:
     name: native-logic-e2e
     needs: [change-scope, release-build, product-validation]
-    if: always()
+    # Not always(): a job that always runs cannot be cancelled, so a superseded run sat in its
+    # native wait for up to 180 minutes and held the concurrency group, leaving the new run
+    # pending. `build` still requires this job's result to be success.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 190
     permissions:
@@ -533,8 +549,9 @@ jobs:
           set -euo pipefail
           test "$RELEASE_BUILD" = success
           test "$PRODUCT_VALIDATION" = success
-          # Exit 3 from the consumer means "no native status yet": keep this job (and so
-          # the run) active until the maintainer's Scripts/ci-native-qualify.sh posts it.
+          # Exit 3 from the consumer means "no native result yet" (no status, or pending, for
+          # this attempt): keep this job (and so the run) active until the maintainer's
+          # Scripts/ci-native-qualify.sh posts its result.
           deadline=$((SECONDS + NATIVE_WAIT_MINUTES * 60))
           while true; do
             gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/status?per_page=100" \
@@ -544,10 +561,16 @@ jobs:
               > "$RUNNER_TEMP/status-pages.json"
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
               > "$RUNNER_TEMP/artifacts.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?filter=all&per_page=100" \
+              > "$RUNNER_TEMP/run-jobs.json"
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/attempts/$EXPECTED_ATTEMPT" \
+              > "$RUNNER_TEMP/run-attempt.json"
             set +e
             python3 - "$RUNNER_TEMP/combined-status.json" "$RUNNER_TEMP/status-pages.json" \
               "$RUNNER_TEMP/artifacts.json" \
-              "$EXPECTED_SHA" "$EXPECTED_TARGET" "$EXPECTED_ATTEMPT" "$RUN_ID" <<'PY'
+              "$EXPECTED_SHA" "$EXPECTED_TARGET" "$EXPECTED_ATTEMPT" "$RUN_ID" \
+              "$RUNNER_TEMP/run-jobs.json" "$RUNNER_TEMP/run-attempt.json" <<'PY'
           import json, re, sys
           status_response = json.load(open(sys.argv[1], encoding="utf-8"))
           status_pages = json.load(open(sys.argv[2], encoding="utf-8"))
@@ -559,7 +582,43 @@ jobs:
           if not isinstance(status_pages, list) or not all(isinstance(page, list) for page in status_pages):
               raise SystemExit("full commit status pages have an unexpected shape")
           rows = [row for page in status_pages for row in page]
-          name = f"release-runtime-{run_id}-{expected_attempt}"
+          # A failed-only rerun does not run release-build again, but the jobs API still lists it
+          # under the current run_attempt with a new id and the ORIGINAL started_at/completed_at.
+          # It ran in THIS attempt only if it started at or after this attempt's run_started_at;
+          # then only this attempt's artifact is acceptable. Otherwise it is carried over and the
+          # artifact belongs to the earliest attempt whose release-build has the same start and
+          # end times (the attempt that really ran it), which must have succeeded. The status
+          # below stays bound to the current attempt's target URL either way.
+          from datetime import datetime
+          def when(text):
+              return datetime.fromisoformat(text.replace("Z", "+00:00"))
+          jobs_pages = json.load(open(sys.argv[8], encoding="utf-8"))
+          if not isinstance(jobs_pages, list) or not all(
+                  isinstance(page, dict) and isinstance(page.get("jobs"), list)
+                  for page in jobs_pages):
+              raise SystemExit("workflow run jobs have an unexpected shape")
+          run_started = when(json.load(open(sys.argv[9], encoding="utf-8")).get("run_started_at"))
+          release_jobs = [job for page in jobs_pages for job in page["jobs"]
+                          if job.get("name") == "release-build"]
+          here = [job for job in release_jobs if job.get("run_attempt") == int(expected_attempt)]
+          if len(here) != 1:
+              raise SystemExit(f"expected one release-build job for attempt {expected_attempt}, found {len(here)}")
+          artifact_attempt = expected_attempt
+          if when(here[0].get("started_at")) < run_started:
+              origin = [job["run_attempt"] for job in release_jobs
+                        if isinstance(job.get("run_attempt"), int)
+                        and not isinstance(job["run_attempt"], bool)
+                        and 0 < job["run_attempt"] < int(expected_attempt)
+                        and job.get("conclusion") == "success"
+                        and job.get("started_at") == here[0].get("started_at")
+                        and job.get("completed_at") == here[0].get("completed_at")]
+              if not origin:
+                  raise SystemExit("carried-over release-build has no earlier successful attempt that ran it")
+              if any(row.get("name") == f"release-runtime-{run_id}-{expected_attempt}"
+                     for row in artifacts):
+                  raise SystemExit("an artifact exists for this attempt, so an earlier attempt's is not used")
+              artifact_attempt = str(min(origin))
+          name = f"release-runtime-{run_id}-{artifact_attempt}"
           matches = [row for row in artifacts if row.get("name") == name]
           if len(matches) != 1:
               raise SystemExit(f"expected one current {name!r} artifact, found {len(matches)}")
@@ -574,15 +633,21 @@ jobs:
           receipt = f"Native PASS a={expected_attempt} id={artifact_id} d={digest[7:]}"
           if len(receipt) > 140:
               raise SystemExit("native receipt exceeds GitHub's commit-status description limit")
-          exact = [row for row in rows if row.get("context") == "logic-native-e2e"]
+          # Only statuses for THIS run attempt count: an older attempt's status (any state) is
+          # ignored, never accepted and never a reason to fail. Newest first, as the API returns.
+          exact = [row for row in rows
+                   if row.get("context") == "logic-native-e2e"
+                   and row.get("target_url") == expected_target]
           if not exact:
               print("missing exact native status; run Scripts/ci-native-qualify.sh "
                     f"for candidate {expected_sha} and run {run_id} on the trusted Logic host",
                     file=sys.stderr)
               raise SystemExit(3)
           latest = exact[0]
-          if latest.get("target_url") != expected_target:
-              raise SystemExit("native status belongs to another CI run attempt")
+          if latest.get("state") == "pending":
+              print("native qualification is still running for this run attempt; waiting",
+                    file=sys.stderr)
+              raise SystemExit(3)
           if latest.get("state") != "success":
               raise SystemExit(f"native status is {latest.get('state')!r}, not success")
           if latest.get("description") != receipt:

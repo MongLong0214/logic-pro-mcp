@@ -7,9 +7,10 @@ extension AccessibilityChannel {
     /// physical-input, aux creation, or input-format conversion authority.
     static func setInputBusVerified(params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
-        timing: OutputAssignmentTiming = .live,
+        timing: OutputAssignmentTiming? = nil,
         ownedInverse: ChangedInputObservation? = nil,
         ownedCreation: OwnedAuxLifecycle.InputInitializationProof? = nil) async -> ChannelResult {
+        let timing = OutputAssignmentTiming.resolving(timing, for: runtime)
         let operation = "mixer.set_input_bus_verified"
         var extras: [String: Any] = ["operation": operation, "write_attempted": false,
             "navigation_attempted": false]
