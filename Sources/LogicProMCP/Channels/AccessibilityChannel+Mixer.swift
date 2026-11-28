@@ -300,7 +300,8 @@ extension AccessibilityChannel {
     static func defaultSetMixerValue(
         params: [String: String],
         target: MixerTarget,
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        headerCache: MixerHeaderFaderCache? = nil
     ) -> ChannelResult {
         // Accept both `value` (legacy) and `volume`/`pan` (dispatcher-side aliases)
         // — same contract-drift class of bug as transport.set_tempo's bpm/tempo.
@@ -337,6 +338,7 @@ extension AccessibilityChannel {
         // not jump to the written value (`set 0.5` on a 0.76 fader looked unmoved),
         // but on Logic 12.3.1 it moved one raw unit toward it, which the fine phase uses.
         var headerReadForDiagnostics: AXLogicProElements.TrackHeaderRead = .unavailable
+        var locatePath = "full_walk"
         let slider: AXUIElement?
         if let physical {
             switch target {
@@ -354,13 +356,20 @@ extension AccessibilityChannel {
             }
 
             var resolved: AXUIElement?
-            if let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime) {
+            if target == .volume, let headerCache,
+               let cached = headerCache.revalidated(index: index, runtime: runtime.ax) {
+                resolved = cached
+                locatePath = "revalidated_cache"
+            } else if let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime) {
                 headerReadForDiagnostics = AXLogicProElements.allTrackHeadersRead(
                     in: arrangeWindow, runtime: runtime
                 )
                 if case .read(let headers) = headerReadForDiagnostics,
                    index >= 0, index < headers.count {
                     resolved = control(in: headers[index])
+                    if target == .volume, let headerCache, let found = resolved {
+                        headerCache.store(index: index, header: headers[index], slider: found, runtime: runtime.ax)
+                    }
                     if resolved == nil,
                        AXHelpers.performAction(
                         arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax
@@ -552,8 +561,7 @@ extension AccessibilityChannel {
             guard controlIsCurrent() else { break }
             _ = AXHelpers.performAction(slider, goingUp ? kAXIncrementAction : kAXDecrementAction, runtime: runtime.ax)
             steps += 1
-            usleep(25_000)
-            guard var next = readSlider() else { break }
+            guard var next = MixerSettle.read(after: cur, read: readSlider) else { break }
             if next == cur {
                 usleep(150_000)
                 next = readSlider() ?? next
@@ -564,7 +572,7 @@ extension AccessibilityChannel {
                 if abs(cur - targetRaw) < abs(next - targetRaw) {
                     guard controlIsCurrent() else { break }
                     _ = AXHelpers.performAction(slider, goingUp ? kAXDecrementAction : kAXIncrementAction, runtime: runtime.ax)
-                    usleep(25_000)
+                    _ = MixerSettle.read(after: next, read: readSlider)
                 }
                 break
             }
@@ -588,8 +596,7 @@ extension AccessibilityChannel {
             ) else { break }
             fineSteps += 1
             lastFineWriteFrom = cur
-            usleep(25_000)
-            var next = readSlider()
+            var next = MixerSettle.read(after: cur, read: readSlider)
             if next == cur {
                 usleep(150_000)
                 next = readSlider()
@@ -641,6 +648,7 @@ extension AccessibilityChannel {
             "detent_raw_step": detentRawStep,
             "verify_source": "ax_slider",
             "write_method": "ax_increment_decrement",
+            "locate_path": locatePath,
             "nudge_steps": steps,
             "fine_steps": fineSteps,
             // On a normalized slider rounding would call 0.6 and 0.9 one position, so only equality counts.

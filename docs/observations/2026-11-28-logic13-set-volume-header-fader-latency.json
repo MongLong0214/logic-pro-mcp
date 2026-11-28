@@ -1,0 +1,101 @@
+{
+  "schema": 3,
+  "id": "2026-11-28-logic13-set-volume-header-fader-latency",
+  "date": "2026-11-28",
+  "subject": "Logic 13 track-header Volume fader: an AXIncrement, AXDecrement or AXValue write is readable at once, so the time of mixer.set_volume was fixed sleeps and the header walk",
+  "question": "On Logic 13 how long after an Accessibility write on a track-header Volume fader does its AXValue read the new value, and what part of a mixer.set_volume call is the header walk?",
+  "verdict": "works",
+  "issues": [
+    1606
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "13.0",
+    "build": "7801",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "On a disposable copy of a five-track project in Logic 13, start one LogicProMCP server and call logic_mixer set_volume 20 times on the same track with values 0.72 and 0.45 alternating, timing each call from the client, then read the track's header fader with a separate Accessibility reader.",
+    "expected": "Every call returns State A with verified true and reached_exact true; the median call is under 20 ms after the first; the first call and any call after the rail changed show locate_path full_walk; the reader shows the last requested value.",
+    "cost": "A disposable project copy; about 2 minutes; no save."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Mixer.swift:defaultSetMixerValue",
+    "Sources/LogicProMCP/Channels/MixerHeaderFaderCache.swift:MixerSettle.read",
+    "Sources/LogicProMCP/Channels/MixerHeaderFaderCache.swift:MixerHeaderFaderCache.revalidated"
+  ],
+  "evidence": [],
+  "method": "Built main at 9664b4f1 and called logic_mixer set_volume 20 times on track index 2 of a copy of the R11 fixture in one server process, timing each call; repeated the run with temporary timers in the write path to split locate, nudge and fine phases. Built the repair and made the same 20 calls, then 1 call, 3 calls after selecting another track, 3 after two blind Mixer toggles, 3 after selecting track 0, and one repeat of the last value 2 s later. Every call's envelope was recorded.",
+  "observations": [
+    {
+      "what": "before, 20 calls, wall ms",
+      "median": 530,
+      "p90": 552,
+      "max": 559,
+      "states": "A 20/20",
+      "nudge_steps": "8 (call 1: 2)",
+      "fine_steps": "5 (call 1: 4)"
+    },
+    {
+      "what": "before, split of one call, ms",
+      "locate": "70 to 95",
+      "first_reads": 1,
+      "nudge_loop": "255",
+      "fine_phase": "170",
+      "final_reads": 1
+    },
+    {
+      "what": "fixed sleep before each readback in the unrepaired write loop, ms",
+      "value": 25,
+      "reads_after_the_repair": "the first read after each write already returned the new value in the 13 steps of a call"
+    },
+    {
+      "what": "after, 20 calls, wall ms",
+      "median": 6.2,
+      "p90": 8.1,
+      "max": 81,
+      "states": "A 20/20",
+      "observed_raw": "159 and 84, the same as before",
+      "first_call_locate_path": "full_walk",
+      "other_calls_locate_path": "revalidated_cache"
+    },
+    {
+      "what": "after selecting another track, 3 calls",
+      "state": "A 3/3",
+      "locate_path": "revalidated_cache",
+      "wall_ms": [
+        5,
+        8,
+        6
+      ]
+    },
+    {
+      "what": "after two blind Mixer toggles, 3 calls each side, and after selecting track 0, 3 calls",
+      "state": "A 9/9",
+      "locate_path": "revalidated_cache",
+      "wall_ms": "3 to 17",
+      "mixer_visibility_observed": false
+    },
+    {
+      "what": "same value requested 2 s after the last write",
+      "nudge_steps": 0,
+      "fine_steps": 0,
+      "observed_raw": 159
+    }
+  ],
+  "conclusion": "On this host the header Volume fader reads its new AXValue immediately after each write; the fixed 25 ms sleep before every readback was the larger part of a call, and the whole-window header walk was 70 to 95 ms. Polling from the first read and reusing a revalidated fader took the median from 530 ms to 6.2 ms with the same State A, step counts and final raw values, and the value held 2 s later.",
+  "limits": [
+    "One Logic 13.0 build 7801 host, ko-KR, one fixture, one track, header Volume fader only; pan, Mixer-strip writes and other operations were not measured.",
+    "The per-part split of a before-call comes from temporary timers and is not committed.",
+    "Whether the Mixer panel changed visibility during the blind toggles was not observed; the rail does not depend on it.",
+    "A reordered rail or a changed slider falling back to the full locate is covered by unit tests, not measured live.",
+    "The evidence files are retained under the author's cache and are not committed."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures call latency and write readback timing. It adds no Apple label vocabulary and claims no string-corpus value."
+  }
+}
