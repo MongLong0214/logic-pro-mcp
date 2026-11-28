@@ -118,13 +118,15 @@ struct Issue1606SetVolumeLatencyTests {
     func settledOnTargetIsA() throws {
         let body = try runVolume(transient: false)
         #expect(body["state"] as? String == "A")
-        #expect(body["verified"] as? Bool == true)
+        let verified = try #require(body["verified"] as? Bool)
+        #expect(verified)
     }
 
     @Test("a value that passes through the target and settles elsewhere is not State A")
     func transientThroughTargetIsNotA() throws {
         let body = try runVolume(transient: true)
         #expect(body["state"] as? String != "A")
-        #expect(body["verified"] as? Bool != true)
+        let verified = (body["verified"] as? Bool) ?? false
+        #expect(!verified)
     }
 }
