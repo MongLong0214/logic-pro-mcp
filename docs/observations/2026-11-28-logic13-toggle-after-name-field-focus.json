@@ -1,0 +1,92 @@
+{
+  "schema": 3,
+  "id": "2026-11-28-logic13-toggle-after-name-field-focus",
+  "date": "2026-11-28",
+  "subject": "Logic 13 track toggles after a track-name click: the focus is an unchanged text field under the name field, and writing AXFocused on the Tracks group leaves it",
+  "question": "After a track name is focused, why do mute, solo and arm refuse, can an AX press toggle instead, and can focus be moved off the field without losing text?",
+  "verdict": "works",
+  "issues": [
+    1604,
+    1605
+  ],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "13.0",
+    "build": "7801",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "On a fresh copy of a four-track project, write AXFocused on the name text field of track 1 through Accessibility and read the focused element and its parents. Call logic_tracks mute, solo and arm on index 1 and read each header checkbox with a separate Accessibility reader. Repeat with Track > Rename Track open and text written into the field.",
+    "expected": "With the name field focused each op returns State A and the reader shows the change; with a rename editor holding pending text each op returns State C unsafe_focus_for_synthetic_key and the field keeps its text.",
+    "cost": "A disposable project copy per trial; no save."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:leaveUnchangedNameField"
+  ],
+  "evidence": [],
+  "method": "Measured main at 9664b4f1 (release build) for 3 trials on a fresh fixture copy each, with focus (a) as at project open, (b) after AXPress on the header name field, (c) after AXFocused written on the name text field; mute, solo and arm on track 1 each. Probed, in the name-field state, AXFocused written on the header group and on the Tracks group, and AXPress on the mute checkbox. Opened Track > Rename Track with pending text for comparison. Ran the fix build for 3 trials in state (c) and 1 trial with the rename editor holding pending text and 3 operations. Every trial read the header checkboxes with a separate reader.",
+  "observations": [
+    {
+      "what": "focus at project open",
+      "role": "AXGroup",
+      "description_is_track_contents": true,
+      "mute_solo_arm_state": "A",
+      "trials": 1
+    },
+    {
+      "what": "AXPress on the header name field",
+      "focus_after": "unchanged, the track contents group",
+      "mute_solo_arm_state": "A",
+      "trials": 1
+    },
+    {
+      "what": "AXFocused written on the name text field",
+      "focus_after": "AXTextField child of the name AXTextField; value equals the track name; whole name selected; value and selection range settable",
+      "mute_solo_arm_state": "C unsafe_focus_for_synthetic_key, focus_guard AXTextField",
+      "trials": 3,
+      "operations_per_trial": 3
+    },
+    {
+      "what": "AXPress on the mute checkbox with that field focused",
+      "mute_changed": false,
+      "focus_after": "unchanged"
+    },
+    {
+      "what": "AXFocused written on the header group with that field focused",
+      "focus_after": "unchanged"
+    },
+    {
+      "what": "AXFocused written on the Tracks group (first AXGroup above the header group) with that field focused",
+      "focus_after": "the Tracks group"
+    },
+    {
+      "what": "rename editor from Track > Rename Track with pending text",
+      "focus_parent": "the header group",
+      "focus_after_header_group_write": "unchanged"
+    },
+    {
+      "what": "fix build, AXFocused written on the name text field",
+      "mute_solo_arm_state": "A",
+      "reader_confirmed": true,
+      "trials": 3,
+      "operations_per_trial": 3
+    },
+    {
+      "what": "fix build, rename editor with pending text",
+      "state": "C unsafe_focus_for_synthetic_key",
+      "pending_text_kept": true,
+      "operations": 3
+    }
+  ],
+  "conclusion": "The refusal after a name click is the focus guard seeing a text field. When that field's value equals the committed name nothing is pending: focus moves to the Tracks group and the key then lands, State A in 9 of 9 operations. AXPress on the mute checkbox does not flip it while the field is focused, so the press route is not available. A rename editor with pending text keeps its text and the refusal. Focus on the track contents at project open is an ordinary start state and does not refuse the toggles.",
+  "limits": [
+    "One machine, ko-KR, one project.",
+    "No real mouse click was made; the state was produced with AXFocused.",
+    "A name field with pending text in the name-field shape was covered by unit tests only.",
+    "Other locales and other Logic builds are not measured."
+  ],
+  "supersedes": null
+}
