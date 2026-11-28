@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+- `insert_plugin` no longer needs `slot` (#1618, #1619). Without it the plug-in goes to the first
+  empty Audio FX slot; with it, that slot is used. An occupied slot is still refused, never
+  replaced, and a strip with no empty visible slot refuses with `no_free_slot`. The reply reads the
+  new slot back and reports the slots that were already there. Every stock Audio FX with a measured
+  menu row now resolves by name, not only Gain, Compressor and Channel EQ; a name outside the
+  measured set refuses. Sending to a bus and parameter writes on an arbitrary slot are not part of
+  this change, so #1618 stays open.
+- A server deadline that fires after an operation has started writing now answers State B
+  (`effect_unknown_after_timeout`, `write_attempted: true`, `safe_to_retry: false`) instead of State
+  C `operation_timeout` (#1565, #1622). Timeouts, `logic_system health` and a new doctor check
+  `logic.responsiveness` name two measured causes with their fix: Logic's window is not on screen on
+  this Space, or Logic's CPU is saturated. The idle state poller backs off, its periodic transport
+  read no longer walks the whole window, and an abandoned read releases the Accessibility actor so
+  later reads do not queue behind it. Not yet confirmed by the reporters on Logic 13 in en-US.
+- `record_sequence` accepts a target whose track header reads as unclassified when the inspector
+  channel strip for that exact track shows a software instrument (#1565, #1623). On Logic 13 every
+  header reads unclassified, so the target check refused even a track `create_instrument` had just
+  verified. Audio, external MIDI and undetermined strips are still refused before any write.
+- Opening a plug-in editor from an insert slot presses the slot's open control a second time when
+  the first press opened nothing (#1611). On a freshly opened Logic 13.0 project the first press
+  returned success and opened no editor, so `get_channel_eq_state_verified` and
+  `get_param_verified` refused with `window_open_failed`.
+- A packaged install no longer prints `manifest.json unavailable; using embedded emergency
+  fallback` at every start (#1627, #1630). The built-in Logic variant records are the same as the
+  manifest's, so nothing changed at runtime. A line appears only when
+  `LOGIC_PRO_MCP_MANIFEST_PATH` names a manifest that could not be used, or a discovered
+  `manifest.json` could not be read; neither line prints a path.
 - `tracks.select` on Logic 13 (#1600): the rail's selection write is acknowledged without effect there, so the selection now moves through the main Mixer's `AXSelectedChildren`. It writes the Mixer only when the Mixer is in Tracks view, no type filter is off and every header's name equals its row's strip name field; otherwise it refuses before any Mixer write with the selection unchanged, and a Mixer write that does not settle on the requested track is a failure, never State A. `select` now refuses with State C `unsafe_focus_for_synthetic_key` while a text field has Logic's focus, because moving the selection committed an open rename's pending text as the track name.
 - `transport.stop` through Accessibility now presses the control bar's Stop button (identifier
   `controlBar/stopButton`) while Play is on, and answers State A only when Play reads off (#1621).

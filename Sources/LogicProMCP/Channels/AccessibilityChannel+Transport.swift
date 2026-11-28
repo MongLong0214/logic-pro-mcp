@@ -2079,7 +2079,8 @@ extension AccessibilityChannel {
                 -- even if AX reports an error, so any result after it becomes true must not
                 -- release another position route.
                 set dialogActuationIssued to false
-                delay 0.2
+                -- #1601: no fixed wait here. dismissOpenMenu has just observed the menu bar CLOSED,
+                -- and a fixed 0.2 s after an observed state guarded no transition (measured).
 
                 -- Locale selection is a read-only path-resolution step. It
                 -- deliberately performs no click, so an AX error cannot turn a
@@ -2259,7 +2260,6 @@ extension AccessibilityChannel {
                     return "DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before typing (" & dialogFocusState & ")"
                 end if
                 keystroke "a" using command down
-                delay 0.1
             on error errMsg
                 \(PostLeafCleanupSite.selectAllError.appleScript)
                 return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: Cmd+A may have been sent (" & errMsg & ")"
@@ -2278,7 +2278,6 @@ extension AccessibilityChannel {
                     return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: observed Go To Position dialog was not focused before typing (" & dialogTypingFocusState & ")"
                 end if
                 keystroke "\(position)"
-                delay 0.1
             on error errMsg
                 \(PostLeafCleanupSite.positionError.appleScript)
                 return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: position text may have been sent (" & errMsg & ")"
@@ -2300,7 +2299,6 @@ extension AccessibilityChannel {
             end if
             try
                 keystroke return
-                delay 0.2
             on error errMsg
                 \(PostLeafCleanupSite.returnError.appleScript)
                 return "DIALOG_SUBMISSION_ISSUED: Return may have been sent (" & errMsg & ")"
@@ -2308,6 +2306,14 @@ extension AccessibilityChannel {
             -- A normal Return reply is not proof Logic consumed it. Observe this exact modal before
             -- returning OK; if it survived, clean it only after recording the submission boundary.
             set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
+            -- #1601: the dialog closes after Return; observe that transition instead of
+            -- sleeping a fixed 0.2 s before the single read. Bounded at 2 s, and only while the
+            -- read says this exact dialog is still open.
+            repeat 40 times
+                if dialogPostReturnState does not start with "OPEN" then exit repeat
+                delay 0.05
+                set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
+            end repeat
                 if dialogPostReturnState is not "CLOSED" then
                 \(PostLeafCleanupSite.postReturnState.appleScript)
                 return "DIALOG_SUBMISSION_ISSUED: dialog was not observed closed after Return"

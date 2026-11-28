@@ -706,7 +706,6 @@ struct Issue529MenuValidationTests {
             of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)",
             in: script
         )
-        let firstOperationalDelay = try issue529Position(of: "delay 0.2", in: script)
         let localeDecision = try issue529Position(
             of: "repeat with candidate in {"
                 + AXLocalePolicy.navigateMenuBar.labels.map { "\"\($0)\"" }.joined(separator: ", ")
@@ -718,7 +717,6 @@ struct Issue529MenuValidationTests {
             in: script
         )
 
-        #expect(entryCleanup < firstOperationalDelay)
         #expect(entryCleanup < localeDecision)
         #expect(entryCleanup < leafClick)
     }

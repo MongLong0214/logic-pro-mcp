@@ -1,0 +1,91 @@
+{
+  "schema": 3,
+  "id": "2026-11-28-logic13-goto-readback-display-precision",
+  "date": "2026-11-28",
+  "subject": "Logic 13 Playhead Position group in the default Beats & Project display, and the time the Go To Position dialog route takes",
+  "question": "How many playhead components does the default display expose, and does goto_bar / goto_position land on the requested bar and beat?",
+  "verdict": "partial",
+  "issues": [
+    1601
+  ],
+  "surface": "arrange.transport",
+  "host": {
+    "app": "Logic Pro",
+    "version": "13.0",
+    "build": "7801",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "With a disposable project copy open on Beats & Project, read the Playhead Position group's sliders with an AX probe, call logic_navigate goto_bar {bar:9} and logic_transport goto_position {position:\"5.2.1.1\"}, and read the group again after each call.",
+    "expected": "The group exposes two sliders (bar, beat); after each call they read 9 1 and 5 2.",
+    "cost": "About one minute against a disposable project copy; closes only that copy."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/TransportDispatcher.swift:musicalPrefixMatch",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift:gotoPositionViaDialogAppleScript"
+  ],
+  "evidence": [
+    "evidence/2026-11-28-logic13-goto-readback-display-precision.trials.json"
+  ],
+  "method": "Server over stdio, fresh ditto copy of a disposable fixture per trial, closed without saving; a separate AX probe read the Playhead Position group before and after each call. Timing stamps inside the dialog script were taken once with an instrumented build and then removed. Nothing was clicked by coordinates and the display mode was never changed.",
+  "observations": [
+    {
+      "what": "Playhead Position group in Beats & Project",
+      "slider_count": 2,
+      "before_goto_bar": "12 4",
+      "after_goto_bar_9": "9 1",
+      "after_goto_position_5.2.1.1": "5 2"
+    },
+    {
+      "what": "dialog script segments (s, two runs)",
+      "entry_dismiss": "0.27-0.31",
+      "fixed_wait_0.2": "0.23",
+      "menu_resolve_and_enabled_read": "0.15-0.17",
+      "dialog_appears": "0.21-0.23",
+      "focus_and_ledger_before_cmd_a": "0.16-0.18",
+      "after_cmd_a_incl_0.1_wait": "0.14-0.16",
+      "after_text_incl_0.1_wait": "0.30-0.31",
+      "after_return_incl_0.2_wait": "0.40",
+      "post_return_state_read": "0.43-0.46"
+    },
+    {
+      "what": "elapsed per call, main build, 3 trials each (s)",
+      "goto_bar": [
+        2.68,
+        2.8,
+        3.11
+      ],
+      "goto_position": [
+        2.6,
+        3.02,
+        3.07
+      ]
+    },
+    {
+      "what": "elapsed per call, fixed build, 3 trials each (s)",
+      "goto_bar": [
+        2.64,
+        2.86,
+        2.39
+      ],
+      "goto_position": [
+        2.59,
+        2.34,
+        2.26
+      ]
+    }
+  ],
+  "conclusion": "In the default display the playhead is readable to bar and beat only, so a request ending in subdivision 1 and tick 1 can be verified at bar.beat and no finer. The playhead landed on the requested bar and beat in all twelve calls. The script's fixed waits are listed in the observations; the larger part of each call is System Events reads in the dialog script.",
+  "limits": [
+    "One Logic 13.0 build 7801 host, ko-KR, one fixture.",
+    "Subdivision and tick were never read; the Beats display was not selected.",
+    "The System Overload dialog case and the 10 s dialog_not_found were not reproduced.",
+    "The script stamps were taken on two runs of one build."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime Accessibility slider counts and timing. It adds no Apple label vocabulary and claims no string-corpus value."
+  }
+}

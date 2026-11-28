@@ -1,0 +1,95 @@
+{
+  "schema": 3,
+  "id": "2026-11-28-logic13-export-panel-list-view-destination",
+  "date": "2026-11-28",
+  "subject": "Logic 13 export panel in List view: the browser is an AXOutline of AXRow > AXCell > AXTextField(AXURL); the selected row is the destination and the popup names the browsed directory",
+  "question": "In the export panel's List view, how is a destination folder chosen through Accessibility, and does the destination popup confirm it?",
+  "verdict": "works",
+  "issues": [
+    1553
+  ],
+  "surface": "project.export",
+  "host": {
+    "app": "Logic Pro",
+    "version": "13.0",
+    "build": "7801",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "On a disposable copy of a one-region project with Logic 13, open File > Export > All Tracks as Audio Files, choose List from the View Options menu (item id cmdViewAsList:), cancel, then call logic_project export_run with artifacts [stem], confirmed true and an empty visible output_root on a read-write volume. Repeat three times.",
+    "expected": "Each run writes the stem file into the requested folder (state B stem_subject_file_binding_unestablished on this host). The View Options menu still marks List afterwards. Before the fix the same call refuses with stem_destination_component_group_unresolved.",
+    "cost": "A disposable project copy and an empty output folder; no save."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Projects/ProjectStemExportPanelDriver.swift:selectListedComponent"
+  ],
+  "evidence": [],
+  "method": "Reproduced on main (9664b4f1) in List view, then dumped the panel through Accessibility in Column and List view, probed row selection and disclosure writes on the browser outline with readbacks, pressed Export with a folder row selected and with nothing selected, and ran the fixed build for eight exports starting in List view (the start view was read from the View Options mark in five of them and was the persisted List setting in the rest).",
+  "observations": [
+    {
+      "what": "main, List view, export_run stem",
+      "error": "stem_destination_component_group_unresolved:Users",
+      "bounce_fired": false,
+      "write_attempted": false
+    },
+    {
+      "what": "Column view browser",
+      "chain": "AXBrowser(ColumnView) > AXScrollArea > AXList > AXGroup > AXTextField(AXURL)"
+    },
+    {
+      "what": "List view browser",
+      "chain": "AXOutline(ListView) > AXRow(AXOutlineRow) > AXCell > AXTextField(AXURL)",
+      "has_group_or_list_ancestor": false,
+      "sidebar": "a second AXOutline with no AXURL fields"
+    },
+    {
+      "what": "AXSelectedRows write on the ListView outline",
+      "return_code": 0,
+      "readback_is_written_row": true
+    },
+    {
+      "what": "AXDisclosing write on a folder row",
+      "return_code": 0,
+      "children_listed": true,
+      "hidden_folders_listed": false
+    },
+    {
+      "what": "destination popup after selecting a folder row",
+      "value_names": "the browsed directory, not the selected folder"
+    },
+    {
+      "what": "Export pressed with a folder row selected",
+      "file_written_in_selected_folder": true
+    },
+    {
+      "what": "Export pressed with no row selected",
+      "result": "Logic alert that the volume is read-only (browsed directory was the startup volume root)"
+    },
+    {
+      "what": "fixed build, panel starting in List view",
+      "exports": 8,
+      "wrote_expected_file": 6,
+      "no_effect": 2,
+      "no_effect_reason": "stem_export_press_effect_not_observed, nothing written, both within about a minute of opening the project",
+      "start_view_verified_by_mark": 5
+    },
+    {
+      "what": "View Options mark after the runs",
+      "list_still_marked": true
+    }
+  ],
+  "conclusion": "In List view the destination is the selected folder row, found structurally as AXTextField > AXCell > AXRow > AXOutline and selected through AXSelectedRows. The popup cannot confirm it, so the exact AXURL of the single selected row does. The panel's view is not changed by the fix. Six of eight fixed runs exported; two reported no observed effect and wrote nothing.",
+  "limits": [
+    "One Logic 13.0 build 7801 host, ko-KR. The reporter's Logic 12.4 was not run.",
+    "Icon and Gallery views were not measured.",
+    "The panel does not list hidden folders in either view, so a destination below one is not reachable.",
+    "The cause of the two no-effect runs was not found.",
+    "The evidence files are retained under the author's cache and are not committed."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime Accessibility structure and write effects in the export panel. It adds no Apple label vocabulary and claims no string-corpus value."
+  }
+}
