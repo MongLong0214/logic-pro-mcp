@@ -8551,6 +8551,7 @@ extension QualificationRunnerTests {
     @Test(arguments: [
         QualificationPositionDisplayFake.Fault.restoreRefused,
         QualificationPositionDisplayFake.Fault.laterRestoreNotApplied,
+        QualificationPositionDisplayFake.Fault.switchUnsettledNoLease,
     ])
     func aDisplayModeNotConfirmedBackEndsTheDriveBeforeTheNextOperationIsSent(
         fault: QualificationPositionDisplayFake.Fault

@@ -1946,6 +1946,7 @@ struct QualificationTransport: Sendable {
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
+                                try Self.abortIfDisplayModeHeld(session, cleanup: cleanupWitness)
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
                                     + "; cleanup: " + cleanupWitness.summary
@@ -2050,6 +2051,7 @@ struct QualificationTransport: Sendable {
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
+                                try Self.abortIfDisplayModeHeld(session, cleanup: cleanupWitness)
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
                                     + "; cleanup: " + cleanupWitness.summary
@@ -4352,6 +4354,8 @@ struct QualificationTransport: Sendable {
         /// True once the menu was opened to switch the bar to Beats, whatever came of it. From then
         /// on the original mode has to be read back before the cycle can end.
         private(set) var switchAttempted = false
+        /// True once a lease was given back and both readings said the original.
+        private(set) var givenBack = false
 
         init(display: QualificationPositionDisplay, original: String) {
             self.display = display
@@ -4400,17 +4404,26 @@ struct QualificationTransport: Sendable {
             case .unavailable(let reason):
                 throw refusal("display mode could not be switched to Beats (\(reason)); \(unread)")
             case .unsettled(let held, let reason):
-                // No lease means nothing was found switched, so there is nothing to give back.
-                problem = held.flatMap { giveBack($0) }
+                // Without a lease nothing can be given back, and nothing proves the original mode
+                // on the original control (the window may have changed): that is unconfirmed, and
+                // a later matching popup or checked item, possibly of another window, cannot clear it.
+                if let held {
+                    problem = giveBack(held)
+                    givenBack = problem == nil
+                } else {
+                    problem = "display mode switch to Beats left no lease (\(reason)), so "
+                        + "\(original) is not confirmed on the original control"
+                }
                 throw refusal("display mode switch to Beats did not settle (\(reason)); \(unread)")
             }
             guard let confirmed = display.read(), ControlBarDisplayMode.isBeatsMode(confirmed) else {
                 problem = giveBack(lease)
+                givenBack = problem == nil
                 throw refusal("display mode switch to Beats was not confirmed by a readback; \(unread)")
             }
             let result: Result<T, Error>
             do { result = .success(try body()) } catch { result = .failure(error) }
-            if let given = giveBack(lease) { problem = given }
+            if let given = giveBack(lease) { problem = given } else { givenBack = true }
             return try result.get()
         }
     }
@@ -4494,9 +4507,9 @@ struct QualificationTransport: Sendable {
             outcome = .failure(error)
         }
         var problem = beats.problem
-        if problem == nil, !beats.switches {
-            // Nothing was switched, so nothing is given back, and another party's change is not
-            // overwritten. The mode is still read again: a changed or unreadable mode is no credit.
+        if problem == nil, !beats.switches || (beats.switchAttempted && !beats.givenBack) {
+            // Nothing was switched, or the switch was refused before anything changed, so nothing
+            // is given back, and another party's change is not overwritten. The mode is still read again: a changed or unreadable mode is no credit.
             if let now = display.read() {
                 if now != original { problem = "display mode reads \(now) after the cycle, expected \(original)" }
             } else {
@@ -6495,6 +6508,18 @@ struct QualificationTransport: Sendable {
     /// The cleanup runs in a `defer`, after the error that triggered it was already built, so its
     /// story cannot go into that message directly. Without a witness the only thing a leak leaves
     /// behind is the leak — which is how four of them in a row got diagnosed by guesswork.
+    /// A display-mode hold ends the drive. The marker and playhead catches turn ordinary refusals
+    /// into a report, so they call this first: the abort then carries the cleanup they completed
+    /// (a withheld marker delete, deferred playhead-restore diagnostics) instead of the next probe
+    /// throwing the hold without it.
+    static func abortIfDisplayModeHeld(
+        _ session: QualificationSubprocessSession, cleanup: PhaseCCleanupWitness
+    ) throws {
+        guard let held = session.displayModeHoldReason else { return }
+        throw QualificationTransportError.recoveryUnconfirmed(
+            "\(held); cleanup: \(cleanup.summary)")
+    }
+
     final class PhaseCCleanupWitness: @unchecked Sendable {
         private let lock = NSLock()
         private var steps: [String] = []
@@ -8056,6 +8081,8 @@ final class QualificationSubprocessSession: @unchecked Sendable {
     /// bar is in a state nobody has read. Every later request is refused at the single place the
     /// session writes one, so nothing more reaches the candidate however the cycle that found this
     /// was caught. The first reason is kept.
+    var displayModeHoldReason: String? { stateLock.withLock { displayModeHold } }
+
     func holdWrites(displayModeUnconfirmed detail: String) {
         stateLock.withLock { if displayModeHold == nil { displayModeHold = detail } }
     }

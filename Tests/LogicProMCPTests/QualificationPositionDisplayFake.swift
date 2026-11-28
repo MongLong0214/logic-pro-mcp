@@ -16,6 +16,10 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
         case switchNotApplied
         /// A switch that cannot be performed.
         case switchUnavailable
+        /// A switch that settles nowhere and leaves no lease (the production authority's
+        /// `.unsettled(nil, "display_mode_window_changed")`). Nothing is switched, and the popup and
+        /// the checked item still read the original afterwards, possibly from a replacement window.
+        case switchUnsettledNoLease
         /// A restore that is refused outright.
         case restoreRefused
         /// A restore that reports itself done and changes nothing, so the re-read disagrees.
@@ -88,6 +92,9 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
                 log("switch", mode: nil)
                 if fault == .switchUnavailable {
                     return .unavailable("display_mode_beats_item_not_pressed")
+                }
+                if fault == .switchUnsettledNoLease {
+                    return .unsettled(nil, "display_mode_window_changed")
                 }
                 let found = checkedReading(counting: false) ?? mode
                 if fault != .switchNotApplied { write(Self.beats) }

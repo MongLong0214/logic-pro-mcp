@@ -627,7 +627,7 @@ import Testing
     /// sends nothing, so its requests are exactly those of the first operation alone, and the bar
     /// is never recorded as the "original" of a later cycle.
     @Test(arguments: playheadOperations,
-          [QualificationPositionDisplayFake.Fault.restoreRefused, .restoreNotApplied])
+          [QualificationPositionDisplayFake.Fault.restoreRefused, .restoreNotApplied, .switchUnsettledNoLease])
     func aDisplayModeNotConfirmedBackEndsTheDriveBeforeTheNextOperationIsSent(
         operation: OperationID, fault: QualificationPositionDisplayFake.Fault
     ) throws {
@@ -652,7 +652,58 @@ import Testing
             #expect("\(transportError)".contains("display mode"), "\(transportError)")
         }
         #expect(both.sent == alone.sent, "nothing is sent for the next operation: \(both.sent)")
-        #expect(!both.sent.isEmpty && alone.sent.count == both.sent.count)
+        // A switch that left no lease stops before the first request of the cycle: nothing at all.
+        #expect(fault == .switchUnsettledNoLease ? both.sent.isEmpty : !both.sent.isEmpty, "\(both.sent)")
+    }
+
+    /// The abort of a display mode that is not confirmed back carries the cleanup the recipe had
+    /// completed: the staged marker whose deletion was withheld is named in the abort itself, and
+    /// nothing is sent after it.
+    @Test func aDisplayModeAbortCarriesTheNamedResidualMarker() throws {
+        func run(_ operations: [OperationID]) throws -> (detail: String, sent: [String]) {
+            let fixture = try Fixture(
+                listOpenInitially: true, closeAfterCreate: true, startBeat: 2, displayMode: "Beats & Project")
+            defer { fixture.remove() }
+            let fake = try QualificationPositionDisplayFake(
+                directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+                fault: .restoreRefused)
+            let outcome = try driveOperations(fixture, operations, display: fake.display)
+            guard case .failure(let error) = outcome,
+                  case QualificationTransportError.recoveryUnconfirmed(let detail)? = error as? QualificationTransportError
+            else {
+                Issue.record("expected recoveryUnconfirmed, got \(outcome)"); return ("", [])
+            }
+            return (detail, sentRequests(fixture))
+        }
+        let alone = try run([.navigateGotoMarker])
+        let both = try run([.navigateGotoMarker, .navigateGotoBar])
+        for result in [alone, both] {
+            #expect(result.detail.contains("display mode"), "\(result.detail)")
+            #expect(result.detail.contains("withheld") && result.detail.contains("qualification_phase_b_probe"),
+                    "the residual marker is named in the abort: \(result.detail)")
+        }
+        #expect(!alone.sent.isEmpty && both.sent == alone.sent, "nothing is sent after the abort: \(both.sent)")
+    }
+
+    /// The same for the playhead cycle: the abort carries the cleanup the recipe completed.
+    @Test(arguments: [OperationID.navigateGotoBar, .transportGotoPosition])
+    func aDisplayModeAbortCarriesThePlayheadCleanup(operation: OperationID) throws {
+        let fixture = try Fixture(
+            listOpenInitially: true, barWriteOvershoot: true, startBeat: 2, displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+            fault: .restoreRefused)
+        let outcome = try driveOperations(fixture, [operation], display: fake.display)
+        guard case .failure(let error) = outcome else {
+            Issue.record("the drive returned a result"); return
+        }
+        guard case QualificationTransportError.recoveryUnconfirmed(let detail)? = error as? QualificationTransportError else {
+            Issue.record("expected recoveryUnconfirmed, got \(error)"); return
+        }
+        #expect(detail.contains("display mode"), "\(detail)")
+        #expect(detail.contains("cleanup:") && !detail.contains("cleanup did not run"),
+                "the completed playhead cleanup is carried: \(detail)")
     }
 
     // MARK: Round 5: one setting read two ways, a read that only half failed
