@@ -1534,8 +1534,10 @@ enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sen
     case supportBundleOutcomeQuiesced(String)
     case supportBundleOutcomeUncertain(String)
     /// A failed transport cycle whose recovery could not be confirmed (stopped, the exact
-    /// four-component position, and the original display mode, each read back on its own). The
-    /// machine is in a state nobody has read, so the drive stops mutating.
+    /// four-component position, and the original display mode, each read back on its own), or any
+    /// cycle that attempted a display-mode switch and could not confirm the original mode back
+    /// (`withPositionDisplay`). The machine is in a state nobody has read, so the drive stops
+    /// mutating.
     case recoveryUnconfirmed(String)
     case shutdownTimeout
     case unimplemented
@@ -1944,6 +1946,7 @@ struct QualificationTransport: Sendable {
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
+                                try Self.abortIfDisplayModeHeld(session, cleanup: cleanupWitness)
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
                                     + "; cleanup: " + cleanupWitness.summary
@@ -2048,6 +2051,7 @@ struct QualificationTransport: Sendable {
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
+                                try Self.abortIfDisplayModeHeld(session, cleanup: cleanupWitness)
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
                                     + "; cleanup: " + cleanupWitness.summary
@@ -3551,6 +3555,10 @@ struct QualificationTransport: Sendable {
         }
         var playheadRestoreAttempted = false
         var workMayHaveLanded = false
+        // True once the recipe's own motion was read back at the pre-state. A later failure (the
+        // playhead hold, a display-mode or lease loss) owes no motion recovery: a Stop would go to
+        // whatever window is current, and the motion this recipe moved is already back.
+        var motionVerifiedRestored = false
         do {
             if pre.motion == expected || (expected == .paused && pre.motion != .moving) {
                 workMayHaveLanded = true
@@ -3632,6 +3640,7 @@ struct QualificationTransport: Sendable {
                 throw QualificationTransportError.protocolViolation(
                     "phase_b.restore_readback: recorded transport cycle did not verify")
             }
+            motionVerifiedRestored = true
             func putPlayheadBack(at prePosition: String, observed: String?) throws {
                 guard observed != prePosition else { return }
                 playheadRestoreAttempted = true
@@ -3655,13 +3664,15 @@ struct QualificationTransport: Sendable {
             return (record, nextID)
         } catch {
             guard workMayHaveLanded else { throw error }
-            let compensation = compensateTransportMotion(
-                session,
-                spec: spec,
-                target: pre.motion,
-                nextID: &nextID,
-                phase: "phase_b.cleanup"
-            )
+            let compensation: (verified: Bool, summary: String) = motionVerifiedRestored
+                ? (true, "motion already verified restored to \(pre.motion); no motion command sent")
+                : compensateTransportMotion(
+                    session,
+                    spec: spec,
+                    target: pre.motion,
+                    nextID: &nextID,
+                    phase: "phase_b.cleanup"
+                )
             if let recovery {
                 // Stopped, the exact position and (in the caller) the display mode are each read
                 // back on their own. Unconfirmed halts the drive.
@@ -4347,6 +4358,11 @@ struct QualificationTransport: Sendable {
         let switches: Bool
         /// The first give-back that was not confirmed. Once set, the bar is not switched again.
         private(set) var problem: String?
+        /// True once the menu was opened to switch the bar to Beats, whatever came of it. From then
+        /// on the original mode has to be read back before the cycle can end.
+        private(set) var switchAttempted = false
+        /// True once a lease was given back and both readings said the original.
+        private(set) var givenBack = false
 
         init(display: QualificationPositionDisplay, original: String) {
             self.display = display
@@ -4388,23 +4404,33 @@ struct QualificationTransport: Sendable {
                     + "it would be switched; \(unread)")
             }
             let lease: ControlBarDisplayMode.Lease
+            switchAttempted = true
             switch display.selectBeats() {
             case .switched(let held):
                 lease = held
             case .unavailable(let reason):
                 throw refusal("display mode could not be switched to Beats (\(reason)); \(unread)")
             case .unsettled(let held, let reason):
-                // No lease means nothing was found switched, so there is nothing to give back.
-                problem = held.flatMap { giveBack($0) }
+                // Without a lease nothing can be given back, and nothing proves the original mode
+                // on the original control (the window may have changed): that is unconfirmed, and
+                // a later matching popup or checked item, possibly of another window, cannot clear it.
+                if let held {
+                    problem = giveBack(held)
+                    givenBack = problem == nil
+                } else {
+                    problem = "display mode switch to Beats left no lease (\(reason)), so "
+                        + "\(original) is not confirmed on the original control"
+                }
                 throw refusal("display mode switch to Beats did not settle (\(reason)); \(unread)")
             }
             guard let confirmed = display.read(), ControlBarDisplayMode.isBeatsMode(confirmed) else {
                 problem = giveBack(lease)
+                givenBack = problem == nil
                 throw refusal("display mode switch to Beats was not confirmed by a readback; \(unread)")
             }
             let result: Result<T, Error>
             do { result = .success(try body()) } catch { result = .failure(error) }
-            if let given = giveBack(lease) { problem = given }
+            if let given = giveBack(lease) { problem = given } else { givenBack = true }
             return try result.get()
         }
     }
@@ -4488,9 +4514,9 @@ struct QualificationTransport: Sendable {
             outcome = .failure(error)
         }
         var problem = beats.problem
-        if problem == nil, !beats.switches {
-            // Nothing was switched, so nothing is given back, and another party's change is not
-            // overwritten. The mode is still read again: a changed or unreadable mode is no credit.
+        if problem == nil, !beats.switches || (beats.switchAttempted && !beats.givenBack) {
+            // Nothing was switched, or the switch was refused before anything changed, so nothing
+            // is given back, and another party's change is not overwritten. The mode is still read again: a changed or unreadable mode is no credit.
             if let now = display.read() {
                 if now != original { problem = "display mode reads \(now) after the cycle, expected \(original)" }
             } else {
@@ -4509,6 +4535,16 @@ struct QualificationTransport: Sendable {
                 problem = "display mode's checked menu item could not be read after the cycle"
             }
         }
+        // The one enforcement point for the display mode. Every cycle that can switch the bar (the
+        // marker, playhead and transport cycles) ends here, so a switch that was attempted and
+        // whose original mode is not confirmed back is decided here and nowhere else: the drive
+        // writes nothing more (`holdWrites`), whichever way this error is caught or swallowed by
+        // the cycle's caller, and `recoveryUnconfirmed` ends the drive.
+        func displayModeUnconfirmed(_ detail: String) -> QualificationTransportError {
+            session.holdWrites(displayModeUnconfirmed: detail)
+            return .recoveryUnconfirmed(detail)
+        }
+        let unconfirmedAfterSwitch = beats.switchAttempted && problem != nil
         if let recovery, recovery.ran {
             recovery.recordMode(problem.map { .unconfirmed($0) }
                 ?? .confirmed("\(original) read back by the popup and the checked menu item"))
@@ -4517,6 +4553,7 @@ struct QualificationTransport: Sendable {
                 if case QualificationTransportError.recoveryUnconfirmed(let inner) = error { detail = inner }
                 detail += "; display mode " + (problem.map { "unconfirmed (\($0))" }
                     ?? "confirmed (\(original) read back by the popup and the checked menu item)")
+                if unconfirmedAfterSwitch { throw displayModeUnconfirmed(detail) }
                 throw recovery.unconfirmed
                     ? QualificationTransportError.recoveryUnconfirmed(detail)
                     : QualificationTransportError.protocolViolation(detail)
@@ -4526,10 +4563,15 @@ struct QualificationTransport: Sendable {
         case (.success(let cycleResult), nil):
             return cycleResult
         case (.success, let problem?):
-            throw refusal("\(problem); the cycle's credit is withheld")
+            let detail = "\(problem); the cycle's credit is withheld"
+            if unconfirmedAfterSwitch {
+                throw displayModeUnconfirmed("phase_b.display_mode: \(detail)")
+            }
+            throw refusal(detail)
         case (.failure(let error), nil):
             throw error
         case (.failure(let error), let problem?):
+            if unconfirmedAfterSwitch { throw displayModeUnconfirmed("\(error) | \(problem)") }
             throw QualificationTransportError.protocolViolation("\(error) | \(problem)")
         }
     }
@@ -6473,6 +6515,18 @@ struct QualificationTransport: Sendable {
     /// The cleanup runs in a `defer`, after the error that triggered it was already built, so its
     /// story cannot go into that message directly. Without a witness the only thing a leak leaves
     /// behind is the leak — which is how four of them in a row got diagnosed by guesswork.
+    /// A display-mode hold ends the drive. The marker and playhead catches turn ordinary refusals
+    /// into a report, so they call this first: the abort then carries the cleanup they completed
+    /// (a withheld marker delete, deferred playhead-restore diagnostics) instead of the next probe
+    /// throwing the hold without it.
+    static func abortIfDisplayModeHeld(
+        _ session: QualificationSubprocessSession, cleanup: PhaseCCleanupWitness
+    ) throws {
+        guard let held = session.displayModeHoldReason else { return }
+        throw QualificationTransportError.recoveryUnconfirmed(
+            "\(held); cleanup: \(cleanup.summary)")
+    }
+
     final class PhaseCCleanupWitness: @unchecked Sendable {
         private let lock = NSLock()
         private var steps: [String] = []
@@ -8016,6 +8070,7 @@ final class QualificationSubprocessSession: @unchecked Sendable {
     private var started = false
     private var shutdownOutcome: ShutdownOutcome?
     private var framesTranscript: [QualificationWireFrame] = []
+    private var displayModeHold: String?
 
     init(
         request: QualificationDriveRequest,
@@ -8028,6 +8083,16 @@ final class QualificationSubprocessSession: @unchecked Sendable {
     }
 
     var stderrTail: String { stderr.text }
+
+    /// Once a display-mode switch was attempted and the original mode is not confirmed back, the
+    /// bar is in a state nobody has read. Every later request is refused at the single place the
+    /// session writes one, so nothing more reaches the candidate however the cycle that found this
+    /// was caught. The first reason is kept.
+    var displayModeHoldReason: String? { stateLock.withLock { displayModeHold } }
+
+    func holdWrites(displayModeUnconfirmed detail: String) {
+        stateLock.withLock { if displayModeHold == nil { displayModeHold = detail } }
+    }
 
     var transcriptFrames: [QualificationWireFrame] {
         stateLock.withLock { framesTranscript }
@@ -8164,6 +8229,10 @@ final class QualificationSubprocessSession: @unchecked Sendable {
         direction: QualificationWireFrame.Direction,
         operationID: String
     ) throws {
+        if let held = stateLock.withLock({ displayModeHold }) {
+            throw QualificationTransportError.recoveryUnconfirmed(
+                "\(held); no further request is sent (\(operationID))")
+        }
         let data: Data
         do {
             var encoded = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])

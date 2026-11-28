@@ -638,28 +638,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             // The human-readable summary is what an operator wants to read, but a caller needs the
             // states themselves — `health` has always returned them and this command had not, which
             // left it violating its own declared outputSchema (#544).
-            let status = PermissionChecker.check()
-            // The prose stays the text: `SemanticOracleTable.systemPermissions` grades this operation by
-            // asserting its four exact lines, so encoding JSON here would RED a correct answer in
-            // qualification while every unit test stayed green. The states go beside it.
-            return toolTextResult(
-                text: status.summary,
-                structured: .object([
-                    "operation": .string("system.permissions"),
-                    "accessibility": .string(status.accessibilityState.rawValue),
-                    "automation_logic_pro": .string(status.automationState.rawValue),
-                    "automation_system_events": .string(status.systemEventsAutomationState.rawValue),
-                    "post_event": .string(status.postEventAccessState.rawValue),
-                    // Deliberately not a plain Bool: "undetermined" is not "permission denied", and a
-                    // client reading a single flag would have to treat them the same. `false` is reserved
-                    // for a MEASURED denial on at least one of the four states above; when nothing was
-                    // denied but something could not be verified, the key is present with a JSON `null` —
-                    // not omitted — so a caller that only checks presence still sees it and must read the
-                    // per-check states to learn why. See `Self.allGrantedValue`.
-                    "all_granted": Self.allGrantedValue(for: status),
-                    "summary": .string(status.summary),
-                ])
-            )
+            return Self.permissionsResult(PermissionChecker.check())
 
         case "refresh_cache":
             await cache.recordToolAccess()
@@ -1817,6 +1796,35 @@ struct SystemDispatcher: OperationTraceDispatching {
         default:
             return unknownCommandResult(command)
         }
+    }
+
+    /// The `permissions` response for a measured status. Separate from the dispatch case so the
+    /// public text and structured fields can be pinned with a fabricated status (#1596).
+    static func permissionsResult(_ status: PermissionChecker.PermissionStatus) -> CallTool.Result {
+        // The prose stays the text: `SemanticOracleTable.systemPermissions` grades this operation by
+        // asserting its four exact lines, so encoding JSON here would RED a correct answer in
+        // qualification while every unit test stayed green. The states go beside it.
+        return toolTextResult(
+            text: status.summary,
+            structured: .object([
+                "operation": .string("system.permissions"),
+                "accessibility": .string(status.accessibilityState.rawValue),
+                "automation_logic_pro": .string(status.automationState.rawValue),
+                "automation_system_events": .string(status.systemEventsAutomationState.rawValue),
+                "post_event": .string(status.postEventAccessState.rawValue),
+                // Deliberately not a plain Bool: "undetermined" is not "permission denied", and a
+                // client reading a single flag would have to treat them the same. `false` is reserved
+                // for a MEASURED denial on at least one of the four states above; when nothing was
+                // denied but something could not be verified, the key is present with a JSON `null` —
+                // not omitted — so a caller that only checks presence still sees it and must read the
+                // per-check states to learn why. See `Self.allGrantedValue`.
+                "all_granted": Self.allGrantedValue(for: status),
+                // #1596: the process these states describe. `null` when unmeasured.
+                "tcc_principal": status.principal.map { .string($0.displayName) } ?? .null,
+                "tcc_principal_is_self": status.principal.map { .bool($0.isSelf) } ?? .null,
+                "summary": .string(status.summary),
+            ])
+        )
     }
 
     /// Maps the MEASURED tri-state permission aggregate (`PermissionStatus.aggregateState`,

@@ -19,6 +19,24 @@ extension SetupDoctor {
         cfBundleIdentifier: String?,
         termProgram: String?
     ) -> LaunchContextInfo {
+        let raw = classifyRawLaunchContext(
+            ancestryBundleIDs: ancestryBundleIDs,
+            ancestryProcessNames: ancestryProcessNames,
+            cfBundleIdentifier: cfBundleIdentifier,
+            termProgram: termProgram
+        )
+        // Whatever the environment or ancestry supplied is reduced to the fixed category (#1596).
+        let isITerm = raw.context == "terminal" && raw.responsibleHint.localizedCaseInsensitiveContains("iTerm")
+        return LaunchContextInfo(context: raw.context, responsibleHint: isITerm ? "iterm" : raw.context)
+    }
+
+
+    private static func classifyRawLaunchContext(
+        ancestryBundleIDs: [String],
+        ancestryProcessNames: [String] = [],
+        cfBundleIdentifier: String?,
+        termProgram: String?
+    ) -> LaunchContextInfo {
         for bundleID in ancestryBundleIDs {
             if let result = launchContextSignal(bundleID) { return result }
         }
@@ -126,4 +144,12 @@ extension SetupDoctor {
     }
 
 
+    /// The `responsible_hint` shown in public doctor output: the classifier's own context category
+    /// (or `iterm` for a terminal), never the raw TERM_PROGRAM, process name or bundle identifier.
+    /// A hint that is not that fixed category becomes "unknown".
+    static func publicResponsibleHint(_ info: LaunchContextInfo) -> String {
+        let hint = info.responsibleHint.lowercased()
+        if info.context == "terminal", hint == "iterm" { return "iterm" }
+        return hint == info.context.lowercased() ? info.context : "unknown"
+    }
 }

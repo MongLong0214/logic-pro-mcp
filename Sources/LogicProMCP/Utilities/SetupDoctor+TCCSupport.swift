@@ -1,22 +1,13 @@
 import Foundation
 
 extension SetupDoctor {
-    private static let relevantTCCBundleIDs: Set<String> = [
-        "com.anthropic.claudefordesktop",
-        "com.exafunction.windsurf",
-        "com.microsoft.vscode",
-        "com.microsoft.vscodeinsiders",
-        "com.todesktop.230313mzl4w4u92",
-        "dev.zed.zed",
-    ]
-
-    private static let relevantTCCAppNames: Set<String> = [
-        "claude desktop",
-        "cursor",
-        "visual studio code",
-        "vs code",
-        "windsurf",
-        "zed",
+    /// Fixed words for the Apple Events target, keyed by built-in identifiers only. The SQL may also
+    /// match identifiers a manifest supplies, which widens what is queried. Printing never widens:
+    /// any identifier missing from this table is printed as `another application`.
+    private static let appleEventsTargetLabels: [String: String] = [
+        "com.apple.systemevents": "systemevents",
+        "com.apple.logic10": "logic-pro",
+        "com.apple.mobilelogic": "logic-pro-creator-studio",
     ]
 
     static func productionTCCCrossContextProbe() -> TCCCrossContextProbe {
@@ -85,51 +76,29 @@ extension SetupDoctor {
         case .schemaMismatch:
             return .skipped(reason: .tccSchemaMismatch)
         case let .rows(rows):
-            let findings = tccFindings(rows)
-            guard !findings.isEmpty else { return .skipped(reason: .principalNotFound) }
-            if findings.contains(where: { $0.contains("state=denied") }) {
-                return .denied(findings.joined(separator: ","))
-            }
-            if findings.contains(where: { $0.contains("state=granted") }) {
-                return .granted(findings.joined(separator: ","))
-            }
-            return .skipped(reason: .principalNotFound)
+            // Historical context only (#1596). A row records what one client holds, not what the
+            // measured principal holds, so this path reports counts and fixed labels and never a
+            // grant, a denial, or a pass.
+            let recognised = tccFindings(rows)
+            guard !recognised.isEmpty else { return .skipped(reason: .principalNotFound) }
+            let unrecognised = rows.count - recognised.count
+            return .recorded(
+                "recognised_entries=\(recognised.count);unrecognised_entries=\(unrecognised);"
+                    + recognised.joined(separator: ",")
+            )
         }
     }
 
 
+    /// One entry per row whose client is on the closed list of recognised hosts. The entry has no
+    /// authorization state: a database row is not evidence about the measured principal.
     static func tccFindings(_ rows: [TCCRow]) -> [String] {
         rows.compactMap { row in
-            guard isRelevantTCCPrincipal(row.client) else { return nil }
-            let state: String
-            switch row.authValue {
-            case 0:
-                state = "denied"
-            case 2:
-                state = "granted"
-            default:
-                state = "unknown"
-            }
+            guard TCCResponsibility.knownTCCClientLabel(for: row.client) != nil
+                || TCCResponsibility.isProductExecutable(tccClient: row.client) else { return nil }
             let service = redactedTCCService(row.service, indirectObjectIdentifier: row.indirectObjectIdentifier)
-            return "service=\(service);principal_hint=\(redactedTCCPrincipal(row.client));state=\(state)"
+            return "service=\(service);principal_hint=\(redactedTCCPrincipal(row.client))"
         }
-    }
-
-
-    private static func isRelevantTCCPrincipal(_ client: String) -> Bool {
-        let normalizedClient = client.lowercased()
-        if relevantTCCBundleIDs.contains(normalizedClient) { return true }
-
-        let basename = client.contains("/") ? URL(fileURLWithPath: client).lastPathComponent : client
-        let normalizedName = basename.lowercased().hasSuffix(".app")
-            ? String(basename.dropLast(4)).lowercased()
-            : basename.lowercased()
-        if relevantTCCAppNames.contains(normalizedName) { return true }
-
-        return normalizedClient.contains("claude")
-            || normalizedClient.contains("terminal")
-            || normalizedClient.contains("iterm")
-            || normalizedClient.contains("logicpromcp")
     }
 
 
@@ -137,19 +106,17 @@ extension SetupDoctor {
         if service == "kTCCServiceAccessibility" { return "accessibility" }
         if service == "kTCCServicePostEvent" { return "post_event" }
         if service == "kTCCServiceAppleEvents" {
-            if indirectObjectIdentifier == "com.apple.systemevents" { return "appleevents:systemevents" }
-            if indirectObjectIdentifier.hasPrefix("com.apple.") {
-                return "appleevents:\(indirectObjectIdentifier.dropFirst("com.apple.".count))"
-            }
-            return "appleevents"
+            let target = appleEventsTargetLabels[indirectObjectIdentifier] ?? "another application"
+            return "appleevents:\(target)"
         }
         return "unknown"
     }
 
 
+    /// Every `client` value from the database goes through the same fixed-label rule as the rest of
+    /// the permission output; the row's own text is never copied.
     private static func redactedTCCPrincipal(_ client: String) -> String {
-        if client.contains("/") { return URL(fileURLWithPath: client).lastPathComponent }
-        return client
+        TCCResponsibility.publicLabel(forTCCClient: client)
     }
 
 

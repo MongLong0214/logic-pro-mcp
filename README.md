@@ -106,11 +106,11 @@ Claude Desktop can start the same configured server twice (chat and Code/Cowork)
 
 ## Permissions
 
-Grant these to the app that launches `LogicProMCP` (your terminal, Claude Desktop, Cursor, ...) in System Settings, Privacy & Security:
+Grant these to the process macOS evaluates for the server, the **TCC principal** that `logic_system permissions` or `LogicProMCP --check-permissions` names when run from your client (the client app, or the `LogicProMCP` binary itself when the client disclaims responsibility), in System Settings, Privacy & Security:
 
 - **Accessibility**
 - **Automation** for **Logic Pro** and for **System Events**
-- **PostEvent** (keyboard-event posting). It is granted through the same launcher-app Accessibility control but is checked and reported separately, because the CGEvent paths need it
+- **PostEvent** (keyboard-event posting). It is checked and reported separately, because the CGEvent paths need it
 
 Check them:
 
@@ -119,7 +119,7 @@ LogicProMCP --check-permissions   # prints status, exits non-zero if not ready
 LogicProMCP doctor                # full read-only readiness report
 ```
 
-macOS grants are per launcher app, so run these from the app that will launch the server. Creator Studio's Logic Pro is a distinct app to macOS and needs its own Automation grant. To keep the server on desktop Logic Pro, set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10`.
+macOS grants belong to the principal, so run these from the client that will launch the server and see [Troubleshooting](docs/TROUBLESHOOTING.md#which-process-needs-the-permission). Creator Studio's Logic Pro is a distinct app to macOS and needs its own Automation grant. To keep the server on desktop Logic Pro, set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10`.
 
 Other CLI flags (from `LogicProMCP --help`): `--version`, `--help`, `lifecycle <install|update|uninstall> [--json]` (read-only plan), and `--qualify` (live qualification run against the packaged binary; with `--mutate-open-project` it writes to the project Logic has open).
 
@@ -204,7 +204,7 @@ Live measurement on Logic Pro 13.0 is in progress (PR #1590 adds the Logic versi
 
 Start with `LogicProMCP doctor` and `LogicProMCP --check-permissions`, then see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). The items that most often apply:
 
-- **Permissions look granted but fail.** Grants belong to the launcher app and to the exact binary; after an upgrade or rebuild, remove stale entries and grant again.
+- **Permissions look granted but fail.** Grants belong to the TCC principal that the permission report names: the client app, or the exact LogicProMCP binary when the client disclaims responsibility. After an upgrade or rebuild, remove only entries for binaries no client launches any more, then grant the measured principal again.
 - **Homebrew refuses the tap.** Homebrew 6.0+ needs `brew trust monglong0214/logic-pro-mcp`.
 - **MIDI channels degraded or ports missing.** Usually a second server launch holds the port group; stop the duplicate and restart.
 - **Health says Logic is not ready.** Logic needs to be running with a project open, no blocking dialog, and not sitting at the project chooser.
