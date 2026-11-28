@@ -2197,7 +2197,9 @@ extension AccessibilityChannel {
         // with the track rename field focused, the field was already gone when the press rung
         // started. Looking up the header's toggle ended the edit and COMMITTED its pending text,
         // and the key rung's focus guard then saw a checkbox and let the key through.
-        if let refusal = textEditorFocusedRefusal(runtime: runtime) {
+        if let refusal = textEditorFocusedRefusal(runtime: runtime),
+           !(refusal.extras["focus_guard"] as? String == kAXTextFieldRole as String
+             && leaveUnchangedNameField(runtime: runtime)) {
             return .error(HonestContract.encodeStateC(
                 error: refusal.error,
                 hint: refusal.hint,
@@ -3329,6 +3331,54 @@ extension AccessibilityChannel {
                 "fallback_unsafe": true,
             ])
         )
+    }
+
+    /// Leave a track-name field that holds no pending edit, so a toggle can run after a click on
+    /// a track name. Measured on Logic 13 (7801, ko-KR): a click or AXFocused on a header's name
+    /// puts focus on an AXTextField that is the child of the name AXTextField, with its whole
+    /// name selected; writing AXFocused on the Tracks group moves focus there, and AXPress on the
+    /// mute checkbox does not flip it while that field is focused. The field is left only when
+    /// it reads as unchanged: its value equals the committed name, the AXDescription of its parent
+    /// name field. Any pending text, a field of another shape (the rename-menu editor sits
+    /// directly under the header group) or an unreadable link keeps the refusal, so no editor with
+    /// text to lose is ever left. The Tracks group is the first AXGroup above the header group,
+    /// found by structure; no label is read. True only once the focus reads as no text editor.
+    static func leaveUnchangedNameField(runtime: AXLogicProElements.Runtime) -> Bool {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime),
+              let field: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute, runtime: runtime.ax),
+              AXHelpers.getRole(field, runtime: runtime.ax) == kAXTextFieldRole as String,
+              let value = AXHelpers.getValue(field, runtime: runtime.ax) as? String, !value.isEmpty,
+              let name: AXUIElement = AXHelpers.getAttribute(field, kAXParentAttribute, runtime: runtime.ax),
+              AXHelpers.getRole(name, runtime: runtime.ax) == kAXTextFieldRole as String,
+              let committed = AXHelpers.getDescription(name, runtime: runtime.ax),
+              committed.precomposedStringWithCanonicalMapping == value.precomposedStringWithCanonicalMapping,
+              let row: AXUIElement = AXHelpers.getAttribute(name, kAXParentAttribute, runtime: runtime.ax),
+              AXHelpers.getRole(row, runtime: runtime.ax) == kAXLayoutItemRole as String
+        else { return false }
+        var headerGroup: AXUIElement?
+        var tracksGroup: AXUIElement?
+        var current: AXUIElement? = AXHelpers.getAttribute(row, kAXParentAttribute, runtime: runtime.ax)
+        for _ in 0..<12 {
+            guard let element = current,
+                  let role = AXHelpers.getRole(element, runtime: runtime.ax),
+                  role != kAXWindowRole as String else { break }
+            if role == kAXGroupRole as String {
+                if headerGroup == nil { headerGroup = element } else { tracksGroup = element; break }
+            }
+            current = AXHelpers.getAttribute(element, kAXParentAttribute, runtime: runtime.ax)
+        }
+        guard let tracksGroup,
+              AXHelpers.setAttribute(tracksGroup, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
+        else { return false }
+        for _ in 0..<10 {
+            if let landed: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute, runtime: runtime.ax),
+               CFEqual(landed, tracksGroup),
+               readLogicKeyboardFocus(of: landed, runtime: runtime) == .notTextEditing {
+                return true
+            }
+            usleep(60_000)
+        }
+        return false
     }
 
     /// #7 — refusal when the record-arm key override is present but invalid
