@@ -632,13 +632,16 @@ import Testing
         operation: OperationID, fault: QualificationPositionDisplayFake.Fault
     ) throws {
         let next: OperationID = operation == .navigateGotoBar ? .transportGotoPosition : .navigateGotoBar
-        func run(_ operations: [OperationID]) throws -> (outcome: Result<QualificationDriveResult, Error>, sent: [String], mode: String) {
+        func run(_ operations: [OperationID]) throws -> (
+            outcome: Result<QualificationDriveResult, Error>, sent: [String], mode: String, afterFault: [String]?
+        ) {
             let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats & Project")
             defer { fixture.remove() }
             let fake = try QualificationPositionDisplayFake(
                 directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
             let outcome = try driveOperations(fixture, operations, display: fake.display)
-            return (outcome, sentRequests(fixture), fake.mode)
+            return (outcome, sentRequests(fixture), fake.mode,
+                    QualificationPositionDisplayFake.rawLog(from: fault, in: fixture.directory))
         }
         let alone = try run([operation])
         let both = try run([operation, next])
@@ -650,6 +653,11 @@ import Testing
             let transportError = try #require(error as? QualificationTransportError, "\(error)")
             #expect(transportError.requiresDriveAbort, "\(transportError)")
             #expect("\(transportError)".contains("display mode"), "\(transportError)")
+            // Anchored to the fault in each run's own raw log: from the faulting display call on,
+            // only the double's own confirming read may follow. An identical extra request in both
+            // runs, which the comparison below cannot see, fails here.
+            #expect(result.afterFault == QualificationPositionDisplayFake.allowedLog(from: fault),
+                    "after the fault the log holds \(result.afterFault ?? ["no fault call"])")
         }
         #expect(both.sent == alone.sent, "nothing is sent for the next operation: \(both.sent)")
         // A switch that left no lease stops before the first request of the cycle: nothing at all.
@@ -660,7 +668,7 @@ import Testing
     /// completed: the staged marker whose deletion was withheld is named in the abort itself, and
     /// nothing is sent after it.
     @Test func aDisplayModeAbortCarriesTheNamedResidualMarker() throws {
-        func run(_ operations: [OperationID]) throws -> (detail: String, sent: [String]) {
+        func run(_ operations: [OperationID]) throws -> (detail: String, sent: [String], afterFault: [String]?) {
             let fixture = try Fixture(
                 listOpenInitially: true, closeAfterCreate: true, startBeat: 2, displayMode: "Beats & Project")
             defer { fixture.remove() }
@@ -671,9 +679,10 @@ import Testing
             guard case .failure(let error) = outcome,
                   case QualificationTransportError.recoveryUnconfirmed(let detail)? = error as? QualificationTransportError
             else {
-                Issue.record("expected recoveryUnconfirmed, got \(outcome)"); return ("", [])
+                Issue.record("expected recoveryUnconfirmed, got \(outcome)"); return ("", [], nil)
             }
-            return (detail, sentRequests(fixture))
+            return (detail, sentRequests(fixture),
+                    QualificationPositionDisplayFake.rawLog(from: .restoreRefused, in: fixture.directory))
         }
         let alone = try run([.navigateGotoMarker])
         let both = try run([.navigateGotoMarker, .navigateGotoBar])
@@ -681,6 +690,8 @@ import Testing
             #expect(result.detail.contains("display mode"), "\(result.detail)")
             #expect(result.detail.contains("withheld") && result.detail.contains("qualification_phase_b_probe"),
                     "the residual marker is named in the abort: \(result.detail)")
+            #expect(result.afterFault == QualificationPositionDisplayFake.allowedLog(from: .restoreRefused),
+                    "nothing but the refused restore is in the log from the fault on: \(result.afterFault ?? [])")
         }
         #expect(!alone.sent.isEmpty && both.sent == alone.sent, "nothing is sent after the abort: \(both.sent)")
     }

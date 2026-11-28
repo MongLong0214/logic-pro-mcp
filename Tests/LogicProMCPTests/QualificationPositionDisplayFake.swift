@@ -20,6 +20,9 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
         /// `.unsettled(nil, "display_mode_window_changed")`). Nothing is switched, and the popup and
         /// the checked item still read the original afterwards, possibly from a replacement window.
         case switchUnsettledNoLease
+        /// The first switch is applied; the second settles nowhere and leaves no lease (the window
+        /// was lost between the origin read and the final playhead hold).
+        case secondSwitchUnsettledNoLease
         /// A restore that is refused outright.
         case restoreRefused
         /// A restore that reports itself done and changes nothing, so the re-read disagrees.
@@ -59,6 +62,7 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
     private var checks = 0
     private var restored = false
     private var restores = 0
+    private var switches = 0
 
     init(directory: URL, start: String, fault: Fault = .none) throws {
         self.directory = directory
@@ -93,7 +97,8 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
                 if fault == .switchUnavailable {
                     return .unavailable("display_mode_beats_item_not_pressed")
                 }
-                if fault == .switchUnsettledNoLease {
+                lock.lock(); switches += 1; let switchCount = switches; lock.unlock()
+                if fault == .switchUnsettledNoLease || (fault == .secondSwitchUnsettledNoLease && switchCount > 1) {
                     return .unsettled(nil, "display_mode_window_changed")
                 }
                 let found = checkedReading(counting: false) ?? mode
@@ -174,6 +179,42 @@ final class QualificationPositionDisplayFake: @unchecked Sendable {
             }
         }
         return events
+    }
+
+    /// The raw request log from the faulting display-mode call on, display-mode entries included:
+    /// the fault itself is the first line. The fault is the switch for a switch that leaves no
+    /// lease, the first restore for a refused or unapplied restore, the second for a later one.
+    /// Nil when the log has no such call. Anchoring here, and not on a comparison of two runs,
+    /// means an identical extra request after the fault in both runs still shows.
+    static func rawLog(from fault: Fault, in directory: URL) -> [String]? {
+        let lines = ((try? String(
+            contentsOf: directory.appendingPathComponent("requests"), encoding: .utf8)) ?? "")
+            .split(separator: "\n").map(String.init)
+        let kind: String, occurrence: Int
+        switch fault {
+        case .switchUnsettledNoLease: (kind, occurrence) = ("switch", 1)
+        case .restoreRefused, .restoreNotApplied: (kind, occurrence) = ("restore", 1)
+        case .laterRestoreNotApplied: (kind, occurrence) = ("restore", 2)
+        default: return nil
+        }
+        let marker = "\"display_mode\":\"\(kind)\""
+        let hits = lines.indices.filter { lines[$0].contains(marker) }
+        guard hits.count >= occurrence else { return nil }
+        return Array(lines[hits[occurrence - 1]...])
+    }
+
+    /// Everything the raw log may hold from the fault on, by fault. The fault call is first; the
+    /// only bounded cleanup after it is the double's own confirming popup read, which a restore
+    /// that reports itself done is followed by. No transport request, probe, refresh or later
+    /// operation is allowed there, and a run that sends one fails.
+    static func allowedLog(from fault: Fault) -> [String] {
+        switch fault {
+        case .switchUnsettledNoLease: return [#"{"display_mode":"switch","mode":null}"#]
+        case .restoreRefused: return [#"{"display_mode":"restore","mode":null}"#]
+        case .restoreNotApplied, .laterRestoreNotApplied:
+            return [#"{"display_mode":"restore","mode":null}"#, #"{"display_mode":"read","mode":"Beats"}"#]
+        default: return []
+        }
     }
 
     /// The last two display-mode calls, provided nothing else was logged between them: the mode

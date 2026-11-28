@@ -3555,6 +3555,10 @@ struct QualificationTransport: Sendable {
         }
         var playheadRestoreAttempted = false
         var workMayHaveLanded = false
+        // True once the recipe's own motion was read back at the pre-state. A later failure (the
+        // playhead hold, a display-mode or lease loss) owes no motion recovery: a Stop would go to
+        // whatever window is current, and the motion this recipe moved is already back.
+        var motionVerifiedRestored = false
         do {
             if pre.motion == expected || (expected == .paused && pre.motion != .moving) {
                 workMayHaveLanded = true
@@ -3636,6 +3640,7 @@ struct QualificationTransport: Sendable {
                 throw QualificationTransportError.protocolViolation(
                     "phase_b.restore_readback: recorded transport cycle did not verify")
             }
+            motionVerifiedRestored = true
             func putPlayheadBack(at prePosition: String, observed: String?) throws {
                 guard observed != prePosition else { return }
                 playheadRestoreAttempted = true
@@ -3659,13 +3664,15 @@ struct QualificationTransport: Sendable {
             return (record, nextID)
         } catch {
             guard workMayHaveLanded else { throw error }
-            let compensation = compensateTransportMotion(
-                session,
-                spec: spec,
-                target: pre.motion,
-                nextID: &nextID,
-                phase: "phase_b.cleanup"
-            )
+            let compensation: (verified: Bool, summary: String) = motionVerifiedRestored
+                ? (true, "motion already verified restored to \(pre.motion); no motion command sent")
+                : compensateTransportMotion(
+                    session,
+                    spec: spec,
+                    target: pre.motion,
+                    nextID: &nextID,
+                    phase: "phase_b.cleanup"
+                )
             if let recovery {
                 // Stopped, the exact position and (in the caller) the display mode are each read
                 // back on their own. Unconfirmed halts the drive.

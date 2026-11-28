@@ -8533,6 +8533,96 @@ extension QualificationRunnerTests {
     }
 }
 
+
+// MARK: Motion already verified restored owes no motion compensation
+
+extension QualificationRunnerTests {
+    /// The `play`/`stop`/`pause` commands the drive sent, in order, from the raw request log.
+    private func motionCommands(_ fixture: SlowHandshakeFixture) -> [String] {
+        sentRequests(fixture).compactMap { line in
+            ["play", "stop", "pause"].first { line.contains("\"command\":\"\($0)\"") }
+        }
+    }
+
+    /// What a clean `play` cycle from a stopped start does, measured in a run of its own: the
+    /// number of the transport read that follows the restore's readback, and the one that follows
+    /// the second display switch (the final playhead hold). A fault that flips the transport to
+    /// moving at that read is "the current motion reads as different" at exactly that point.
+    private func readNumbersAfterTheRestoreReadbackAndTheSecondSwitch() throws -> (restore: Int, hold: Int) {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "stopped", displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        guard case .success = try driveTransportOperations(fixture, commands: ["play"], display: fake.display) else {
+            Issue.record("the clean cycle did not complete"); return (0, 0)
+        }
+        let events = displayEvents(fixture)
+        let stop = try #require(events.firstIndex(of: "stop"), "\(events)")
+        let switches = events.indices.filter { events[$0] == "mode_switch" }
+        let second = try #require(switches.count >= 2 ? switches[1] : nil, "\(events)")
+        func reads(before index: Int) -> Int { events[..<index].filter { $0 == "transport_read" }.count }
+        // The restore's own readback is the first transport read after the Stop.
+        return (reads(before: stop) + 1, reads(before: second) + 1)
+    }
+
+    /// The refuter's case. The cycle restored and verified `.stopped`; the final playhead hold then
+    /// loses the window without a lease, and the current transport reads as moving. The recipe's
+    /// own motion was already verified back, so the abort is typed and NO further motion command is
+    /// sent: a Stop here would go to whatever window is current.
+    @Test func aLeaseLostOnTheFinalHoldAfterTheMotionWasRestoredSendsNoFurtherMotionCommand() throws {
+        let (_, hold) = try readNumbersAfterTheRestoreReadbackAndTheSecondSwitch()
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "stopped", displayMode: "Beats & Project",
+            startsMovingAtRead: hold)
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+            fault: .secondSwitchUnsettledNoLease)
+        let outcome = try driveTransportOperations(fixture, commands: ["play", "stop"], display: fake.display)
+        guard case .failure(let error) = outcome else {
+            Issue.record("the drive returned a result after the window was lost: \(sentRequests(fixture))"); return
+        }
+        let transportError = try #require(error as? QualificationTransportError, "\(error)")
+        guard case .recoveryUnconfirmed(let detail) = transportError else {
+            Issue.record("expected the typed abort, got \(transportError)"); return
+        }
+        #expect(detail.contains("display mode"), "\(detail)")
+        #expect(motionCommands(fixture) == ["play", "stop"],
+                "the recipe's own play and verified stop only; nothing after the lost lease: \(motionCommands(fixture))")
+        let events = displayEvents(fixture)
+        let secondSwitch = try #require(events.indices.filter { events[$0] == "mode_switch" }.dropFirst().first)
+        let afterFault = Array(events[secondSwitch...])
+        #expect(!afterFault.contains { ["play", "stop", "pause"].contains($0) },
+                "no motion command follows the fault: \(afterFault)")
+    }
+
+    /// The companion: a failure BEFORE the motion was verified restored still owes it. The restore's
+    /// own readback reads moving (the Stop did not hold), so the bounded Stop of the compensation
+    /// is sent, exactly once more.
+    @Test func aFailureBeforeTheMotionWasVerifiedRestoredStillSendsItsBoundedStop() throws {
+        let (restoreRead, _) = try readNumbersAfterTheRestoreReadbackAndTheSecondSwitch()
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true, initialTransportMotion: "stopped", displayMode: "Beats & Project",
+            startsMovingAtRead: restoreRead)
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject)
+        let outcome = try driveTransportOperations(fixture, commands: ["play"], display: fake.display)
+        // The refusal is the recipe's own (the Stop recovered), so the drive may return; no credit.
+        if case .success(let result) = outcome {
+            #expect(result.mutationRestoreRecords.isEmpty, "a restore that did not read back earns nothing")
+        }
+        // The cycle's own requests are the ones before its no-write probe (a later `play` belongs to
+        // the whole-run sweep, not to the cycle).
+        let cycle = try recipeRequests(fixture).compactMap { line in
+            ["play", "stop", "pause"].first { line.contains("\"command\":\"\($0)\"") }
+        }
+        #expect(cycle == ["play", "stop", "stop"],
+                "play, the restore's Stop, and the one bounded compensating Stop: \(cycle)")
+    }
+}
+
 // MARK: A display mode that is not confirmed back ends the drive
 
 extension QualificationRunnerTests {
@@ -8556,14 +8646,17 @@ extension QualificationRunnerTests {
     func aDisplayModeNotConfirmedBackEndsTheDriveBeforeTheNextOperationIsSent(
         fault: QualificationPositionDisplayFake.Fault
     ) throws {
-        func drive(_ commands: [String]) throws -> (outcome: Result<QualificationDriveResult, Error>, sent: [String]) {
+        func drive(_ commands: [String]) throws -> (
+            outcome: Result<QualificationDriveResult, Error>, sent: [String], afterFault: [String]?
+        ) {
             let fixture = try SlowHandshakeFixture(
                 transportNativePause: true, initialTransportMotion: "paused", displayMode: "Beats & Project")
             defer { fixture.remove() }
             let fake = try QualificationPositionDisplayFake(
                 directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
             let outcome = try driveTransportOperations(fixture, commands: commands, display: fake.display)
-            return (outcome, sentRequests(fixture))
+            return (outcome, sentRequests(fixture),
+                    QualificationPositionDisplayFake.rawLog(from: fault, in: fixture.directory))
         }
         let alone = try drive(["play"])
         let both = try drive(["play", "stop"])
@@ -8579,6 +8672,10 @@ extension QualificationRunnerTests {
                 return
             }
             #expect(detail.contains("display mode"), "\(detail)")
+            // Anchored to the fault in each run's own raw log, not to the other run: from the
+            // faulting display call on, only the double's own confirming read may follow.
+            #expect(run.afterFault == QualificationPositionDisplayFake.allowedLog(from: fault),
+                    "after the fault the log holds \(run.afterFault ?? ["no fault call"])")
         }
         #expect(both.sent == alone.sent, "nothing is sent for the second operation: \(both.sent)")
     }
