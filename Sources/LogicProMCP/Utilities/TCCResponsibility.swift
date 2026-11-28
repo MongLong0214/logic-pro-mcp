@@ -109,6 +109,12 @@ enum TCCResponsibility {
         return knownTCCClientLabels[name]
     }
 
+    /// True when a TCC database `client` value is this product's own executable, by exact name
+    /// (`LogicProMCP`, alone or as the last path component). Its label is the fixed product label.
+    static func isProductExecutable(tccClient client: String) -> Bool {
+        (client as NSString).lastPathComponent == productExecutableName
+    }
+
     /// The public-safe label for the `client` column of a TCC database row (doctor's cross-context
     /// enrichment). A recognised host gets its fixed label (`knownTCCClientLabel`). An executable
     /// called exactly `LogicProMCP` gets the fixed product label. Everything else is `another

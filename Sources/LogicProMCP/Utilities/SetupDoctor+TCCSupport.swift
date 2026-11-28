@@ -94,7 +94,8 @@ extension SetupDoctor {
     /// authorization state: a database row is not evidence about the measured principal.
     static func tccFindings(_ rows: [TCCRow]) -> [String] {
         rows.compactMap { row in
-            guard TCCResponsibility.knownTCCClientLabel(for: row.client) != nil else { return nil }
+            guard TCCResponsibility.knownTCCClientLabel(for: row.client) != nil
+                || TCCResponsibility.isProductExecutable(tccClient: row.client) else { return nil }
             let service = redactedTCCService(row.service, indirectObjectIdentifier: row.indirectObjectIdentifier)
             return "service=\(service);principal_hint=\(redactedTCCPrincipal(row.client))"
         }

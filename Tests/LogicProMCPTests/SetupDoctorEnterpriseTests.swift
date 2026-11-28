@@ -1043,6 +1043,32 @@ private struct FrozenV2Report: Codable {
     }
 }
 
+// #1596: the historical enrichment is informational for every outcome. A database that holds only a
+// row for the product's own executable, and every skip reason, leave a healthy install `ok` with
+// strict exit 0 (the same as before the enrichment was reworked).
+@Test func test1596EnrichmentOutcomesNeverChangeReadinessOrStrictExit() throws {
+    let productOnly = [
+        "/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicProMCP",
+        "LogicProMCP",
+    ].map {
+        SetupDoctor.TCCRow(service: "kTCCServiceAccessibility", client: $0, authValue: 2, indirectObjectIdentifier: "")
+    }
+    var probes: [SetupDoctor.TCCCrossContextProbe] = productOnly.map { SetupDoctor.mapTCCQueryOutcome(.rows([$0])) }
+    for probe in probes {
+        guard case .recorded = probe else { Issue.record("product row not recognised: \(probe)"); continue }
+    }
+    probes += [.skipped(reason: .principalNotFound), .skipped(reason: .fullDiskAccessUnavailable),
+               .skipped(reason: .tccQueryUnavailable), .skipped(reason: .tccSchemaMismatch)]
+    for probe in probes {
+        var runtime = enterpriseRuntime()
+        runtime.tccCrossContextProbe = { probe }
+        let report = makeReport(runtime: runtime)
+        #expect(report.status == .ok, "\(probe)")
+        #expect(SetupDoctor.strictExitCode(report) == 0, "\(probe)")
+    }
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "LogicProMCP") == "LogicProMCP")
+}
+
 @Test func test1596TCCClientLabelIsAlwaysAFixedLabel() {
     #expect(TCCResponsibility.publicLabel(forTCCClient: "/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicProMCP") == "LogicProMCP (homebrew)")
     #expect(TCCResponsibility.publicLabel(forTCCClient: "/x/other-logicpromcp") == "another executable")
