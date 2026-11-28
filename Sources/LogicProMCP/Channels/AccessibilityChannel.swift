@@ -261,7 +261,10 @@ actor AccessibilityChannel: Channel {
                     return (read.states, read.yielded)
                 },
                 selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },
-                selectTrack: { await AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime) },
+                selectTrack: {
+                    await AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime,
+                                                                  processRuntime: processRuntime)
+                },
                 setTrackToggle: {
                     AccessibilityChannel.defaultSetTrackToggle(
                         params: $0,

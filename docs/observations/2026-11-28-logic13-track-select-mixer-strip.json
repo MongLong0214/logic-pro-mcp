@@ -2,8 +2,8 @@
   "schema": 3,
   "id": "2026-11-28-logic13-track-select-mixer-strip",
   "date": "2026-11-28",
-  "subject": "Logic 13 track selection: rail AXSelectedChildren is acknowledged without effect, the main Mixer AXSelectedChildren moves the selection",
-  "question": "On Logic 13 which Accessibility write actually changes the selected track, and does moving the selection by it also let mute, solo and rename act on a non-selected track?",
+  "subject": "Logic 13 track selection: the rail write is acknowledged without effect; the main Mixer's AXSelectedChildren moves it, and no strip identifies its track except through the Mixer's selected child",
+  "question": "On Logic 13 which Accessibility write changes the selected track, what binds a Mixer strip to a track header without a name, and does selecting through it let mute, solo and rename act on a track that starts unselected, with an inline rename left intact?",
   "verdict": "works",
   "issues": [
     1598,
@@ -20,15 +20,17 @@
   },
   "reverify": {
     "kind": "manual",
-    "command": "With Logic 13 running a disposable copy of a four-track project with the Mixer visible and track 3 selected, call logic_tracks select with index 0 and read the track-header rows' AXSelected with a separate Accessibility reader; then call mute, solo and rename on that track.",
-    "expected": "select returns State A verified, the reader shows only row 0 selected, and mute, solo and rename each return State A verified with the header showing the change. Before the fix select returned State B readback_mismatch with the selection unchanged.",
-    "cost": "A disposable project copy; no save."
+    "command": "With Logic 13 on a disposable copy of a four-track project (track 3 selected, Mixer shown), call logic_tracks select, mute, solo and rename by index on a track that is not selected, each on a fresh copy, and read every header row's AXSelected, mute, solo and name with a separate Accessibility reader. Then rename the selected track and select its neighbours. Then hide the Mixer (View menu) and select. Then open Track > Rename Track on the selected track, write pending text into the field, and call select for another track.",
+    "expected": "select, mute, solo and rename return State A and the reader shows the target alone selected with the change; selects after the rename land on the requested rows; with the Mixer hidden select returns State B readback_mismatch and the selection is unchanged; with the rename field open select returns State C unsafe_focus_for_synthetic_key and the field keeps its pending text.",
+    "cost": "A disposable project copy per trial; no save."
   },
   "depends": [
-    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift:selectTrackViaAX"
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Tracks.swift:selectViaMixerStrip",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Mixer.swift:AXMixerStripBinding.selectedChildRead",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:defaultSelectTrack"
   ],
   "evidence": [],
-  "method": "Measured the unfixed product (main at 213035c2) for 3 trials from a fresh copy of the qualification fixture: the select envelope, the operation trace and an independent structural read of every header row. Then, on a fresh copy per probe, wrote or pressed each candidate (rail AXSelectedChildren, row AXSelected, row AXPress, focus radio AXPress, main Mixer AXSelectedChildren) and read the selection at 0, 0.1, 0.4, 0.5 and 1.0 s. Then ran the fixed product for 3 trials.",
+  "method": "Measured the unfixed product (main at 213035c2) for 3 trials, then probed each candidate write on a fresh copy and read the selection at 0, 0.1, 0.4, 0.5 and 1.0 s. For the #1640 review: probed four more header-side writes; dumped every attribute of the header rows and the Mixer strips; renamed a track through the product and compared the header name, the strip AXDescription and the strip name field; wrote the Mixer's AXSelectedChildren with track and non-track strips and compared the strip and row CF identities before and after; opened Track > Rename Track through AX with pending text and called select on the PR head (b024d60c, 3 trials) and on the repair (3 trials). Then ran the repair 3 times each, from a fresh copy and with the target not selected: select, mute, solo, rename by index, rename-then-select-neighbours, select with the Mixer hidden. Every trial records the envelope and an independent read before and after.",
   "observations": [
     {
       "what": "rail AXSelectedChildren write",
@@ -47,10 +49,37 @@
       "selection_changed": false
     },
     {
-      "what": "main Mixer AXSelectedChildren written with the strip carrying the track name",
+      "what": "row AXFocused, radio AXFocused, rail AXFocused then rail write, rail cleared then written",
+      "return_code": 0,
+      "selection_changed": false
+    },
+    {
+      "what": "main Mixer AXSelectedChildren written with a track's strip",
       "return_code": 0,
       "selection_changed": true,
-      "settled_within_seconds": 0.1
+      "settled_within_seconds": 0.1,
+      "mixer_selected_child_is_written_strip": true
+    },
+    {
+      "what": "main Mixer AXSelectedChildren written with the Stereo Out strip",
+      "selection_changed": false,
+      "mixer_selected_child_is_written_strip": true
+    },
+    {
+      "what": "strip and header-row CF identities across four Mixer selection writes",
+      "unchanged": true
+    },
+    {
+      "what": "attributes shared by a header row and a Mixer strip",
+      "identifier": false,
+      "linked_element": false
+    },
+    {
+      "what": "verified product rename of the selected track",
+      "header_name": "Renamed1600",
+      "strip_AXDescription": "Deluxe Classic (stale)",
+      "strip_name_field": "Renamed1600",
+      "strip_AXDescription_after_next_selection_change": "Renamed1600"
     },
     {
       "what": "unfixed product, 3 trials",
@@ -59,15 +88,35 @@
       "rename": "State C selection_not_exclusive"
     },
     {
-      "what": "fixed product, 3 trials",
-      "select": "State A verified",
-      "mute_solo_rename": "State A verified"
+      "what": "PR head b024d60c, inline rename open with pending text, select another track, 3 trials",
+      "select": "State A",
+      "editor_survived": 0,
+      "pending_text_committed_as_track_name": 3
+    },
+    {
+      "what": "repair, inline rename open with pending text, select another track, 3 trials",
+      "select": "State C unsafe_focus_for_synthetic_key",
+      "editor_survived": 3,
+      "pending_text_kept": 3,
+      "track_name_unchanged": 3
+    },
+    {
+      "what": "repair, target not selected at start, 3 trials each",
+      "select": "State A 3/3",
+      "mute": "State A 3/3",
+      "solo": "State A 3/3",
+      "rename_by_index": "State A 3/3",
+      "rename_then_select_neighbour_renamed_neighbour": "State A 9/9 on the requested row",
+      "mixer_hidden": "State B readback_mismatch 3/3, selection unchanged, Mixer not opened"
     }
   ],
-  "conclusion": "The rail setter is acknowledged with return code 0 and does nothing on this host; the main Mixer's AXSelectedChildren moves the selection. selectTrackViaAX now requires the exclusive selection to settle and otherwise writes the Mixer strip matched to the header by the track's own name, judged by the header read-back. Mute and rename needed that selection and are resolved by it.",
+  "conclusion": "The rail setter is acknowledged and does nothing on this host; the main Mixer's AXSelectedChildren moves the selection. No strip carries its track's identity: they share no identifier or linked element, and a strip's AXDescription can lag a rename. The one header-to-strip relationship the tree publishes is the Mixer's selected child of the selected header, which stayed consistent with the rows and kept its CF identities across selection writes. selectTrackViaAX now uses that relationship: it writes the strip at the requested row only when the current selection's selected child sits at its own row, accepts the result only when the same retained header is the only selected row and the selected child is the written strip, and otherwise writes the original child back. Moving the selection with an inline rename open committed the pending text as the track name; track.select now refuses while a text editor is focused.",
   "limits": [
-    "One Logic 13.0 build 7801 host, ko-KR only, one four-track fixture, Mixer visible.",
-    "Hidden Mixer, Track Stacks and duplicate track names were not measured live; duplicate names refuse by design and are unit-tested.",
+    "One Logic 13.0 build 7801 host, ko-KR only, one four-track fixture in the Mixer's Tracks view.",
+    "The candidate strip is chosen by row position and proven after the write. A Mixer whose order differs from the track order (All view, filters, stacks, tracks sharing a channel) refuses, or is undone after one wrong write; neither was measured live, only in unit fixtures.",
+    "With the Mixer hidden, select refuses; it does not open the Mixer.",
+    "The stale strip description refreshed on the next selection change on this host, so the name drift that misdirected the earlier name match was not reproduced live; it is covered by unit fixtures.",
+    "An unsaved project with no AXDocument refuses the Mixer route (the strip binding needs the document); not measured.",
     "The evidence files are retained under the author's cache and are not committed."
   ],
   "supersedes": null,

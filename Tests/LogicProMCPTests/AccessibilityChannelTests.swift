@@ -2165,6 +2165,8 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [trackList])
+    // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
     builder.setChildren(trackList, [header])
@@ -2239,6 +2241,8 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [trackList])
+    // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
     builder.setChildren(trackList, [header])
@@ -3497,6 +3501,8 @@ private func makeTempoSliderFixture(
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [trackList])
+    // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
     builder.setChildren(trackList, [firstHeader, secondHeader])
@@ -3733,6 +3739,8 @@ private func makeTempoSliderFixture(
     builder.setAttribute(firstHeader, kAXSelectedAttribute as String, true)
     builder.setAttribute(secondHeader, kAXTitleAttribute as String, "Track 2")
     builder.setAttribute(secondHeader, kAXSelectedAttribute as String, false)
+    // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
 
     let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app)
     let selectResult = await channel.execute(operation: "track.select", params: ["index": "1"])
@@ -4371,6 +4379,8 @@ private final class LockedFlag: @unchecked Sendable {
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [trackList])
+    // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
     builder.setChildren(trackList, [header])
@@ -6197,6 +6207,8 @@ private struct Issue1097Rail {
         let nameFields = selected.indices.map { builder.element(9720 + $0) }
         builder.setAttribute(app, kAXMainWindowAttribute as String, window)
         builder.setChildren(window, [rail])
+        // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, rail)
         builder.setAttribute(rail, kAXRoleAttribute as String, kAXListRole as String)
         builder.setAttribute(rail, kAXIdentifierAttribute as String, "Track Headers")
         builder.setChildren(rail, headers)

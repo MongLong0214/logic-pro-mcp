@@ -15,6 +15,12 @@ private func decodeJSON(_ s: String) -> [String: Any] {
 
 // MARK: - T3 track.select
 
+/// track.select activates Logic before selecting; a unit test must not reach the real app.
+private let noActivation = ProcessUtils.Runtime(
+    logicProPID: { 4242 }, fallbackLogicProPID: { 4242 }, logicProRunning: { true },
+    activateLogicPro: { true }, logicIsFrontmost: { true }, logicProBundleURL: { nil }
+)
+
 @Test func testTrackSelectReturnsVerifiedTrueWhenSelectedChildMatches() async {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(700)
@@ -25,6 +31,8 @@ private func decodeJSON(_ s: String) -> [String: Any] {
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [trackList])
+    // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
     builder.setChildren(trackList, [header0, header1])
@@ -36,7 +44,8 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     let runtime = AccessibilityChannel.Runtime.axBacked(
         isTrusted: { true },
         isLogicProRunning: { true },
-        logicRuntime: builder.makeLogicRuntime(appElement: app)
+        logicRuntime: builder.makeLogicRuntime(appElement: app),
+        processRuntime: noActivation
     )
     let channel = AccessibilityChannel(runtime: runtime)
 
@@ -57,6 +66,8 @@ private func decodeJSON(_ s: String) -> [String: Any] {
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [trackList])
+    // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
     builder.setChildren(trackList, [])
@@ -64,7 +75,8 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     let runtime = AccessibilityChannel.Runtime.axBacked(
         isTrusted: { true },
         isLogicProRunning: { true },
-        logicRuntime: builder.makeLogicRuntime(appElement: app)
+        logicRuntime: builder.makeLogicRuntime(appElement: app),
+        processRuntime: noActivation
     )
     let channel = AccessibilityChannel(runtime: runtime)
 
@@ -86,6 +98,8 @@ private func decodeJSON(_ s: String) -> [String: Any] {
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [trackList])
+    // #1600: track.select reads Logic's focus first and refuses when an editor cannot be ruled out.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
     builder.setChildren(trackList, [h0, h1])
@@ -97,7 +111,8 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     let runtime = AccessibilityChannel.Runtime.axBacked(
         isTrusted: { true },
         isLogicProRunning: { true },
-        logicRuntime: builder.makeLogicRuntime(appElement: app)
+        logicRuntime: builder.makeLogicRuntime(appElement: app),
+        processRuntime: noActivation
     )
     let channel = AccessibilityChannel(runtime: runtime)
 

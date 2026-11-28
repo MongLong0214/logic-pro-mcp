@@ -2036,10 +2036,23 @@ extension AccessibilityChannel {
 
     static func defaultSelectTrack(
         params: [String: String],
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        processRuntime: ProcessUtils.Runtime = .production
     ) async -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
+        }
+        // Read the focus before anything else touches Logic, as the mute, solo and arm entry point
+        // does. Moving the selection ends an open text editor and Logic commits its pending text.
+        // Measured on Logic 13.0 (7801), ko-KR, at b024d60c: with Track > Rename Track open on
+        // track 2 holding "Pending1600", select index 0 answered State A, the field was gone and
+        // track 2 was named "Pending1600", in 3 of 3 trials.
+        if let refusal = textEditorFocusedRefusal(runtime: runtime, operation: "track selection") {
+            return .error(HonestContract.encodeStateC(
+                error: refusal.error,
+                hint: refusal.hint,
+                extras: ["requested": index].merging(refusal.extras) { _, new in new }
+            ))
         }
         guard AXLogicProElements.findTrackHeader(at: index, runtime: runtime) != nil else {
             // v3.1.0 (T3) — missing track is a hard failure; no retry will
@@ -2055,7 +2068,7 @@ extension AccessibilityChannel {
         // v3.0.3+ — activate Logic so the frontmost-dependent AX selection can
         // land, then go through the AX-native selection ladder (ADR-001: no
         // coordinate fallback — fail closed if every AX step is rejected).
-        _ = ProcessUtils.Runtime.production.activateLogicPro()
+        _ = processRuntime.activateLogicPro()
         try? await Task.sleep(nanoseconds: 150_000_000)
         var writeAttempted = false
         guard AXLogicProElements.selectTrackViaAX(
@@ -3249,7 +3262,9 @@ extension AccessibilityChannel {
     /// rename edit and committed its text on Logic 13. The Logic 13 strip group
     /// (`.passiveInsertionPoint`) reads as no editor and still reaches the press rung. No other
     /// channel may act either: MCU or a CGEvent key would hit the same open editor.
-    static func textEditorFocusedRefusal(runtime: AXLogicProElements.Runtime) -> RungRefusal? {
+    static func textEditorFocusedRefusal(
+        runtime: AXLogicProElements.Runtime, operation: String = "track toggle"
+    ) -> RungRefusal? {
         let focus = readLogicKeyboardFocus(runtime: runtime)
         let guardName: String
         let cause: String
@@ -3276,7 +3291,7 @@ extension AccessibilityChannel {
         }
         return RungRefusal(
             error: .unsafeFocusForSyntheticKey,
-            hint: "refused the track toggle: \(cause). Nothing in the track header was read, pressed or "
+            hint: "refused the \(operation): \(cause). Nothing in the track header was read, pressed or "
                 + "posted, so any editor and its pending text were left as they were.",
             extras: terminalNoHumanExtras([
                 "focus_guard": guardName,

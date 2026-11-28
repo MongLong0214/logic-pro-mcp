@@ -130,6 +130,10 @@ ownership or recording success, and an activation timeout alone does not establi
 incompatibility. The diagnostics describe the observation that decided that attempt, not a later
 resample or a guarantee that another attempt is ready.
 
+### `select` returns `readback_mismatch` on Logic 13
+
+Logic 13 ignores the track-header selection write, so `select` (and `mute`, `rename` by index, which select first) goes through the main Mixer. Show the Mixer in its Tracks view and try again. With the Mixer hidden, filtered, in All view, or ordered differently from the tracks, `select` writes nothing there (or writes the original strip back) and the selection stays where it was. State C `unsafe_focus_for_synthetic_key` means a text field, usually an open track rename, has the focus: finish or cancel it first.
+
 ### `logic://tracks` shows placeholders
 
 Make the main Tracks area visible and wait for one refresh. Placeholder rows are treated as untrusted and should not be used for writes.
