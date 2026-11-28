@@ -21,7 +21,8 @@ extension ResourceHandlers {
         cache: StateCache,
         router: ChannelRouter,
         targetRegistry: TargetRegistry? = nil,
-        fileReader: LogicProjectFileReader.Runtime = .production
+        fileReader: LogicProjectFileReader.Runtime = .production,
+        populateColdTracks: (@Sendable () async -> Void)? = nil
     ) async throws -> ReadResource.Result {
         // Health must be side-effect free so the resource stays aligned with the tool contract.
         if uri == "logic://system/health" {
@@ -106,6 +107,11 @@ extension ResourceHandlers {
             return try await readTempoMap(router: router, uri: uri)
 
         case "logic://tracks":
+            // #1603: before the first population the cache answers placeholders or an empty
+            // list. Wait (bounded by the caller) for the first live read instead.
+            if let populateColdTracks, await cache.tracksFetchedAt == .distantPast {
+                await populateColdTracks()
+            }
             return try await readTracks(
                 cache: cache,
                 uri: uri,
