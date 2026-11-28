@@ -168,7 +168,7 @@ func cacheProjectNameOnly_usesLiveTransportAndLiveTrackCacheForProjectTrackCount
         Issue.record("data missing"); return
     }
     #expect(data["tempo"] as? Double == 127)
-    #expect(data["sampleRate"] as? Int == 48_000)
+    #expect(data["sampleRate"] == nil)
     #expect(data["trackCount"] as? Int == 11)
     #expect(envelope["source"] as? String == "ax_live")
     #expect(envelope["last_saved_age_sec"] == nil)
@@ -201,26 +201,38 @@ func savedProjectSampleRateOverridesDisagreeingLiveTransport() async throws {
     #expect(data["sampleRate"] as? Int == 48_000)
 }
 
-@Test
-func invalidSavedProjectSampleRateFallsBackToFreshTransport() async throws {
+@Test(arguments: [44_100, 48_000, 96_000])
+func savedSampleRateIsReportedWhateverTheLiveTransportSays(rate: Int) async throws {
     let cache = StateCache()
-
     var transport = TransportState()
     transport.sampleRate = 44_100
     transport.lastUpdated = Date()
     await cache.updateTransport(transport)
-
     let bundle = ensureFixtureBundle(at: FileManager.default.temporaryDirectory
-        .appendingPathComponent("InvalidSavedSampleRateBundle.logicx", isDirectory: true))
-    let runtime = makeFileReaderRuntime(sampleRate: 0, bundlePath: bundle)
-
+        .appendingPathComponent("SavedRate\(rate)Bundle.logicx", isDirectory: true))
+    let runtime = makeFileReaderRuntime(sampleRate: rate, bundlePath: bundle)
     let result = try await ResourceHandlers.read(
         uri: "logic://project/info", cache: cache, router: ChannelRouter(), fileReader: runtime
     )
-    let envelope = try parseEnvelope(result)
-    let data = try #require(envelope["data"] as? [String: Any])
+    let data = try #require(try parseEnvelope(result)["data"] as? [String: Any])
+    #expect(data["sampleRate"] as? Int == rate)
+}
 
-    #expect(data["sampleRate"] as? Int == 44_100)
+@Test
+func invalidSavedProjectSampleRateIsUnknownNotTheTransportDefault() async throws {
+    let cache = StateCache()
+    var transport = TransportState()
+    transport.sampleRate = 44_100
+    transport.lastUpdated = Date()
+    await cache.updateTransport(transport)
+    let bundle = ensureFixtureBundle(at: FileManager.default.temporaryDirectory
+        .appendingPathComponent("InvalidSavedSampleRateBundle.logicx", isDirectory: true))
+    let runtime = makeFileReaderRuntime(sampleRate: 0, bundlePath: bundle)
+    let result = try await ResourceHandlers.read(
+        uri: "logic://project/info", cache: cache, router: ChannelRouter(), fileReader: runtime
+    )
+    let data = try #require(try parseEnvelope(result)["data"] as? [String: Any])
+    #expect(data["sampleRate"] == nil)
 }
 
 @Test
