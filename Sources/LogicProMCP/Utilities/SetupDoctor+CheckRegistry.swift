@@ -108,7 +108,9 @@ extension SetupDoctor {
         .init(.permissionsAutomationSystemEvents, capabilityGroups: ["midi_import", "project_lifecycle"], remediationAnchor: "docs/SETUP.md#doctor-permissionsautomation-system-events"),
         .init(.permissionsPostEventAccess, capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-permissionspost-event-access"),
         .init(.permissionsLaunchContext, remediationAnchor: "docs/SETUP.md#doctor-permissionslaunch-context"),
-        .init(.permissionsTCCCrossContext, remediationAnchor: "docs/SETUP.md#doctor-permissionstcc-cross-context"),
+        // #1596: historical TCC context. It never passes on a database row, so it is not a readiness
+        // requirement; readiness is decided by the live permission probes above.
+        .init(.permissionsTCCCrossContext, optionalByDefault: true, remediationAnchor: "docs/SETUP.md#doctor-permissionstcc-cross-context"),
         .init(.systemMacOSVersion, remediationAnchor: "docs/SETUP.md#doctor-systemmacos-version"),
         .init(.logicInstallation, capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-logicinstallation"),
         .init(.logicVersionSupport, dependencies: [.logicInstallation], capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-logicversion-support"),

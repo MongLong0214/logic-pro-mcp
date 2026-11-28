@@ -43,7 +43,7 @@ private func enterpriseRuntime(
     runtime.keyCommandsPresetStaged = { true }
     runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
-    runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
+    runtime.tccCrossContextProbe = { .recorded("recognised_entries=1;unrecognised_entries=0;service=accessibility;principal_hint=Terminal") }
     runtime.blockingDialogInfo = { nil }
     runtime.fileExistsAtPath = { _ in true }
     runtime.isRegularFile = { _ in true }
@@ -156,7 +156,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     #expect(report.summary.failed == 0)
     #expect(report.summary.manual == 0)
     #expect(report.summary.warnings == 0)
-    #expect(report.summary.skipped == 5)
+    #expect(report.summary.skipped == 6) // includes the optional TCC history check (#1596)
 }
 
 @Test func test_t1_optional_skip_does_not_degrade_aggregate() {
@@ -188,7 +188,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     let c = try #require(check(report, "mcp.claude_desktop_registration"))
     #expect(c.status == .skipped)
     #expect(c.optional)
-    #expect(report.summary.skipped == 5)
+    #expect(report.summary.skipped == 6) // includes the optional TCC history check (#1596)
     #expect(report.status == .ok)
 }
 
@@ -380,11 +380,15 @@ private struct FrozenV1Report: Codable {
     }
 }
 
-@Test func test_t2_cross_context_denial_is_informational_without_human_remediation() throws {
+@Test func test_t2_cross_context_history_is_never_a_pass_or_a_denial_claim() throws {
     var runtime = enterpriseRuntime()
-    runtime.tccCrossContextProbe = { .denied("terminal:accessibility=denied") }
+    runtime.tccCrossContextProbe = { .recorded("recognised_entries=1;unrecognised_entries=0;service=accessibility;principal_hint=Terminal") }
     let c = try #require(check(makeReport(runtime: runtime), "permissions.tcc_cross_context"))
-    #expect(c.status == .warn)
+    #expect(c.status == .skipped)
+    #expect(c.status != .pass)
+    #expect(c.status != .warn)
+    #expect(!c.summary.contains("denied"))
+    #expect(!c.summary.contains("granted"))
     #expect(c.remediation.type == .none)
     #expect(c.remediation.value == "")
 }
@@ -392,7 +396,7 @@ private struct FrozenV1Report: Codable {
 @Test func test_t2_launch_context_reports_binding_without_rerun_instruction() throws {
     let c = try #require(check(makeReport(), "permissions.launch_context"))
     #expect(c.status == .pass)
-    #expect(c.summary == "This report measures TCC permissions for the responsible process terminal; permission results are bound to that launch context.")
+    #expect(c.summary == "The responsible process could not be measured, so permission results are shown without an identity; the identity is unresolved (launch context hint: terminal).")
     #expect(c.remediation.type == .none)
     #expect(c.remediation.value == "")
 }
@@ -480,19 +484,20 @@ private struct FrozenV1Report: Codable {
 @Test func test_t3_headline_render_nonpass() {
     let report = makeReport(permission: granted(systemEvents: .notGranted))
     let out = SetupDoctor.renderHuman(report, mode: .default, useColor: false)
-    #expect(report.headline == "Terminal outcome [permissions.automation_system_events]: Automation permission for System Events is not granted for the responsible process that launched this server; this is a launcher-permission gap, and Logic Pro automation is separate.")
+    #expect(report.headline == "Terminal outcome [permissions.automation_system_events]: Automation permission for System Events is not granted for the responsible process (identity unresolved); Logic Pro automation is separate.")
     #expect(report.fixPlan == [])
     #expect(out.contains(report.headline))
     #expect(!(out.contains("Next action")))
     #expect(!(out.contains("Fix plan:")))
 }
 
-@Test func test_t3_informational_permission_warning_is_not_an_action_plan() {
+@Test func test_t3_history_entry_raises_no_headline_and_no_action_plan() {
     var runtime = enterpriseRuntime()
-    runtime.tccCrossContextProbe = { .denied("terminal:accessibility=denied") }
+    runtime.tccCrossContextProbe = { .recorded("recognised_entries=1;unrecognised_entries=0;service=accessibility;principal_hint=Terminal") }
     let report = makeReport(runtime: runtime)
     let out = SetupDoctor.renderHuman(report, mode: .default, useColor: false)
-    #expect(report.headline == "Unresolved outcome [permissions.tcc_cross_context]: TCC database shows a known MCP host explicitly denied a required permission.")
+    #expect(!report.headline.contains("permissions.tcc_cross_context"))
+    #expect(!report.headline.contains("denied"))
     #expect(report.fixPlan == [])
     #expect(out.contains(report.headline))
     #expect(!(out.contains("Next action")))
@@ -954,4 +959,119 @@ private struct FrozenV2Report: Codable {
         case installSource = "install_source"
         case checks, summary, headline
     }
+}
+
+
+// #1596: the TCC database reader is the one doctor input that carries other software's names. A
+// private bundle identifier that contains a word the relevance filter looks for must reach neither
+// the JSON report nor the verbose text.
+@Test func test1596TCCDatabaseClientNamesNeverReachDoctorJSONOrVerboseOutput() throws {
+    let privateClients = [
+        "com.zq-private.review-token-9f3a.logicpromcp",
+        "com.zq-private.review-token-9f3a." + "cl" + "aude",
+        "/Users/someone/clients/acme/Zqprivate-9f3a-terminal.app",
+        "/Users/someone/clients/acme/review-token-9f3a-iterm",
+    ]
+    for authValue in [0, 2] {
+        let rows = privateClients.map {
+            SetupDoctor.TCCRow(service: "kTCCServiceAccessibility", client: $0, authValue: authValue, indirectObjectIdentifier: "")
+        } + [
+            SetupDoctor.TCCRow(service: "kTCCServiceAppleEvents", client: "com.apple.Terminal", authValue: authValue, indirectObjectIdentifier: "com.zq-private.review-token-9f3a"),
+        ]
+        var runtime = enterpriseRuntime()
+        let probe = SetupDoctor.mapTCCQueryOutcome(.rows(rows))
+        runtime.tccCrossContextProbe = { probe }
+        let report = makeReport(runtime: runtime)
+        let crossContext = try #require(check(report, "permissions.tcc_cross_context"))
+        let findings = try #require(crossContext.evidence["findings"])
+        #expect(findings.contains("unrecognised_entries=4"))
+        #expect(findings.contains("service=appleevents:another application;principal_hint=com.apple.Terminal"))
+
+        let json = encodeJSON(report)
+        let verbose = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
+        for output in [json, verbose] {
+            for fragment in ["zq-private", "Zqprivate", "review-token", "9f3a", "someone", "acme", "/Users"] {
+                #expect(!output.contains(fragment), "\(fragment) in doctor output")
+            }
+            #expect(output.contains("appleevents:another application"))
+        }
+    }
+}
+
+// #1596: the Apple Events target is printed only through fixed labels. A com.apple.* identifier that
+// the built-in list does not know, such as one a manifest adds, is printed as `another application`
+// in both renderers. The built-in Logic targets keep their fixed words.
+@Test func test1596ManifestOnlyAppleEventsTargetIsNeverPrintedByName() throws {
+    for authValue in [0, 2] {
+        let rows = [
+            SetupDoctor.TCCRow(service: "kTCCServiceAppleEvents", client: "com.apple.Terminal", authValue: authValue, indirectObjectIdentifier: "com.apple.BlueOrchardPrivate"),
+            SetupDoctor.TCCRow(service: "kTCCServiceAppleEvents", client: "com.apple.Terminal", authValue: authValue, indirectObjectIdentifier: "com.apple.logic10"),
+        ]
+        var runtime = enterpriseRuntime()
+        let probe = SetupDoctor.mapTCCQueryOutcome(.rows(rows))
+        runtime.tccCrossContextProbe = { probe }
+        let report = makeReport(runtime: runtime)
+        let json = encodeJSON(report)
+        let verbose = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
+        for output in [json, verbose] {
+            #expect(!output.contains("BlueOrchard"))
+            #expect(!output.contains("blueorchard"))
+            #expect(output.contains("appleevents:another application"))
+            #expect(output.contains("appleevents:logic-pro"))
+        }
+    }
+}
+
+// #1596: a client whose identifier merely contains the product name is not a host. It is counted,
+// never named, and never makes the enrichment pass or assert a grant.
+@Test func test1596LookalikeClientIsCountedNotNamedAndNeverPasses() throws {
+    let lookalike = SetupDoctor.TCCRow(service: "kTCCServiceAccessibility", client: "com.example.logicpromcp.sample", authValue: 2, indirectObjectIdentifier: "")
+    let terminal = SetupDoctor.TCCRow(service: "kTCCServiceAccessibility", client: "com.apple.Terminal", authValue: 0, indirectObjectIdentifier: "")
+    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([lookalike])) == .skipped(reason: .principalNotFound))
+    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([lookalike, terminal])) == .recorded("recognised_entries=1;unrecognised_entries=1;service=accessibility;principal_hint=com.apple.Terminal"))
+
+    for probe in [SetupDoctor.mapTCCQueryOutcome(.rows([lookalike])), SetupDoctor.mapTCCQueryOutcome(.rows([lookalike, terminal]))] {
+        var runtime = enterpriseRuntime()
+        runtime.tccCrossContextProbe = { probe }
+        let report = makeReport(runtime: runtime)
+        let c = try #require(check(report, "permissions.tcc_cross_context"))
+        #expect(c.status != .pass)
+        #expect(!c.summary.contains("granted"))
+        let output = encodeJSON(report) + SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
+        #expect(!output.contains("com.example"))
+        #expect(!output.contains("logicpromcp.sample"))
+    }
+}
+
+// #1596: the historical enrichment is informational for every outcome. A database that holds only a
+// row for the product's own executable, and every skip reason, leave a healthy install `ok` with
+// strict exit 0 (the same as before the enrichment was reworked).
+@Test func test1596EnrichmentOutcomesNeverChangeReadinessOrStrictExit() throws {
+    let productOnly = [
+        "/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicProMCP",
+        "LogicProMCP",
+    ].map {
+        SetupDoctor.TCCRow(service: "kTCCServiceAccessibility", client: $0, authValue: 2, indirectObjectIdentifier: "")
+    }
+    var probes: [SetupDoctor.TCCCrossContextProbe] = productOnly.map { SetupDoctor.mapTCCQueryOutcome(.rows([$0])) }
+    for probe in probes {
+        guard case .recorded = probe else { Issue.record("product row not recognised: \(probe)"); continue }
+    }
+    probes += [.skipped(reason: .principalNotFound), .skipped(reason: .fullDiskAccessUnavailable),
+               .skipped(reason: .tccQueryUnavailable), .skipped(reason: .tccSchemaMismatch)]
+    for probe in probes {
+        var runtime = enterpriseRuntime()
+        runtime.tccCrossContextProbe = { probe }
+        let report = makeReport(runtime: runtime)
+        #expect(report.status == .ok, "\(probe)")
+        #expect(SetupDoctor.strictExitCode(report) == 0, "\(probe)")
+    }
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "LogicProMCP") == "LogicProMCP")
+}
+
+@Test func test1596TCCClientLabelIsAlwaysAFixedLabel() {
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicProMCP") == "LogicProMCP (homebrew)")
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "/x/other-logicpromcp") == "another executable")
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "com.apple.Terminal") == "com.apple.Terminal")
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "com.example.unlisted") == "another application")
 }

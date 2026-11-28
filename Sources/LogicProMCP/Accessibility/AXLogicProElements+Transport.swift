@@ -672,6 +672,45 @@ extension AXLogicProElements {
         return candidates.count == 1 ? candidates[0] : nil
     }
 
+    /// The identifier Logic 13 gives the control bar's Stop button. It is not localized, and it
+    /// is the only handle on that button that does not depend on its description, which changes
+    /// with the transport (`정지   0` while playing, `처음으로 이동   ↩` when stopped).
+    static let controlBarStopButtonIdentifier = "controlBar/stopButton"
+
+    /// What the control bar's Stop button lookup found. Three outcomes, because they call for
+    /// three different things: press it, take the older route, or press nothing.
+    enum ControlBarStopButtonLookup {
+        /// Exactly one AXButton carries the identifier.
+        case found(AXUIElement)
+        /// The tree was read and no button carries it: an older control bar.
+        case absent
+        /// An identifier or child read failed, or more than one button carries it. Neither says the
+        /// button is absent, and the older route presses Play, which restarts playback on Logic 13.
+        case unreadableOrAmbiguous(String)
+    }
+
+    /// The control bar's Stop button: an AXButton, not a checkbox, so `controlBarCheckboxes` never
+    /// sees it. Only a button that carries the identifier is taken; a label match would be a guess
+    /// in ten locales.
+    static func lookupControlBarStopButton(
+        in controlBar: AXUIElement,
+        runtime: Runtime = .production
+    ) -> ControlBarStopButtonLookup {
+        switch AXHelpers.censusDescendantResult(
+            of: controlBar, role: kAXButtonRole as String,
+            identifier: controlBarStopButtonIdentifier, maxDepth: 4, runtime: runtime.ax
+        ) {
+        case .failure(let error):
+            return .unreadableOrAmbiguous("an accessibility read failed (status \(error.raw))")
+        case .success(let census):
+            switch census.candidates {
+            case 0: return .absent
+            case 1: return census.matches.first.map { .found($0) } ?? .absent
+            default: return .unreadableOrAmbiguous("\(census.candidates) buttons carry the Stop identifier")
+            }
+        }
+    }
+
     /// Find an AXCheckBox inside Logic Pro's control bar by its name.
     /// Common names (Korean): `녹음` (Record), `재생` (Play), `사이클` (Cycle),
     /// `카운트 인` (Count-in), `메트로놈 클릭` (Metronome).

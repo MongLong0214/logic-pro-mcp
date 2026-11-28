@@ -6,8 +6,10 @@ extension SetupDoctor {
             id: "permissions.accessibility",
             domain: "permissions",
             status: status.accessibility ? .pass : .fail,
-            summary: status.accessibility ? "Accessibility permission is granted." : "Accessibility permission is not granted.",
-            evidence: ["state": status.accessibilityState.rawValue],
+            summary: status.accessibility
+                ? "Accessibility permission is granted\(principalClause(status))."
+                : "Accessibility permission is not granted\(principalClause(status)).",
+            evidence: principalEvidence(status, ["state": status.accessibilityState.rawValue]),
             remediationType: .none
         )
     }
@@ -52,7 +54,7 @@ extension SetupDoctor {
             id: "permissions.automation_system_events",
             domain: "permissions",
             status: checkStatus,
-            summary: systemEventsSummary(for: status.systemEventsAutomationState),
+            summary: systemEventsSummary(for: status.systemEventsAutomationState, principal: status.principal),
             evidence: ["state": status.systemEventsAutomationState.rawValue],
             remediationType: .none
         )
@@ -65,49 +67,91 @@ extension SetupDoctor {
             domain: "permissions",
             status: status.postEventAccess ? .pass : .fail,
             summary: status.postEventAccess
-                ? "PostEvent access for CGEvent-family operations is granted."
-                : "PostEvent access is denied; CGEvent-family ops (transport.stop/pause + most edit/view/track fallbacks) will fail.",
-            evidence: ["post_event_access": status.postEventAccess ? "granted" : "denied"],
+                ? "PostEvent access for CGEvent-family operations is granted\(principalClause(status))."
+                : "PostEvent access is denied\(principalClause(status)); CGEvent-family ops (transport.stop/pause + most edit/view/track fallbacks) will fail.",
+            evidence: principalEvidence(status, ["post_event_access": status.postEventAccess ? "granted" : "denied"]),
             remediationType: .none
         )
     }
 
 
-    static func launchContextCheck(runtime: Runtime) -> Check {
+    static func launchContextCheck(
+        runtime: Runtime,
+        permissionStatus: PermissionChecker.PermissionStatus? = nil
+    ) -> Check {
         let context = runtime.launchContext()
-        let summary = context.context == "unknown"
-            ? "This report could not identify the responsible process; permission results remain bound to the unresolved launch context."
-            : "This report measures TCC permissions for the responsible process \(context.context); permission results are bound to that launch context."
+        // #1596: attribution comes only from the measured principal. The launch context is a hint
+        // about the client found in the parent chain; it never names who the grants belong to.
+        let hint = "launch context hint: \(context.context)"
+        let summary: String
+        if let principal = permissionStatus?.principal {
+            summary = principal.isSelf
+                ? "Permission results were measured for this LogicProMCP binary itself (\(principal.displayName)); grants held by the launching app do not apply to this server (\(hint))."
+                : "Permission results were measured for the responsible process \(principal.displayName) (\(hint))."
+        } else if permissionStatus != nil {
+            summary = "The responsible process could not be measured, so permission results are shown without an identity; the identity is unresolved (\(hint))."
+        } else {
+            summary = "Permission results are not attributed to a process here (\(hint))."
+        }
+        var launchEvidence = principalEvidence(
+            permissionStatus,
+            ["launch_context": context.context, "responsible_hint": publicResponsibleHint(context)]
+        )
+        if let permissionStatus, permissionStatus.principal == nil {
+            launchEvidence["tcc_principal"] = "unresolved"
+        }
         return check(
             id: "permissions.launch_context",
             domain: "permissions",
             status: .pass,
             summary: summary,
-            evidence: ["launch_context": context.context, "responsible_hint": context.responsibleHint],
+            evidence: launchEvidence,
             remediationType: .none
         )
     }
 
 
+    /// " for <principal>" when the principal was measured, so a denial names the process that was
+    /// denied (#1596) instead of leaving the reader to assume it was the launcher app.
+    static func principalClause(_ status: PermissionChecker.PermissionStatus) -> String {
+        guard let principal = status.principal else { return "" }
+        return principal.isSelf
+            ? " for this LogicProMCP binary (\(principal.displayName))"
+            : " for \(principal.displayName)"
+    }
+
+
+    static func principalEvidence(
+        _ status: PermissionChecker.PermissionStatus?,
+        _ evidence: [String: String]
+    ) -> [String: String] {
+        guard let principal = status?.principal else { return evidence }
+        var merged = evidence
+        merged["tcc_principal"] = principal.displayName
+        merged["tcc_principal_is_self"] = principal.isSelf ? "true" : "false"
+        return merged
+    }
+
+
     static func tccCrossContextCheck(runtime: Runtime) -> Check {
         switch runtime.tccCrossContextProbe() {
-        case let .granted(detail):
+        case let .recorded(detail):
+            // Never a pass and never a grant claim: a database row is historical context, and the
+            // measured principal is judged only by the live probes.
             return check(
                 id: "permissions.tcc_cross_context",
                 domain: "permissions",
-                status: .pass,
-                summary: "TCC database confirms a known MCP host grant.",
-                evidence: ["tcc_db_readable": "true", "full_disk_access": "true", "findings": detail],
-                remediationType: .none
-            )
-        case let .denied(detail):
-            return check(
-                id: "permissions.tcc_cross_context",
-                domain: "permissions",
-                status: .warn,
-                summary: "TCC database shows a known MCP host explicitly denied a required permission.",
-                evidence: ["tcc_db_readable": "true", "full_disk_access": "true", "findings": detail],
-                remediationType: .none
+                status: .skipped,
+                summary: "TCC database holds historical entries for recognised MCP clients. They do not establish any grant for the measured principal; live permission probes remain authoritative.",
+                evidence: [
+                    "tcc_db_readable": "true",
+                    "full_disk_access": "true",
+                    "reason": DoctorSkipReason.principalNotFound.rawValue,
+                    "findings": detail,
+                ],
+                remediationType: .none,
+                optional: true,
+                skipReason: .principalNotFound
             )
         case let .skipped(reason):
             let readable: String
@@ -126,6 +170,7 @@ extension SetupDoctor {
                 summary: "Cross-context TCC enrichment could not answer; live permission probes remain authoritative.",
                 evidence: ["tcc_db_readable": readable, "full_disk_access": readable, "reason": reason.rawValue],
                 remediationType: .docs,
+                optional: true,
                 skipReason: reason
             )
         }
@@ -144,12 +189,23 @@ extension SetupDoctor {
     }
 
 
-    static func systemEventsSummary(for state: PermissionChecker.CheckState) -> String {
+    static func systemEventsSummary(
+        for state: PermissionChecker.CheckState,
+        principal: TCCResponsibility.Principal? = nil
+    ) -> String {
         switch state {
         case .granted:
             return "Automation permission for System Events is granted."
         case .notGranted:
-            return "Automation permission for System Events is not granted for the responsible process that launched this server; this is a launcher-permission gap, and Logic Pro automation is separate."
+            let subject: String
+            if let principal {
+                subject = principal.isSelf
+                    ? "this LogicProMCP binary (\(principal.displayName))"
+                    : principal.displayName
+            } else {
+                subject = "the responsible process (identity unresolved)"
+            }
+            return "Automation permission for System Events is not granted for \(subject); Logic Pro automation is separate."
         case .notVerifiable:
             return "Automation permission for System Events could not be verified."
         }

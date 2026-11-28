@@ -308,6 +308,29 @@ import Testing
         return result.operationResults[operation.rawValue]
     }
 
+    /// What the drive sent to the server double, minus the display-mode double's own entries.
+    private func sentRequests(_ fixture: Fixture) -> [String] {
+        fixture.lines("requests").filter { !$0.contains("\"display_mode\"") }
+    }
+
+    private func driveOperations(
+        _ fixture: Fixture, _ operations: [OperationID], display: QualificationPositionDisplay
+    ) throws -> Result<QualificationDriveResult, Error> {
+        let specs = try operations.map { operation in
+            try #require(OperationRegistry.specs.first { $0.id == operation })
+        }
+        do {
+            return .success(try QualificationTransport(
+                uiObserver: unchangedUIForTests, positionDisplay: display, handshakeTimeout: 2,
+                requestTimeout: 2, shutdownGrace: 2, uiSettleSleep: { _ in }
+            ).drive(.init(
+                executableURL: fixture.executableURL, environment: ["HANDSHAKE_DELAY": "0"],
+                expectedOperationCount: 0, operations: specs)))
+        } catch {
+            return .failure(error)
+        }
+    }
+
     /// The canonical gate state: the Marker List is closed, so the passive marker read is the
     /// cache, unreadable. No recipe may stage a marker (or park the playhead for one) on that.
     @Test(arguments: markerOperations)
@@ -583,17 +606,115 @@ import Testing
         defer { fixture.remove() }
         let fake = try QualificationPositionDisplayFake(
             directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
-        let observed = try drive(fixture, operation, display: fake.display)
-
-        #expect(observed?.mutationRestore == nil, "a mode left changed earns no cycle record")
-        let refusal: String = observed?.mutationRestoreRefusal ?? "no refusal"
-        #expect(refusal.contains("display mode"), "\(refusal)")
+        // The drive ends with `recoveryUnconfirmed`: no result exists, so no cycle record is earned.
+        guard case .failure(let error) = try driveOperations(fixture, [operation], display: fake.display) else {
+            Issue.record("the drive returned a result although the display mode was not confirmed back")
+            return
+        }
+        let transportError = try #require(error as? QualificationTransportError, "\(error)")
+        #expect(transportError.requiresDriveAbort, "\(transportError)")
+        #expect("\(transportError)".contains("display mode"), "\(transportError)")
         let events = QualificationPositionDisplayFake.events(in: fixture.directory)
         #expect(QualificationPositionDisplayFake.containsInOrder(
             ["mode_switch", "goto_position", "transport_read", "mode_restore"], in: events),
             "the playhead is restored and verified before the mode: \(events)")
         #expect(fixture.bar == 1 && fixture.beat == 2)
         #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
+    }
+
+    /// The marker and playhead cycles hold Beats for the whole cycle and get no recovery witness of
+    /// their own. A mode that is not confirmed given back still ends the drive: the next operation
+    /// sends nothing, so its requests are exactly those of the first operation alone, and the bar
+    /// is never recorded as the "original" of a later cycle.
+    @Test(arguments: playheadOperations,
+          [QualificationPositionDisplayFake.Fault.restoreRefused, .restoreNotApplied, .switchUnsettledNoLease])
+    func aDisplayModeNotConfirmedBackEndsTheDriveBeforeTheNextOperationIsSent(
+        operation: OperationID, fault: QualificationPositionDisplayFake.Fault
+    ) throws {
+        let next: OperationID = operation == .navigateGotoBar ? .transportGotoPosition : .navigateGotoBar
+        func run(_ operations: [OperationID]) throws -> (
+            outcome: Result<QualificationDriveResult, Error>, sent: [String], mode: String, afterFault: [String]?
+        ) {
+            let fixture = try Fixture(listOpenInitially: true, startBeat: 2, displayMode: "Beats & Project")
+            defer { fixture.remove() }
+            let fake = try QualificationPositionDisplayFake(
+                directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject, fault: fault)
+            let outcome = try driveOperations(fixture, operations, display: fake.display)
+            return (outcome, sentRequests(fixture), fake.mode,
+                    QualificationPositionDisplayFake.rawLog(from: fault, in: fixture.directory))
+        }
+        let alone = try run([operation])
+        let both = try run([operation, next])
+        for result in [alone, both] {
+            guard case .failure(let error) = result.outcome else {
+                Issue.record("the drive went on after the display mode was not confirmed back: \(result.sent)")
+                return
+            }
+            let transportError = try #require(error as? QualificationTransportError, "\(error)")
+            #expect(transportError.requiresDriveAbort, "\(transportError)")
+            #expect("\(transportError)".contains("display mode"), "\(transportError)")
+            // Anchored to the fault in each run's own raw log: from the faulting display call on,
+            // only the double's own confirming read may follow. An identical extra request in both
+            // runs, which the comparison below cannot see, fails here.
+            #expect(result.afterFault == QualificationPositionDisplayFake.allowedLog(from: fault),
+                    "after the fault the log holds \(result.afterFault ?? ["no fault call"])")
+        }
+        #expect(both.sent == alone.sent, "nothing is sent for the next operation: \(both.sent)")
+        // A switch that left no lease stops before the first request of the cycle: nothing at all.
+        #expect(fault == .switchUnsettledNoLease ? both.sent.isEmpty : !both.sent.isEmpty, "\(both.sent)")
+    }
+
+    /// The abort of a display mode that is not confirmed back carries the cleanup the recipe had
+    /// completed: the staged marker whose deletion was withheld is named in the abort itself, and
+    /// nothing is sent after it.
+    @Test func aDisplayModeAbortCarriesTheNamedResidualMarker() throws {
+        func run(_ operations: [OperationID]) throws -> (detail: String, sent: [String], afterFault: [String]?) {
+            let fixture = try Fixture(
+                listOpenInitially: true, closeAfterCreate: true, startBeat: 2, displayMode: "Beats & Project")
+            defer { fixture.remove() }
+            let fake = try QualificationPositionDisplayFake(
+                directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+                fault: .restoreRefused)
+            let outcome = try driveOperations(fixture, operations, display: fake.display)
+            guard case .failure(let error) = outcome,
+                  case QualificationTransportError.recoveryUnconfirmed(let detail)? = error as? QualificationTransportError
+            else {
+                Issue.record("expected recoveryUnconfirmed, got \(outcome)"); return ("", [], nil)
+            }
+            return (detail, sentRequests(fixture),
+                    QualificationPositionDisplayFake.rawLog(from: .restoreRefused, in: fixture.directory))
+        }
+        let alone = try run([.navigateGotoMarker])
+        let both = try run([.navigateGotoMarker, .navigateGotoBar])
+        for result in [alone, both] {
+            #expect(result.detail.contains("display mode"), "\(result.detail)")
+            #expect(result.detail.contains("withheld") && result.detail.contains("qualification_phase_b_probe"),
+                    "the residual marker is named in the abort: \(result.detail)")
+            #expect(result.afterFault == QualificationPositionDisplayFake.allowedLog(from: .restoreRefused),
+                    "nothing but the refused restore is in the log from the fault on: \(result.afterFault ?? [])")
+        }
+        #expect(!alone.sent.isEmpty && both.sent == alone.sent, "nothing is sent after the abort: \(both.sent)")
+    }
+
+    /// The same for the playhead cycle: the abort carries the cleanup the recipe completed.
+    @Test(arguments: [OperationID.navigateGotoBar, .transportGotoPosition])
+    func aDisplayModeAbortCarriesThePlayheadCleanup(operation: OperationID) throws {
+        let fixture = try Fixture(
+            listOpenInitially: true, barWriteOvershoot: true, startBeat: 2, displayMode: "Beats & Project")
+        defer { fixture.remove() }
+        let fake = try QualificationPositionDisplayFake(
+            directory: fixture.directory, start: QualificationPositionDisplayFake.beatsAndProject,
+            fault: .restoreRefused)
+        let outcome = try driveOperations(fixture, [operation], display: fake.display)
+        guard case .failure(let error) = outcome else {
+            Issue.record("the drive returned a result"); return
+        }
+        guard case QualificationTransportError.recoveryUnconfirmed(let detail)? = error as? QualificationTransportError else {
+            Issue.record("expected recoveryUnconfirmed, got \(error)"); return
+        }
+        #expect(detail.contains("display mode"), "\(detail)")
+        #expect(detail.contains("cleanup:") && !detail.contains("cleanup did not run"),
+                "the completed playhead cleanup is carried: \(detail)")
     }
 
     // MARK: Round 5: one setting read two ways, a read that only half failed
