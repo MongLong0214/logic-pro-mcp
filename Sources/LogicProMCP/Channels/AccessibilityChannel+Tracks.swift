@@ -2071,11 +2071,33 @@ extension AccessibilityChannel {
         _ = processRuntime.activateLogicPro()
         try? await Task.sleep(nanoseconds: 150_000_000)
         var writeAttempted = false
-        guard AXLogicProElements.selectTrackViaAX(
+        let outcome = AXLogicProElements.selectTrackOutcome(
             at: index,
             runtime: runtime,
             willWrite: { writeAttempted = true }
-        ) else {
+        )
+        if outcome == .mixerUnsettled {
+            // A Mixer strip was written and the requested header did not settle as the only
+            // selected row. Whatever row reads selected now, it is not proven to be the requested
+            // track, so this is a failure, never a read-back by ordinal.
+            return .error(HonestContract.encodeStateC(
+                error: .readbackMismatch,
+                hint: "The Mixer write for track \(index) did not settle on that track; the selection is not claimed and later channel fallback is blocked.",
+                extras: [
+                    "requested": index,
+                    "reason_detail": "mixer_write_unsettled",
+                    "write_attempted": true,
+                    "fallback_unsafe": true,
+                    "safe_to_retry": false,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
+                ]
+            ))
+        }
+        guard outcome.permitsReadback else {
             var extras: [String: Any] = ["requested": index]
             if writeAttempted {
                 extras.merge([
@@ -2104,7 +2126,12 @@ extension AccessibilityChannel {
         // legacy free-form text. Existing `verified:true/false` JSON path
         // stays valid because the new envelope still contains those keys.
         let verification = await verifyTrackSelection(index: index, runtime: runtime)
-        let base: [String: Any] = ["requested": index, "selected": index]
+        var base: [String: Any] = ["requested": index, "selected": index]
+        if case .mixerRefused(let reason) = outcome {
+            // The Logic 13 Mixer route wrote nothing: the read-back below is the selection as it was.
+            base["mixer_write_attempted"] = false
+            base["mixer_refusal"] = reason
+        }
         switch verification {
         case .verified:
             return .success(HonestContract.encodeStateA(extras: base.merging([
@@ -2913,8 +2940,11 @@ extension AccessibilityChannel {
         permittingWrite: (() -> Bool)? = nil,
         willWrite: (() -> Void)? = nil
     ) -> Bool {
-        _ = AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime,
-            heldHeader: heldHeader, permittingWrite: permittingWrite, willWrite: willWrite)
+        // A Mixer write that did not settle on the held header is not a selection to confirm by
+        // ordinal: the row may now hold another header.
+        guard AXLogicProElements.selectTrackOutcome(at: index, runtime: runtime,
+            heldHeader: heldHeader, permittingWrite: permittingWrite, willWrite: willWrite) != .mixerUnsettled
+        else { return false }
         for attempt in 0..<4 {
             guard permittingWrite?() ?? true else { return false }
             if selectionIsExclusive(index: index, runtime: runtime) { return true }

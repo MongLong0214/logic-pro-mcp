@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-- `tracks.select` on Logic 13 (#1600): the rail's selection write is acknowledged without effect there, so the selection now moves through the main Mixer's `AXSelectedChildren`. The strip is bound through the Mixer's selected-child relationship, never a strip name; a write that lands elsewhere is undone, and a hidden or reordered Mixer refuses with the selection unchanged. `select` now refuses with State C `unsafe_focus_for_synthetic_key` while a text field has Logic's focus, because moving the selection committed an open rename's pending text as the track name.
+- `tracks.select` on Logic 13 (#1600): the rail's selection write is acknowledged without effect there, so the selection now moves through the main Mixer's `AXSelectedChildren`. It writes the Mixer only when the Mixer is in Tracks view, no type filter is off and every header's name equals its row's strip name field; otherwise it refuses before any Mixer write with the selection unchanged, and a Mixer write that does not settle on the requested track is a failure, never State A. `select` now refuses with State C `unsafe_focus_for_synthetic_key` while a text field has Logic's focus, because moving the selection committed an open rename's pending text as the track name.
 - Stem export now identifies the destination volume sidebar by its unique exact volume-name row
   instead of requiring it to be the export panel's only outline (#1553), so List-view browser
   outlines without that row are ignored. Duplicate matches, unreadable censuses, failed selection
