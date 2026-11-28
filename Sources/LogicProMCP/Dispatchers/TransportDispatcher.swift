@@ -5,6 +5,13 @@ struct TransportDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicTransport)
     /// Logic's public tempo contract. Keep every tempo-writing surface on this one range.
+    /// The wait after each unmatched reading of a transport verification, 12 attempts. It starts at
+    /// 10 ms and grows to the old 100 ms-class steps; the 12 entries sum to the old 12 x 100 ms
+    /// bound, so a state that never arrives costs what it did and is reported the same way.
+    static let verifyPollSleepNanoseconds: [UInt64] = [
+        10_000_000, 20_000_000, 40_000_000, 80_000_000, 130_000_000, 130_000_000,
+        130_000_000, 130_000_000, 130_000_000, 130_000_000, 130_000_000, 140_000_000,
+    ]
     static let supportedTempoRange: ClosedRange<Double> = 5.0...999.0
 
     static let tool = Tool(
@@ -303,7 +310,7 @@ struct TransportDispatcher: OperationTraceDispatching {
             let liveRefresh = await ResourceHandlers.readLiveTransportState(router: router)
             guard let liveState = liveRefresh.state else {
                 refreshError = liveRefresh.errorCode
-                if attempt < 12 { await sleep(100_000_000) }
+                if attempt < 12 { await sleep(Self.verifyPollSleepNanoseconds[attempt - 1]) }
                 continue
             }
 
@@ -319,7 +326,7 @@ struct TransportDispatcher: OperationTraceDispatching {
                 return toolTextResult(HonestContract.encodeStateA(extras: observedExtras))
             }
 
-            if attempt < 12 { await sleep(100_000_000) }
+            if attempt < 12 { await sleep(Self.verifyPollSleepNanoseconds[attempt - 1]) }
         }
 
         guard let afterState else {
@@ -1082,7 +1089,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         let writePayload = jsonValue(from: writeResult.message)
         var attempts = 0
         var afterState: TransportState?
-        for _ in 0..<12 {
+        for attempt in 0..<12 {
             attempts += 1
             if let observed = await readTransportState(router: router) {
                 afterState = observed
@@ -1104,7 +1111,7 @@ struct TransportDispatcher: OperationTraceDispatching {
                     return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
                 }
             }
-            await sleep(100_000_000)
+            await sleep(Self.verifyPollSleepNanoseconds[attempt])
         }
 
         guard writeResult.isSuccess else {

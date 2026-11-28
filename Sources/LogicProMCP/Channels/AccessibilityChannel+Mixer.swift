@@ -300,8 +300,7 @@ extension AccessibilityChannel {
     static func defaultSetMixerValue(
         params: [String: String],
         target: MixerTarget,
-        runtime: AXLogicProElements.Runtime = .production,
-        headerCache: MixerHeaderFaderCache? = nil
+        runtime: AXLogicProElements.Runtime = .production
     ) -> ChannelResult {
         // Accept both `value` (legacy) and `volume`/`pan` (dispatcher-side aliases)
         // — same contract-drift class of bug as transport.set_tempo's bpm/tempo.
@@ -338,7 +337,6 @@ extension AccessibilityChannel {
         // not jump to the written value (`set 0.5` on a 0.76 fader looked unmoved),
         // but on Logic 12.3.1 it moved one raw unit toward it, which the fine phase uses.
         var headerReadForDiagnostics: AXLogicProElements.TrackHeaderRead = .unavailable
-        var locatePath = "full_walk"
         let slider: AXUIElement?
         if let physical {
             switch target {
@@ -356,20 +354,13 @@ extension AccessibilityChannel {
             }
 
             var resolved: AXUIElement?
-            if target == .volume, let headerCache,
-               let cached = headerCache.revalidated(index: index, runtime: runtime.ax) {
-                resolved = cached
-                locatePath = "revalidated_cache"
-            } else if let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime) {
+            if let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime) {
                 headerReadForDiagnostics = AXLogicProElements.allTrackHeadersRead(
                     in: arrangeWindow, runtime: runtime
                 )
                 if case .read(let headers) = headerReadForDiagnostics,
                    index >= 0, index < headers.count {
                     resolved = control(in: headers[index])
-                    if target == .volume, let headerCache, let found = resolved {
-                        headerCache.store(index: index, header: headers[index], slider: found, runtime: runtime.ax)
-                    }
                     if resolved == nil,
                        AXHelpers.performAction(
                         arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax
@@ -612,8 +603,29 @@ extension AccessibilityChannel {
         // a write that landed correctly and then failed its ONE verification read is reported as
         // unverified, which is honest about the read and wrong about the write. Measured after the
         // loop was fixed — a run that reached its target still came back State B here.
-        let observedRaw = readSlider()
-        let observedAfter = readContract()
+        // The raw read, the contract read and the verdict come from ONE settled sample: two
+        // consecutive samples one poll step apart must agree before the sample is believed, so a
+        // value passing through the target on its way elsewhere cannot be reported as landed.
+        var lastSample: (raw: Double?, contract: Double?)?
+        var finalSample: (raw: Double?, contract: Double?) = (nil, nil)
+        var finalSettled = false
+        var samplesTaken = 0
+        let settleStart = ProcessInfo.processInfo.systemUptime
+        while true {
+            let sample = (raw: readSlider(), contract: readContract())
+            finalSample = sample
+            samplesTaken += 1
+            if let last = lastSample, sample.raw != nil, last.raw == sample.raw, last.contract == sample.contract {
+                finalSettled = true
+                break
+            }
+            lastSample = sample
+            // At least two samples are always taken; after that the old 25 ms bound applies.
+            if samplesTaken >= 2, ProcessInfo.processInfo.systemUptime - settleStart >= 0.025 { break }
+            usleep(2_000)
+        }
+        let observedRaw = finalSample.raw
+        let observedAfter = finalSample.contract
         if physical != nil, steps == 0, fineSteps == 0, !controlIsCurrent() {
             return .error(HonestContract.encodeStateC(error: .staleTargetReference,
                 hint: "The referenced physical control changed before actuation; nothing was written.",
@@ -648,7 +660,6 @@ extension AccessibilityChannel {
             "detent_raw_step": detentRawStep,
             "verify_source": "ax_slider",
             "write_method": "ax_increment_decrement",
-            "locate_path": locatePath,
             "nudge_steps": steps,
             "fine_steps": fineSteps,
             // On a normalized slider rounding would call 0.6 and 0.9 one position, so only equality counts.
@@ -666,13 +677,13 @@ extension AccessibilityChannel {
                 : "An AXValue write moved the slider further from the target, and the fine phase stopped there without restoring it; observed_raw is where it was left."
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: baseExtras))
         }
-        if convergedToNearestDetent, let actual = observedAfter {
+        if convergedToNearestDetent, finalSettled, let actual = observedAfter {
             baseExtras["observed"] = actual
             return .success(HonestContract.encodeStateA(extras: baseExtras))
         }
         return .success(HonestContract.encodeStateB(
             reason: observedAfter == nil ? .readbackUnavailable : .readbackMismatch,
-            extras: baseExtras
+            extras: baseExtras.merging(["settled_sample": finalSettled]) { _, new in new }
         ))
     }
 

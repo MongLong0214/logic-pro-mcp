@@ -654,13 +654,12 @@ extension AXLogicProElements {
     /// True when the retained `header` is still row `index` and the only selected row, polled for
     /// up to ~600 ms.
     private static func waitForExclusiveSelection(of header: AXUIElement, at index: Int, runtime: Runtime) -> Bool {
-        for attempt in 0..<7 {
-            if attempt > 0 { usleep(100_000) }
+        ReadbackPoll.until(bound: 600_000, step: 10_000, confirm: false) {
             if let row = exclusivelySelectedRow(runtime: runtime), row.index == index, CFEqual(row.header, header) {
                 return true
             }
+            return false
         }
-        return false
     }
 
     private enum MixerSelectionOutcome: Equatable {
@@ -758,11 +757,12 @@ extension AXLogicProElements {
         _ = AXHelpers.setAttribute(mixer, kAXSelectedChildrenAttribute, [candidate.strip] as CFArray,
                                    runtime: runtime.ax)
         var unchanged = false
-        for attempt in 0..<7 {
-            if attempt > 0 { usleep(100_000) }
-            if settled(index, header, child: candidate.strip) { return .selected }
+        let landed = ReadbackPoll.until(bound: 600_000, step: 10_000, confirm: false) {
+            if settled(index, header, child: candidate.strip) { return true }
             unchanged = settled(original.index, original.header, child: originalChild)
+            return false
         }
+        if landed { return .selected }
         // From here the answer is `.unsettled` whatever the restore does: the requested header
         // did not settle, so no caller may read the row back as selected.
         guard !unchanged, source.currentIndex(runtime: runtime) == original.index,
@@ -770,9 +770,8 @@ extension AXLogicProElements {
         willWrite?()
         _ = AXHelpers.setAttribute(mixer, kAXSelectedChildrenAttribute, [originalChild] as CFArray,
                                    runtime: runtime.ax)
-        for attempt in 0..<7 {
-            if attempt > 0 { usleep(100_000) }
-            if settled(original.index, original.header, child: originalChild) { break }
+        _ = ReadbackPoll.until(bound: 600_000, step: 10_000, confirm: false) {
+            settled(original.index, original.header, child: originalChild)
         }
         return .unsettled
     }

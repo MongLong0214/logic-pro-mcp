@@ -500,10 +500,18 @@ extension AccessibilityChannel {
             AXMouseHelper.typeNumericString(tempoStr, runtime: mouseRuntime)
             Thread.sleep(forTimeInterval: 0.05)
             AXMouseHelper.pressReturn(runtime: mouseRuntime)
-            Thread.sleep(forTimeInterval: 0.15)
-
-            if let finalValue = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double,
-               abs(finalValue - tempoValue) < 1.0 {
+            // Reads at once and waits only while the tempo has not reached the typed value (the old
+            // fixed 150 ms sleep came first); the bound is the same 150 ms.
+            var landedValue: Double?
+            _ = ReadbackPoll.until(bound: 150_000) {
+                if let value = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double,
+                   abs(value - tempoValue) < 1.0 {
+                    landedValue = value
+                    return true
+                }
+                return false
+            }
+            if let finalValue = landedValue {
                 return tempoSuccess(observed: finalValue, via: "slider")
             }
 

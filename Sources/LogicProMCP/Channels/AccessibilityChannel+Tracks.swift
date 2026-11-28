@@ -2255,12 +2255,10 @@ extension AccessibilityChannel {
         }
 
         func pollMatched(deadlineMs: Int) -> Bool {
-            let deadline = Date().addingTimeInterval(Double(deadlineMs) / 1000.0)
-            repeat {
+            ReadbackPoll.until(bound: UInt32(max(0, deadlineMs)) * 1_000, confirm: false) {
                 if let after = readValue(), after == desired { return true }
-                usleep(40_000)
-            } while Date() < deadline
-            return false
+                return false
+            }
         }
 
         // #106 / ADR-001: coordinate-free per-op actuator ladder. Every rung
@@ -2698,12 +2696,10 @@ extension AccessibilityChannel {
                 runtime: runtime.ax
             )
         }
-        for attempt in 0..<4 {
+        return ReadbackPoll.until(bound: 240_000, step: 8_000, confirm: false) {
             let observed = headers.map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
-            if observed == priorSelection { return true }
-            if attempt < 3 { usleep(80_000) }
+            return observed == priorSelection
         }
-        return false
     }
 
     /// Exclusive-select track 0, confirm a safe keyboard focus, then post ONLY the
@@ -2773,11 +2769,10 @@ extension AccessibilityChannel {
                 }
                 return anyPosted ? .postedNoFlip : .couldNotPost
             }
-            let deadline = Date().addingTimeInterval(Double(syntheticKeyRetryPollMs) / 1000.0)
-            repeat {
-                if armValue() == expected { return .flipped }   // transition observed after the post
-                usleep(40_000)
-            } while Date() < deadline
+            // transition observed after the post
+            if ReadbackPoll.until(bound: UInt32(syntheticKeyRetryPollMs) * 1_000, confirm: false, check: { armValue() == expected }) {
+                return .flipped
+            }
             if attempt < syntheticKeyRetryAttempts - 1 {
                 keyRuntime.sleepMicros(syntheticKeyRetrySettleMicros)
             }
@@ -2799,11 +2794,9 @@ extension AccessibilityChannel {
             ) else { return false }
             _ = AXHelpers.performAction(record, kAXPressAction, runtime: runtime.ax)
         }
-        for attempt in 0..<4 {
-            if transportRecordingState(runtime: runtime) == prior { return true }
-            if attempt < 3 { usleep(80_000) }
+        return ReadbackPoll.until(bound: 240_000, step: 8_000, confirm: false) {
+            transportRecordingState(runtime: runtime) == prior
         }
-        return false
     }
 
     typealias TrackToggleRung = (
@@ -2945,12 +2938,12 @@ extension AccessibilityChannel {
         guard AXLogicProElements.selectTrackOutcome(at: index, runtime: runtime,
             heldHeader: heldHeader, permittingWrite: permittingWrite, willWrite: willWrite) != .mixerUnsettled
         else { return false }
-        for attempt in 0..<4 {
-            guard permittingWrite?() ?? true else { return false }
-            if selectionIsExclusive(index: index, runtime: runtime) { return true }
-            if attempt < 3 { usleep(80_000) }
+        var permitted = true
+        let exclusive = ReadbackPoll.until(bound: 240_000, step: 8_000, confirm: false) {
+            guard permittingWrite?() ?? true else { permitted = false; return true }
+            return selectionIsExclusive(index: index, runtime: runtime)
         }
-        return false
+        return exclusive && permitted
     }
 
     /// Read-only exclusivity predicate: the target — and ONLY the target — is
@@ -3436,8 +3429,12 @@ extension AccessibilityChannel {
             AXHelpers.performAction(field, kAXPressAction, runtime: runtime.ax)
             AXHelpers.setAttribute(field, kAXValueAttribute, truncatedName as CFTypeRef, runtime: runtime.ax)
             AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
-            usleep(50_000)
-            if let verified = verifiedResult(via: "ax_set_value") {
+            var viaSetValue: ChannelResult?
+            _ = ReadbackPoll.until(bound: 50_000, confirm: false) {
+                viaSetValue = verifiedResult(via: "ax_set_value")
+                return viaSetValue != nil
+            }
+            if let verified = viaSetValue {
                 return verified
             }
         }
@@ -3473,9 +3470,12 @@ extension AccessibilityChannel {
         if typing != .typed {
             return renameTypingFailure(typing, baseExtras: baseExtras, observed: observedTrackName())
         }
-        usleep(150_000)
-
-        if let verified = verifiedResult(via: "track_menu") {
+        var viaMenu: ChannelResult?
+        _ = ReadbackPoll.until(bound: 150_000, confirm: false) {
+            viaMenu = verifiedResult(via: "track_menu")
+            return viaMenu != nil
+        }
+        if let verified = viaMenu {
             return verified
         }
 
@@ -4031,21 +4031,19 @@ extension AccessibilityChannel {
         }
 
         var sawSelectionMetadata = false
-        for attempt in 0..<6 {
+        var disappeared = false
+        let selected = ReadbackPoll.until(bound: 500_000, step: 10_000, confirm: false) {
             let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
-            guard index < headers.count else { return false }
+            guard index < headers.count else { disappeared = true; return true }
 
             let selectionStates = headers.map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
             if selectionStates.contains(where: { $0 != nil }) {
                 sawSelectionMetadata = true
             }
-            if selectionStates[index] == true {
-                return true
-            }
-            if attempt < 5 {
-                usleep(100_000)
-            }
+            return selectionStates[index] == true
         }
+        if disappeared { return false }
+        if selected { return true }
         return !sawSelectionMetadata
     }
 
