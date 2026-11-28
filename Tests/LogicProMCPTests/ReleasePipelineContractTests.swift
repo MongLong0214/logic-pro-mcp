@@ -139,7 +139,7 @@ import Testing
     #expect(wrapper.contains("git@github.com:MongLong0214/logic-pro-mcp.git"))
     #expect(wrapper.contains("[\"git\", \"-C\", sys.argv[6], \"show\""))
     #expect(wrapper.contains("run.get(\"path\") != \".github/workflows/ci.yml\""))
-    #expect(wrapper.contains("run.get(\"status\") != \"in_progress\""))
+    #expect(wrapper.contains("run.get(\"status\") == \"completed\" or run.get(\"conclusion\") is not None"))
     #expect(wrapper.contains("run.get(\"conclusion\") is not None"))
     #expect(wrapper.contains("(pull_request.get(\"base\") or {}).get(\"ref\") != \"main\""))
     #expect(wrapper.contains("${LOGIC_NATIVE_STATUS_TOKEN+x}"))
