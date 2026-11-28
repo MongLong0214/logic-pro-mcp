@@ -23,6 +23,7 @@ private final class StemPanelSurfaceFake: ProjectStemExportPanelDriver.Surface, 
     var browserSelectionSucceeds = true
     var destinationBefore: String? = "Old Exports"
     var destinationAfter: String? = "Stem Exports"
+    var listViewSelectionConfirmsDestination = false
     var perTrackActive = true
     /// The action status and observable UI effect vary independently. The
     /// driver must never use the first as evidence for the second.
@@ -79,6 +80,11 @@ private final class StemPanelSurfaceFake: ProjectStemExportPanelDriver.Surface, 
             return .absent
         }
         return panelPresence
+    }
+
+    func listViewSelectionConfirms(_ path: String) -> Bool {
+        events.append("list_view_selection_read")
+        return listViewSelectionConfirmsDestination
     }
 
     func destinationPopupValue() -> String? {
@@ -1471,6 +1477,20 @@ struct Issue369StemExportTests {
     // nothing written — so the folder is chosen as a browser element and the
     // destination popup re-read. No observed popup change means no Export press, State C with
     // write_attempted false, even though the browser action reported success.
+    // List view: the popup names the browsed directory, so only the selected
+    // row's exact path can confirm the destination (#1553).
+    @Test("list-view selected row confirms a destination the popup cannot")
+    func listViewSelectionConfirmsWhenPopupDoesNot() async {
+        let surface = StemPanelSurfaceFake()
+        surface.destinationAfter = surface.destinationBefore
+        surface.listViewSelectionConfirmsDestination = true
+
+        let outcome = await driveStemPanel(surface)
+
+        #expect(outcome == .completed)
+        #expect(surface.events.contains { $0.hasPrefix("export_press") })
+    }
+
     @Test("unchanged destination popup refuses before export")
     func unchangedDestinationRefusesWithoutWrite() async {
         let surface = StemPanelSurfaceFake()
