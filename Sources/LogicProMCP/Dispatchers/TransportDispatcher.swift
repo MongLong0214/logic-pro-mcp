@@ -931,41 +931,77 @@ struct TransportDispatcher: OperationTraceDispatching {
             extras["unobserved_position_components"] = unobservedMusicalComponents.map(\.rawValue)
         }
 
-        let beforePosition = completeObservedMusicalPosition(beforeTransport)
-        let afterPosition = completeObservedMusicalPosition(observedTransport)
-        let observedEffect: Bool
-        if !requestedPosition.contains(":"),
-           let beforePosition,
-           let afterPosition,
-           beforePosition.value != requestedPosition,
-           afterPosition.value == requestedPosition {
-            observedEffect = true
-        } else {
-            observedEffect = false
+        // #1601: the control bar's display mode decides how many components Logic shows. The
+        // default Beats & Project display shows bar and beat only, so a four-component request
+        // can never be read back whole there. Compare at the precision the display has, and say
+        // which components were not compared. The display mode is never switched here.
+        let beforePrefix = musicalPrefixMatch(beforeTransport?.positionReadback, requested: requestedPosition)
+        let afterPrefix = musicalPrefixMatch(observedTransport.positionReadback, requested: requestedPosition)
+        // The components past the readable prefix are compared by nothing, so only a request
+        // that leaves them at the 1 that a beat boundary has can be called verified; any other
+        // sub-beat request is State B at the precision Logic's display cannot show.
+        let unreadableRequestedBeyondDefault = unobservedMusicalComponents.contains { component in
+            guard let value = requestedComponentValue(requestedPosition, component) else { return true }
+            return value != 1
         }
+        let observedEffect = !requestedPosition.contains(":")
+            && beforePrefix == false && afterPrefix == true
         let verificationWithheld = channelVerificationWithheld
-            ?? (afterPosition?.value == requestedPosition && !observedEffect
-                ? "observed_effect_unavailable" : nil)
+            ?? (afterPrefix == true && !observedEffect ? "observed_effect_unavailable" : nil)
         if let verificationWithheld {
             extras["verification_withheld"] = verificationWithheld
         }
+        if !unobservedMusicalComponents.isEmpty {
+            extras["verified_precision"] = observedMusicalComponents.map(\.rawValue).joined(separator: ".")
+        }
 
         // A matching post-write value is a landing observation, not evidence that this invocation
-        // moved the playhead. State A needs a complete AX reading on each side of the write boundary
-        // and the observed transition must end at the requested value.
-        if verificationWithheld == nil, observedEffect {
+        // moved the playhead. State A needs a readable pre-write position that differs from the
+        // request and a post-write one that equals it, at the precision the display shows.
+        if verificationWithheld == nil, observedEffect, !unreadableRequestedBeyondDefault {
             return toolTextResult(HonestContract.encodeStateA(extras: extras))
         }
 
-        let reason: HonestContract.UncertainReason =
-            verificationWithheld != nil || requestedPosition.contains(":")
-                || !unobservedMusicalComponents.isEmpty || beforePosition == nil
-                ? .readbackUnavailable
-                : .readbackMismatch
+        if verificationWithheld == nil, afterPrefix == false, !requestedPosition.contains(":") {
+            return toolTextResult(
+                HonestContract.encodeStateC(
+                    error: .readbackMismatch,
+                    hint: "goto_position wrote a position, but the playhead reads a different one.",
+                    extras: extras
+                ),
+                isError: true
+            )
+        }
+
         return toolTextResult(
-            HonestContract.encodeStateB(reason: reason, extras: extras),
+            HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras),
             isError: true
         )
+    }
+
+    /// nil: nothing readable to compare. Otherwise whether the components the readback shows
+    /// (a leading prefix of bar, beat, subdivision, tick) equal the same components of the request.
+    static func musicalPrefixMatch(
+        _ readback: TransportPositionReadback?,
+        requested: String
+    ) -> Bool? {
+        guard !requested.contains(":"), let readback, !readback.observedComponents.isEmpty
+        else { return nil }
+        let want = requested.split(separator: ".", omittingEmptySubsequences: false)
+        let have = readback.value.split(separator: ".", omittingEmptySubsequences: false)
+        let count = readback.observedComponents.count
+        guard want.count == 4, have.count >= count else { return nil }
+        return Array(want.prefix(count)) == Array(have.prefix(count))
+    }
+
+    private static func requestedComponentValue(
+        _ requested: String,
+        _ component: TransportPositionComponent
+    ) -> Int? {
+        let parts = requested.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4, let index = TransportPositionComponent.allCases.firstIndex(of: component)
+        else { return nil }
+        return Int(parts[index])
     }
 
     private static func finalizeToggleMetronomeResult(
