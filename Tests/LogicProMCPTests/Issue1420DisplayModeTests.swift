@@ -347,6 +347,22 @@ func testDisplayModeRestoreActsOnlyWhileTheLeaseHolds(_ mode: String) throws {
     #expect(fixture.value == "Time & Project")
 }
 
+// A caller that must know the original mode BEFORE it changes anything reads the checked item
+// without selecting one: the menu is opened and cancelled, and the popup keeps its value. Here the
+// popup's title lags (Beats & Project) while the menu's checkmark is Time & Project.
+@Test func testDisplayModeCheckedModeReadsTheMenuWithoutSelectingAnything() {
+    let fixture = DisplayModeFixture(current: "Beats & Project", selected: "Time & Project")
+    #expect(ControlBarDisplayMode.checkedMode(in: fixture.popup, runtime: fixture.runtime()) == "Time & Project")
+    #expect(fixture.actions.calls.map(\.action) == [kAXShowMenuAction as String, kAXCancelAction as String])
+    #expect(fixture.value == "Beats & Project")
+}
+
+@Test func testDisplayModeCheckedModeIsUnknownWhenTheMenuCannotBeClosed() {
+    let fixture = DisplayModeFixture()
+    #expect(ControlBarDisplayMode.checkedMode(
+        in: fixture.popup, runtime: fixture.runtime(failingCancel: true)) == nil)
+}
+
 // A later user choice is likewise proved by the menu checkmark. A stale "Beats" AXValue must not
 // authorize overwriting that choice with the lease's original mode.
 @Test func testDisplayModeRestoreRefusesAUserCheckedModeWhenPopupValueStillSaysBeats() throws {
@@ -635,6 +651,20 @@ func testDisplayModePublicRestoreRenewsTheCurrentWindowAfterItsAction(_ mode: St
     #expect(fixture.value == "Beats")
     #expect(ControlBarDisplayMode.restore(lease, window: fixture.window, popup: fixture.popup, runtime: runtime)
         == .restored)
+}
+
+@Test func testDisplayModeCurrentModeReadsThePopupWithoutPressingAnything() {
+    let fixture = DisplayModeFixture()
+    #expect(ControlBarDisplayMode.currentMode(runtime: fixture.logicRuntime(fixture.runtime())) == "Beats & Project")
+    #expect(fixture.actions.calls.isEmpty)
+    #expect(!ControlBarDisplayMode.isBeatsMode("Beats & Project"))
+    #expect(ControlBarDisplayMode.isBeatsMode("Beats"))
+}
+
+@Test func testDisplayModeCurrentModeIsNilWhenThePopupValueCannotBeRead() {
+    let fixture = DisplayModeFixture(current: nil)
+    #expect(ControlBarDisplayMode.currentMode(runtime: fixture.logicRuntime(fixture.runtime())) == nil)
+    #expect(fixture.actions.calls.isEmpty)
 }
 
 @Test func testDisplayModePublicSwitchRefusesAChangedCurrentWindow() {
