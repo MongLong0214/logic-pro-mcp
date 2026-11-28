@@ -147,7 +147,9 @@ struct Issue105GotoNoteTests {
             command: "goto_position", params: ["bar": .int(1)], router: router, cache: StateCache()
         )
         let o = try #require(obj(result))
-        #expect(!((o["verified"] as? Bool)!))
+        // #1601: a playhead that reads a different position is State C, not an unverified B.
+        #expect(o["state"] as? String == "C")
+        #expect(o["error"] as? String == "readback_mismatch")
         #expect(o["observed"] as? String == "1.2.1.1")
         let resultIsError = result.isError ?? false
         #expect(resultIsError)
