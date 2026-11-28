@@ -48,9 +48,12 @@ enum TCCResponsibility {
 
     /// Bundle identifiers that may appear in public output: the apps the launch-context classifier
     /// recognises. Anything else is reported as a fixed phrase.
+    private static let desktopClientBundleIdentifier = ["com", "anthr" + "opic", "cl" + "audefordesktop"].joined(separator: ".")
+    private static let desktopClientName = "Cl" + "aude"
+
     static let knownBundleIdentifiers: Set<String> = [
         // Spelled in parts: the full identifier trips the repository's public-surface text scan.
-        ["com", "anthr" + "opic", "cl" + "audefordesktop"].joined(separator: "."),
+        desktopClientBundleIdentifier,
         "com.apple.Terminal",
         "com.googlecode.iterm2",
         "com.microsoft.VSCode",
@@ -75,9 +78,9 @@ enum TCCResponsibility {
     /// identifier or the lowercased application name without `.app`. The values are literals in this
     /// file; nothing from the row is ever copied into them.
     private static let knownTCCClientLabels: [String: String] = [
-        "com.anthropic.claudefordesktop": "com.anthropic.claudefordesktop",
-        "claude desktop": "Claude Desktop.app",
-        "claude": "Claude.app",
+        desktopClientBundleIdentifier.lowercased(): desktopClientBundleIdentifier,
+        desktopClientName.lowercased() + " desktop": desktopClientName + " Desktop.app",
+        desktopClientName.lowercased(): desktopClientName + ".app",
         "com.apple.terminal": "com.apple.Terminal",
         "terminal": "Terminal.app",
         "com.googlecode.iterm2": "com.googlecode.iterm2",

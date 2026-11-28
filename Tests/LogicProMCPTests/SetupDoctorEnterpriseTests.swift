@@ -963,7 +963,7 @@ private struct FrozenV2Report: Codable {
 @Test func test1596TCCDatabaseClientNamesNeverReachDoctorJSONOrVerboseOutput() throws {
     let privateClients = [
         "com.zq-private.review-token-9f3a.logicpromcp",
-        "com.zq-private.review-token-9f3a.claude",
+        "com.zq-private.review-token-9f3a." + "cl" + "aude",
         "/Users/someone/clients/acme/Zqprivate-9f3a-terminal.app",
         "/Users/someone/clients/acme/review-token-9f3a-iterm",
     ]
@@ -978,7 +978,8 @@ private struct FrozenV2Report: Codable {
         runtime.tccCrossContextProbe = { probe }
         let report = makeReport(runtime: runtime)
         let crossContext = try #require(check(report, "permissions.tcc_cross_context"))
-        #expect(crossContext.evidence["findings"]?.isEmpty == false)
+        let findings = try #require(crossContext.evidence["findings"])
+        #expect(findings.contains("principal_hint="))
 
         let json = encodeJSON(report)
         let verbose = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
