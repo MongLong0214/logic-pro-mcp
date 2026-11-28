@@ -436,14 +436,18 @@ struct TransportDispatcher: OperationTraceDispatching {
         if first.isPlaying == false {
             return notPlaying(first)
         }
-        let gap: UInt64
-        switch stillnessGap(tempo: await observedTempo(router: router), first: first, extras: &extras) {
-        case .gap(let nanoseconds):
-            gap = nanoseconds
-        case .refused(let refusal):
+        guard let tempo = await observedTempo(router: router) else {
             return stillnessUnmeasuredResult(
-                reason: refusal.reason,
-                hint: refusal.hint(for: "a paused playhead from a playing one"),
+                reason: "tempo_unreadable",
+                hint: "Play is on, but the tempo is not readable in the current Control Bar display mode, so the gap that tells a paused playhead from a playing one could not be sized. Nothing was sent, and the transport was not called paused or playing. To fix it, switch the Control Bar display to one that shows the tempo (for example Beats & Project, not Beats & Time).",
+                extras: extras
+            )
+        }
+        extras["observed_tempo"] = tempo
+        guard let gap = pauseStillnessGapNanoseconds(tempo: tempo) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_too_slow_to_measure",
+                hint: "Play is on, but at this tempo a beat lasts too long for two readings within the command deadline to tell a paused playhead from a playing one. Nothing was sent.",
                 extras: extras
             )
         }
@@ -518,56 +522,6 @@ struct TransportDispatcher: OperationTraceDispatching {
         return UInt64(seconds * 1_000_000_000)
     }
 
-    /// #1621: with the Control Bar display on Beats the tempo is not shown, so `observedTempo` is
-    /// nil, but the position then carries the tick (`13.3.4.189`, measured 2026-11-28 in ko). A
-    /// playing playhead moves by far more than a tick in one second at any tempo, so two tick
-    /// readings that are equal are a paused playhead and the tempo is not needed to size the gap.
-    /// The gap is the one the beat-only readings never go under.
-    static let tickResolutionStillnessGapNanoseconds: UInt64 = 1_000_000_000
-
-    /// Why the stillness gap could not be sized, and what the caller sees for it.
-    struct StillnessRefusal: Equatable {
-        let reason: String
-
-        func hint(for distinction: String) -> String {
-            switch reason {
-            case "tempo_too_slow_to_measure":
-                return "Play is on, but at this tempo a beat lasts too long for two readings within the command deadline to tell \(distinction). Nothing was sent."
-            default:
-                return "Play is on, but the Control Bar display mode shows neither the tempo nor the playhead to the tick, so the gap that tells \(distinction) could not be sized. "
-                    + "Nothing was sent, and the transport was not called paused or playing. "
-                    + "The cause is the display mode: the Beats & Project display shows the tempo and the Beats display shows the tick, and either would let the gap be sized."
-            }
-        }
-    }
-
-    enum StillnessGap: Equatable {
-        case gap(UInt64)
-        case refused(StillnessRefusal)
-    }
-
-    /// The gap between the two readings that tell a paused playhead from a playing one. From the
-    /// tempo when it was read; else from a position that reads to the tick; else a refusal that
-    /// says what the display mode hides. `extras` records which basis was used.
-    static func stillnessGap(
-        tempo: Double?,
-        first: TransportState,
-        extras: inout [String: Any]
-    ) -> StillnessGap {
-        if let tempo {
-            extras["observed_tempo"] = tempo
-            guard let gap = pauseStillnessGapNanoseconds(tempo: tempo) else {
-                return .refused(StillnessRefusal(reason: "tempo_too_slow_to_measure"))
-            }
-            return .gap(gap)
-        }
-        if first.positionReadback?.observedComponents.contains(.tick) == true {
-            extras["stillness_basis"] = "tick_resolution_position"
-            return .gap(tickResolutionStillnessGapNanoseconds)
-        }
-        return .refused(StillnessRefusal(reason: "tempo_unreadable"))
-    }
-
     /// The tempo the stillness gap is sized from, read in the same measurement, or nil when it was
     /// not read. A reading's own `tempo` is not used: `TransportState.tempo` keeps the model's 120
     /// default when its tempo read fails, and a gap sized from 120 during slow playback reads a
@@ -621,9 +575,6 @@ struct TransportDispatcher: OperationTraceDispatching {
               let b = second.positionReadback, !b.observedComponents.isEmpty else {
             return nil
         }
-        // Readings of different grain (the display mode changed between them) are not comparable:
-        // `12.4` against `12.4.1.1` would read as a moving playhead.
-        guard a.observedComponents == b.observedComponents else { return nil }
         return a.value == b.value
     }
 
@@ -688,14 +639,18 @@ struct TransportDispatcher: OperationTraceDispatching {
                 extras: extras
             ), isError: true)
         }
-        let gap: UInt64
-        switch stillnessGap(tempo: await observedTempo(router: router), first: first, extras: &extras) {
-        case .gap(let nanoseconds):
-            gap = nanoseconds
-        case .refused(let refusal):
+        guard let tempo = await observedTempo(router: router) else {
             return stillnessUnmeasuredResult(
-                reason: refusal.reason,
-                hint: refusal.hint(for: "a moving playhead from a paused one"),
+                reason: "tempo_unreadable",
+                hint: "Play is on, but the tempo is not readable in the current Control Bar display mode, so the gap that tells a moving playhead from a paused one could not be sized. Nothing was sent, and the transport was not called paused or playing. To fix it, switch the Control Bar display to one that shows the tempo (for example Beats & Project, not Beats & Time).",
+                extras: extras
+            )
+        }
+        extras["observed_tempo"] = tempo
+        guard let gap = pauseStillnessGapNanoseconds(tempo: tempo) else {
+            return stillnessUnmeasuredResult(
+                reason: "tempo_too_slow_to_measure",
+                hint: "Play is on, but at this tempo a beat lasts too long for two readings within the command deadline to tell a moving playhead from a paused one. Nothing was sent.",
                 extras: extras
             )
         }

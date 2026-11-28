@@ -3630,8 +3630,9 @@ extension AccessibilityChannel {
     /// `transport.stop` on a control bar that has a Stop button: press it while Play is on, and
     /// confirm by Play reading off.
     ///
-    /// Nil leaves the old path in charge, and the old path is right in each of these: no Stop
-    /// button (an older Logic), Play unlocatable or unreadable (it refuses honestly), and Play
+    /// Nil leaves the old path in charge, and the old path is right in each of these: the lookup
+    /// found no Stop button under the identifier (an older Logic; an unreadable or ambiguous lookup
+    /// refuses instead, since the old path presses Play), Play unlocatable or unreadable (it refuses honestly), and Play
     /// already off (it answers with no write). The last one matters here, because the Stop button
     /// pressed on a stopped transport is Go to Beginning and moves the playhead.
     fileprivate static func pressControlBarStopButton(
@@ -3639,12 +3640,39 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> ChannelResult? {
         guard let controlBar = AXLogicProElements.getControlBar(runtime: runtime),
-              let stopButton = AXLogicProElements.findControlBarStopButton(in: controlBar, runtime: runtime),
               let play = AXLogicProElements.findControlBarCheckbox(
                   among: AXLogicProElements.controlBarCheckboxes(in: controlBar, runtime: runtime),
                   matching: AXLocalePolicy.transportPlayControl, runtime: runtime),
               controlBarCheckboxValue(play, runtime: runtime) == true else {
             return nil
+        }
+        let stopButton: AXUIElement
+        switch AXLogicProElements.lookupControlBarStopButton(in: controlBar, runtime: runtime) {
+        case .absent:
+            return nil
+        case .found(let element):
+            stopButton = element
+        case .unreadableOrAmbiguous(let why):
+            var refused: [String: Any] = [
+                "button": "Stop",
+                "control": "Stop",
+                "reason": "stop_button_unresolved",
+                "write_attempted": false,
+                "safe_to_retry": true,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+            ]
+            if stopRecordPreAction.writeAttempted {
+                refused["record_clear_outcome"] = stopRecordPreAction.applied ? "applied" : "unconfirmed_after_write"
+            }
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "Play is on, but the control bar Stop button could not be resolved (\(why)). Pressing the Play checkbox instead would restart playback on Logic 13, so nothing was pressed. This MCP request terminated.",
+                extras: refused
+            ))
         }
         var extras: [String: Any] = [
             "button": "Stop",

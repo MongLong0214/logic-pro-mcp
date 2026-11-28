@@ -11,8 +11,9 @@ import Testing
 //    AXButton, identifier `controlBar/stopButton`, described `정지   0` while playing. Pressed
 //    while playing it stopped the transport at once and held the playhead; pressed while stopped
 //    it is Go to Beginning and moved the playhead to bar 1.
-// 2. `transport.pause` refused with `tempo_unreadable` whenever the Control Bar display was Beats,
-//    where the tempo is not shown but the position reads to the tick (`13.3.4.189`).
+// 2. `transport.pause` refuses with `tempo_unreadable` when the Control Bar display is Beats, where
+//    the tempo is not shown. That stays a refusal before any write; the reply now says why and what
+//    to change.
 //
 // The fakes below model those measurements. Nothing reads a clock or a running Logic.
 
@@ -38,8 +39,11 @@ private final class Logic13Bar: @unchecked Sendable {
     private(set) var goToBeginnings = 0
     private var playing: Bool
     private let stopBehavior: StopBehavior
+    private let identifierReadFails: Bool
 
-    init(playing: Bool, withStopButton: Bool = true, stopBehavior: StopBehavior = .stops) {
+    init(playing: Bool, withStopButton: Bool = true, stopBehavior: StopBehavior = .stops,
+         identifierReadFails: Bool = false, duplicateStopButton: Bool = false) {
+        self.identifierReadFails = identifierReadFails
         self.playing = playing
         self.stopBehavior = stopBehavior
         app = builder.element(16_210)
@@ -65,6 +69,12 @@ private final class Logic13Bar: @unchecked Sendable {
             // `Go to Beginning` when stopped, in the language of the Logic.
             builder.setAttribute(stop, kAXDescriptionAttribute as String, playing ? "Stop   0" : "Go to Beginning   ↩")
             children.append(stop)
+            if duplicateStopButton {
+                let twin = builder.element(16_216)
+                builder.setAttribute(twin, kAXRoleAttribute as String, kAXButtonRole as String)
+                builder.setAttribute(twin, kAXIdentifierAttribute as String, "controlBar/stopButton")
+                children.append(twin)
+            }
             self.stop = stop
         } else {
             stop = nil
@@ -82,8 +92,15 @@ private final class Logic13Bar: @unchecked Sendable {
     }
 
     func runtime() -> AXLogicProElements.Runtime {
-        builder.makeLogicRuntime(
+        let failing = identifierReadFails ? stop : nil
+        return builder.makeLogicRuntime(
             appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if let failing, element == failing, attribute == kAXIdentifierAttribute as String {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                return nil
+            },
             setAttributeHandler: nil,
             performActionHandler: { [self] element, action in
                 guard action == kAXPressAction as String else { return false }
@@ -207,17 +224,47 @@ struct Issue1621TransportStopLogic13Tests {
         #expect(bar.playPresses >= 1)
     }
 
-    // MARK: Pause in Beats
+    @Test("A Stop identifier read that fails presses nothing and refuses; it does not fall back to Play")
+    func stopWithUnreadableIdentifierRefusesWithoutPressing() async throws {
+        let bar = Logic13Bar(playing: true, identifierReadFails: true)
+        let router = await bar.router()
+
+        let result = await router.route(operation: "transport.stop", params: [:])
+
+        #expect(!result.isSuccess)
+        let envelope = try #require(issue1621Object(result.message))
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["reason"] as? String == "stop_button_unresolved")
+        #expect(bar.playPresses == 0, "the Play checkbox was pressed: playback restarts on Logic 13")
+        #expect(bar.stopPresses == 0)
+        #expect(bar.isPlaying)
+    }
+
+    @Test("A duplicated Stop identifier presses nothing and refuses; it does not fall back to Play")
+    func stopWithDuplicateIdentifierRefusesWithoutPressing() async throws {
+        let bar = Logic13Bar(playing: true, duplicateStopButton: true)
+        let router = await bar.router()
+
+        let result = await router.route(operation: "transport.stop", params: [:])
+
+        #expect(!result.isSuccess)
+        let envelope = try #require(issue1621Object(result.message))
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["reason"] as? String == "stop_button_unresolved")
+        #expect(bar.playPresses == 0)
+        #expect(bar.stopPresses == 0)
+        #expect(bar.isPlaying)
+    }
+
+    // MARK: Pause with the tempo unreadable
 
     private actor Readings: Channel {
         nonisolated let id: ChannelID
-        let observedTempo: Double?
         var states: [TransportState]
         var executed: [String] = []
 
-        init(id: ChannelID, observedTempo: Double?, states: [TransportState] = []) {
+        init(id: ChannelID, states: [TransportState] = []) {
             self.id = id
-            self.observedTempo = observedTempo
             self.states = states
         }
 
@@ -233,111 +280,44 @@ struct Issue1621TransportStopLogic13Tests {
                 encoder.dateEncodingStrategy = .iso8601
                 return .success(String(decoding: try! encoder.encode(states.removeFirst()), as: UTF8.self))
             case "transport.get_tempo":
-                guard let observedTempo else { return .error("tempo slider not found, so the tempo was not read") }
-                return .success("{\"tempo\":\(observedTempo)}")
-            case "transport.pause", "transport.resume":
-                return .success("{\"sent\":true}")
+                return .error("tempo slider not found, so the tempo was not read")
             default:
-                return .error("unexpected \(operation)")
+                return .success("{\"sent\":true}")
             }
         }
 
         func healthCheck() async -> ChannelHealth { .healthy(detail: "fake") }
     }
 
-    private static func reading(_ playing: Bool, _ position: String, _ components: [TransportPositionComponent]) -> TransportState {
-        TransportState(
-            isPlaying: playing,
-            position: position,
-            positionReadback: TransportPositionReadback(value: position, observedComponents: components),
-            lastUpdated: Date()
-        )
-    }
-
-    private static let ticks: [TransportPositionComponent] = [.bar, .beat, .subdivision, .tick]
-
-    private func run(
-        _ command: String, tempo: Double?, states: [TransportState]
-    ) async throws -> (envelope: [String: Any], executed: [String], sleeps: [UInt64]) {
+    @Test("Beats display with the tempo unreadable refuses pause with zero writes and names the display mode")
+    func pauseInBeatsRefusesBeforeAnyWrite() async throws {
+        let ticks: [TransportPositionComponent] = [.bar, .beat, .subdivision, .tick]
+        func reading(_ position: String) -> TransportState {
+            TransportState(
+                isPlaying: true, position: position,
+                positionReadback: TransportPositionReadback(value: position, observedComponents: ticks),
+                lastUpdated: Date()
+            )
+        }
         let router = ChannelRouter()
-        let write = Readings(id: .cgEvent, observedTempo: nil)
-        let read = Readings(id: .accessibility, observedTempo: tempo, states: states)
+        let write = Readings(id: .cgEvent)
+        let read = Readings(id: .accessibility, states: [reading("13.3.4.58"), reading("13.3.4.189")])
         await router.register(write)
         await router.register(read)
-        let sleeps = SleepLog()
+
         let result = await TransportDispatcher.handle(
-            command: command, params: [:], router: router, cache: StateCache(),
-            sleep: { await sleeps.add($0) }
+            command: "pause", params: [:], router: router, cache: StateCache(), sleep: { _ in }
         )
-        let text = sharedToolText(result)
-        return (try #require(issue1621Object(text)), await write.executed, await sleeps.values)
-    }
 
-    private actor SleepLog {
-        var values: [UInt64] = []
-        func add(_ value: UInt64) { values.append(value) }
-    }
-
-    @Test("Pause with the tempo unread but the position read to the tick tells moving from still and pauses")
-    func pauseInBeatsSendsOnePauseAndVerifiesByTickStillness() async throws {
-        // Measured in Beats: tempo slider absent, position `13.3.4.58`, `13.3.4.189`, ... while playing.
-        // Mutation killed: the `tempo_unreadable` refusal restored for every unread tempo.
-        let t = Self.ticks
-        let out = try await run("pause", tempo: nil, states: [
-            Self.reading(true, "13.3.4.58", t), Self.reading(true, "13.3.4.189", t),
-            Self.reading(true, "14.2.2.218", t), Self.reading(true, "14.2.2.218", t),
-        ])
-        #expect(out.envelope["state"] as? String == "A", "\(out.envelope)")
-        #expect(out.executed == ["transport.pause"])
-        #expect(out.envelope["stillness_basis"] as? String == "tick_resolution_position")
-        #expect(out.sleeps.first == 1_000_000_000)
-    }
-
-    @Test("Pause in Beats on an already paused transport sends nothing")
-    func pauseInBeatsAlreadyPausedSendsNothing() async throws {
-        let t = Self.ticks
-        let out = try await run("pause", tempo: nil, states: [
-            Self.reading(true, "14.2.2.218", t), Self.reading(true, "14.2.2.218", t),
-        ])
-        #expect(out.envelope["state"] as? String == "A", "\(out.envelope)")
-        let alreadyPaused = try #require(out.envelope["already_paused"] as? Bool)
-        #expect(alreadyPaused)
-        #expect(out.executed.isEmpty)
-    }
-
-    @Test("Pause with the tempo unread and the position read to the beat only still refuses, and names the display mode")
-    func pauseWithNeitherTempoNorTicksRefusesAndNamesTheDisplay() async throws {
-        let out = try await run("pause", tempo: nil, states: [
-            Self.reading(true, "12.4", [.bar, .beat]), Self.reading(true, "12.4", [.bar, .beat]),
-        ])
-        #expect(out.envelope["state"] as? String == "C")
-        #expect(out.envelope["error"] as? String == "readback_unavailable")
-        #expect(out.envelope["reason"] as? String == "tempo_unreadable")
-        let writeAttempted = try #require(out.envelope["write_attempted"] as? Bool)
+        let envelope = try #require(issue1621Object(sharedToolText(result)))
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["error"] as? String == "readback_unavailable")
+        #expect(envelope["reason"] as? String == "tempo_unreadable")
+        let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         #expect(!writeAttempted)
-        #expect(out.executed.isEmpty)
-        let hint = try #require(out.envelope["hint"] as? String)
-        #expect(hint.contains("display"), "the refusal must name the Control Bar display mode: \(hint)")
-        #expect(hint.contains("Beats"), "and say what to change: \(hint)")
-    }
-
-    @Test("Play from a paused start in Beats resumes it through the tick-resolution gap")
-    func playFromPausedInBeatsResumes() async throws {
-        let t = Self.ticks
-        let out = try await run("play", tempo: nil, states: [
-            Self.reading(true, "14.2.2.218", t), Self.reading(true, "14.2.2.218", t),
-            Self.reading(true, "14.2.2.230", t), Self.reading(true, "14.3.1.40", t),
-        ])
-        #expect(out.envelope["state"] as? String == "A", "\(out.envelope)")
-        #expect(out.executed == ["transport.resume"])
-    }
-
-    @Test("Readings of different grain are not compared: `12.4` against `12.4.1.1` is not a moving playhead")
-    func playheadStillRefusesToCompareDifferentGrain() throws {
-        let coarse = Self.reading(true, "12.4", [.bar, .beat])
-        let fine = Self.reading(true, "12.4.1.1", Self.ticks)
-        #expect(TransportDispatcher.playheadStill(coarse, fine) == nil)
-        let identical = try #require(TransportDispatcher.playheadStill(fine, fine))
-        #expect(identical)
+        #expect(await write.executed.isEmpty)
+        let hint = try #require(envelope["hint"] as? String)
+        #expect(hint.contains("display mode"), "\(hint)")
+        #expect(hint.contains("switch the Control Bar display"), "\(hint)")
     }
 }

@@ -3,7 +3,7 @@
   "id": "2026-11-28-logic13-stop-button-and-beats-display",
   "date": "2026-11-28",
   "subject": "Logic 13 control bar: what the Play checkbox and the Stop button do while playing, and what each display mode shows",
-  "question": "Which control bar action stops playback on Logic 13 through Accessibility, and can a paused playhead be told from a playing one when the display mode hides the tempo?",
+  "question": "Which control bar action stops playback on Logic 13 through Accessibility, and what does each display mode show?",
   "verdict": "works",
   "issues": [
     1621
@@ -18,14 +18,13 @@
   },
   "reverify": {
     "kind": "manual",
-    "command": "With Logic 13 running a disposable project copy and the control bar display on Beats & Project, play from bar 12, then AXPress the AXCheckBox with identifier controlBar/playButton and sample the playhead and its AXValue for 5 s; after it, AXPress the AXButton with identifier controlBar/stopButton and sample again. Then switch the display popup to Beats and read the playhead position group while playing and while paused.",
-    "expected": "Pressing the Play checkbox while playing leaves AXValue at 1 and the playhead jumps back to bar 12 and keeps moving; pressing the Stop button turns Play to 0 and the playhead holds. In Beats the playhead reads bar.beat.division.tick and the tempo slider is absent; two tick readings one second apart differ while playing and are equal while paused.",
+    "command": "With Logic 13 running a disposable project copy and the control bar display on Beats & Project, play from bar 12, then AXPress the AXCheckBox with identifier controlBar/playButton and sample the playhead and its AXValue for 5 s; after it, AXPress the AXButton with identifier controlBar/stopButton and sample again. Then switch the display popup through the display modes and read the playhead position group and the tempo slider.",
+    "expected": "Pressing the Play checkbox while playing leaves AXValue at 1 and the playhead jumps back to bar 12 and keeps moving; pressing the Stop button turns Play to 0 and the playhead holds. In Beats the playhead reads bar.beat.division.tick and the tempo slider is absent.",
     "cost": "About two minutes against a disposable project copy; closes only that copy."
   },
   "depends": [
-    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Transport.swift:findControlBarStopButton",
-    "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift:pressControlBarStopButton",
-    "Sources/LogicProMCP/Dispatchers/TransportDispatcher.swift:stillnessGap"
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements+Transport.swift:lookupControlBarStopButton",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift:pressControlBarStopButton"
   ],
   "evidence": [
     "evidence/2026-11-28-logic13-stop-button-and-beats-display.samples.json"
@@ -36,7 +35,9 @@
       "what": "Stop button identity and description",
       "role": "AXButton",
       "identifier": "controlBar/stopButton",
-      "actions": ["AXPress"],
+      "actions": [
+        "AXPress"
+      ],
       "description_while_playing": "Stop 0 (ko, localized)",
       "description_while_stopped": "Go to Beginning (ko, localized)",
       "value": ""
@@ -47,14 +48,29 @@
       "subrole": "AXToggle",
       "identifier": "controlBar/playButton",
       "description": "Play (ko, localized)",
-      "actions": ["AXPress"],
+      "actions": [
+        "AXPress"
+      ],
       "value_while_playing": "1",
       "value_while_stopped": "0"
     },
     {
       "what": "AXPress on the Play checkbox while playing",
       "position_before": "bar 14 beat 4",
-      "position_samples_after": ["12.4", "13.1", "13.2", "13.3", "13.4", "14.1", "14.2", "14.3", "14.4", "15.1", "15.2", "15.3"],
+      "position_samples_after": [
+        "12.4",
+        "13.1",
+        "13.2",
+        "13.3",
+        "13.4",
+        "14.1",
+        "14.2",
+        "14.3",
+        "14.4",
+        "15.1",
+        "15.2",
+        "15.3"
+      ],
       "play_value_after": "1",
       "result": "playback restarted from the start position and continued"
     },
@@ -78,7 +94,11 @@
     {
       "what": "product transport.stop through the Accessibility route after the change, three runs",
       "answer": "State A, button Stop, action axpress, verify_source ax_transport_state",
-      "position_held": ["15.1", "15.2", "15.3"],
+      "position_held": [
+        "15.1",
+        "15.2",
+        "15.3"
+      ],
       "play_value_after": "0 for sixteen samples each"
     },
     {
@@ -100,26 +120,20 @@
     },
     {
       "what": "playhead in Beats while playing, three readings",
-      "positions": ["13.3.4.58", "13.3.4.189", "13.4.1.18"],
+      "positions": [
+        "13.3.4.58",
+        "13.3.4.189",
+        "13.4.1.18"
+      ],
       "tempo_slider": "absent"
-    },
-    {
-      "what": "product transport.pause in Beats before the change",
-      "answer": "State C readback_unavailable, reason tempo_unreadable, nothing sent"
-    },
-    {
-      "what": "product transport.pause in Beats after the change",
-      "answer": "State A, stillness_basis tick_resolution_position, stillness_gap_ms 1000, one pause key sent",
-      "independent_readings_after": "14.2.4.35 on four reads 0.5 s apart, Play 1",
-      "then_play": "State A, resumed_from_pause; playhead 15.3.1.109, 15.4.2.6, 16.1.2.189 while Play 1"
     }
   ],
-  "conclusion": "On the measured host the Play checkbox is not a stop: pressed while playing it restarts playback from the start position and stays on. The AXButton controlBar/stopButton stops playback when pressed while playing and is Go to Beginning when pressed while stopped, so it is pressed only while Play reads on and confirmed by Play reading off. In the Beats display the tempo is not shown but the playhead reads to the tick, and equal tick readings one second apart are a paused playhead.",
+  "conclusion": "On the measured host the Play checkbox is not a stop: pressed while playing it restarts playback from the start position and stays on. The AXButton controlBar/stopButton stops playback when pressed while playing and is Go to Beginning when pressed while stopped, so it is pressed only while Play reads on and confirmed by Play reading off. In the Beats display the tempo slider is absent; pause there is not supported and refuses before any write.",
   "limits": [
     "One Logic 13.0 build 7801 host, ko-KR, one fixture. Other Logic versions and locales were not measured; the identifier controlBar/stopButton is not localized but its presence on Logic 12 is unmeasured, so a bar without it keeps the older Play-checkbox path.",
     "The Accessibility route was isolated with a debug-only channel restriction; the reporter's route to it (why the CGEvent rung did not act on their host) was not measured. On this host the default route stopped playback before the change in three of three runs.",
-    "Pause in Beats was driven once after the change; the other display modes were read idle only, and Beats & Time, Time and Custom were not driven through pause or play.",
-    "A paused transport's Stop button description was not recorded separately from the playing one beyond the pause run, where it read the same as while playing."
+    "A paused transport's Stop button description was not recorded separately from the playing one beyond the pause run, where it read the same as while playing.",
+    "Pause and play from a paused start were not driven in any display mode for this record; with the tempo unreadable they refuse before any write."
   ],
   "supersedes": null,
   "canon_not_applicable": {
