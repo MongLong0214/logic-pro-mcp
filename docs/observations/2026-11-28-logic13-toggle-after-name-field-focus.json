@@ -88,5 +88,8 @@
     "A name field with pending text in the name-field shape was covered by unit tests only.",
     "Other locales and other Logic builds are not measured."
   ],
-  "supersedes": null
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime Accessibility focus and press effects on track toggles. It adds no Apple label vocabulary and claims no string-corpus value."
+  }
 }
