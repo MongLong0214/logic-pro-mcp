@@ -2036,10 +2036,23 @@ extension AccessibilityChannel {
 
     static func defaultSelectTrack(
         params: [String: String],
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        processRuntime: ProcessUtils.Runtime = .production
     ) async -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
+        }
+        // Read the focus before anything else touches Logic, as the mute, solo and arm entry point
+        // does. Moving the selection ends an open text editor and Logic commits its pending text.
+        // Measured on Logic 13.0 (7801), ko-KR, at b024d60c: with Track > Rename Track open on
+        // track 2 holding "Pending1600", select index 0 answered State A, the field was gone and
+        // track 2 was named "Pending1600", in 3 of 3 trials.
+        if let refusal = textEditorFocusedRefusal(runtime: runtime, operation: "track selection") {
+            return .error(HonestContract.encodeStateC(
+                error: refusal.error,
+                hint: refusal.hint,
+                extras: ["requested": index].merging(refusal.extras) { _, new in new }
+            ))
         }
         guard AXLogicProElements.findTrackHeader(at: index, runtime: runtime) != nil else {
             // v3.1.0 (T3) — missing track is a hard failure; no retry will
@@ -2055,14 +2068,36 @@ extension AccessibilityChannel {
         // v3.0.3+ — activate Logic so the frontmost-dependent AX selection can
         // land, then go through the AX-native selection ladder (ADR-001: no
         // coordinate fallback — fail closed if every AX step is rejected).
-        _ = ProcessUtils.Runtime.production.activateLogicPro()
+        _ = processRuntime.activateLogicPro()
         try? await Task.sleep(nanoseconds: 150_000_000)
         var writeAttempted = false
-        guard AXLogicProElements.selectTrackViaAX(
+        let outcome = AXLogicProElements.selectTrackOutcome(
             at: index,
             runtime: runtime,
             willWrite: { writeAttempted = true }
-        ) else {
+        )
+        if outcome == .mixerUnsettled {
+            // A Mixer strip was written and the requested header did not settle as the only
+            // selected row. Whatever row reads selected now, it is not proven to be the requested
+            // track, so this is a failure, never a read-back by ordinal.
+            return .error(HonestContract.encodeStateC(
+                error: .readbackMismatch,
+                hint: "The Mixer write for track \(index) did not settle on that track; the selection is not claimed and later channel fallback is blocked.",
+                extras: [
+                    "requested": index,
+                    "reason_detail": "mixer_write_unsettled",
+                    "write_attempted": true,
+                    "fallback_unsafe": true,
+                    "safe_to_retry": false,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
+                ]
+            ))
+        }
+        guard outcome.permitsReadback else {
             var extras: [String: Any] = ["requested": index]
             if writeAttempted {
                 extras.merge([
@@ -2091,7 +2126,12 @@ extension AccessibilityChannel {
         // legacy free-form text. Existing `verified:true/false` JSON path
         // stays valid because the new envelope still contains those keys.
         let verification = await verifyTrackSelection(index: index, runtime: runtime)
-        let base: [String: Any] = ["requested": index, "selected": index]
+        var base: [String: Any] = ["requested": index, "selected": index]
+        if case .mixerRefused(let reason) = outcome {
+            // The Logic 13 Mixer route wrote nothing: the read-back below is the selection as it was.
+            base["mixer_write_attempted"] = false
+            base["mixer_refusal"] = reason
+        }
         switch verification {
         case .verified:
             return .success(HonestContract.encodeStateA(extras: base.merging([
@@ -2900,8 +2940,11 @@ extension AccessibilityChannel {
         permittingWrite: (() -> Bool)? = nil,
         willWrite: (() -> Void)? = nil
     ) -> Bool {
-        _ = AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime,
-            heldHeader: heldHeader, permittingWrite: permittingWrite, willWrite: willWrite)
+        // A Mixer write that did not settle on the held header is not a selection to confirm by
+        // ordinal: the row may now hold another header.
+        guard AXLogicProElements.selectTrackOutcome(at: index, runtime: runtime,
+            heldHeader: heldHeader, permittingWrite: permittingWrite, willWrite: willWrite) != .mixerUnsettled
+        else { return false }
         for attempt in 0..<4 {
             guard permittingWrite?() ?? true else { return false }
             if selectionIsExclusive(index: index, runtime: runtime) { return true }
@@ -3249,7 +3292,9 @@ extension AccessibilityChannel {
     /// rename edit and committed its text on Logic 13. The Logic 13 strip group
     /// (`.passiveInsertionPoint`) reads as no editor and still reaches the press rung. No other
     /// channel may act either: MCU or a CGEvent key would hit the same open editor.
-    static func textEditorFocusedRefusal(runtime: AXLogicProElements.Runtime) -> RungRefusal? {
+    static func textEditorFocusedRefusal(
+        runtime: AXLogicProElements.Runtime, operation: String = "track toggle"
+    ) -> RungRefusal? {
         let focus = readLogicKeyboardFocus(runtime: runtime)
         let guardName: String
         let cause: String
@@ -3276,7 +3321,7 @@ extension AccessibilityChannel {
         }
         return RungRefusal(
             error: .unsafeFocusForSyntheticKey,
-            hint: "refused the track toggle: \(cause). Nothing in the track header was read, pressed or "
+            hint: "refused the \(operation): \(cause). Nothing in the track header was read, pressed or "
                 + "posted, so any editor and its pending text were left as they were.",
             extras: terminalNoHumanExtras([
                 "focus_guard": guardName,

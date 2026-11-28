@@ -505,8 +505,8 @@ extension AXLogicProElements {
     /// for test doubles that expose the track-header structure without a
     /// writable `AXSelectedChildren` (and for extreme Logic build drift).
     ///
-    /// Returns true when the set succeeded OR a fallback committed the
-    /// selection (verified by the caller's `verifyTrackSelection`).
+    /// Returns true unless `selectTrackOutcome` failed (`.failed` or `.mixerUnsettled`). A caller
+    /// that acts on the selection, or answers for it, reads the outcome instead.
     static func selectTrackViaAX(
         at index: Int,
         runtime: Runtime = .production,
@@ -514,8 +514,43 @@ extension AXLogicProElements {
         permittingWrite: (() -> Bool)? = nil,
         willWrite: (() -> Void)? = nil
     ) -> Bool {
+        selectTrackOutcome(at: index, runtime: runtime, heldHeader: heldHeader,
+                           permittingWrite: permittingWrite, willWrite: willWrite).permitsReadback
+    }
+
+    /// What one selection attempt did. A Mixer write that did not settle on the requested header
+    /// is a failure here and at every caller: it is never read back by ordinal into a success.
+    enum TrackSelectionOutcome: Equatable {
+        /// The retained header settled as the only selected row.
+        case selected
+        /// A legacy rung's write was accepted with no settle proof; the caller's read-back decides.
+        case acknowledged
+        /// The Logic 13 Mixer route refused before writing: zero Mixer writes. The reason names why.
+        case mixerRefused(String)
+        /// A Mixer strip was written and the requested header did not settle as the only selected
+        /// row. Whether a restore settled or not, this is a failure.
+        case mixerUnsettled
+        /// No header, custody lost, or every rung rejected.
+        case failed
+
+        /// False for a failure: the caller must not answer State A or act on the selection.
+        var permitsReadback: Bool {
+            switch self {
+            case .selected, .acknowledged, .mixerRefused: return true
+            case .mixerUnsettled, .failed: return false
+            }
+        }
+    }
+
+    static func selectTrackOutcome(
+        at index: Int,
+        runtime: Runtime = .production,
+        heldHeader: AXUIElement? = nil,
+        permittingWrite: (() -> Bool)? = nil,
+        willWrite: (() -> Void)? = nil
+    ) -> TrackSelectionOutcome {
         guard let header = findTrackHeader(at: index, runtime: runtime),
-              heldHeader.map({ CFEqual($0, header) }) ?? true else { return false }
+              heldHeader.map({ CFEqual($0, header) }) ?? true else { return .failed }
         func permitted() -> Bool {
             guard permittingWrite?() ?? true else { return false }
             guard let heldHeader else { return true }
@@ -532,27 +567,42 @@ extension AXLogicProElements {
         // action on the track header is a no-op for selection purposes.
         if let headersGroup = getTrackHeaders(runtime: runtime) {
             let arr = [header] as CFArray
-            guard permitted() else { return false }
+            guard permitted() else { return .failed }
             willWrite?()
             if AXHelpers.setAttribute(headersGroup, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax) {
-                return true
+                // Measured on Logic 13.0 (7801): this setter returns success and the selection does
+                // not move (the rail, the row's AXSelected and AXFocused, AXPress on the row or its
+                // radio button all return 0 and change nothing). Only this same retained header,
+                // settled as the only selected row, counts as done.
+                if waitForExclusiveSelection(of: header, at: index, runtime: runtime) { return .selected }
+                // The rail write was acknowledged without effect. The main Mixer's own
+                // AXSelectedChildren is the one setter measured to move the selection.
+                switch selectViaMixerStrip(header: header, index: index, runtime: runtime,
+                                           permitted: permitted, willWrite: willWrite) {
+                case .selected: return .selected
+                case .custodyLost: return .failed
+                // Nothing was written to the Mixer: the caller's read-back reports the selection
+                // the rail write left, which no write of ours moved to another header.
+                case .refused(let reason): return .mixerRefused(reason)
+                case .unsettled: return .mixerUnsettled
+                }
             }
         }
 
         // Step 2 — NSTableRow-style AXSelected=true (test-double path).
         if AXHelpers.isAttributeSettable(header, kAXSelectedAttribute, runtime: runtime.ax) == true {
-            guard permitted() else { return false }
+            guard permitted() else { return .failed }
             willWrite?()
             if AXHelpers.setAttribute(header, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax) {
-                return true
+                return .acknowledged
             }
         }
 
         // Step 3 — AXPress on the header itself (test doubles that expose it).
-        guard permitted() else { return false }
+        guard permitted() else { return .failed }
         willWrite?()
         if AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) {
-            return true
+            return .acknowledged
         }
 
         // Step 4 — child AXPress, but only on a child that could plausibly select the track.
@@ -575,10 +625,10 @@ extension AXLogicProElements {
         for child in AXHelpers.getChildren(header, runtime: runtime.ax) {
             guard let role = AXHelpers.getRole(child, runtime: runtime.ax),
                   selectableRoles.contains(role) else { continue }
-            guard permitted() else { return false }
+            guard permitted() else { return .failed }
             willWrite?()
             if AXHelpers.performAction(child, kAXPressAction, runtime: runtime.ax) {
-                return true
+                return .acknowledged
             }
         }
 
@@ -588,7 +638,224 @@ extension AXLogicProElements {
         // selection (v3.0.9, 10/10 indices on a 10-track project), and
         // `track.select` also routes to the MCU channel — so failing closed here
         // preserves function without a coordinate fallback.
+        return .failed
+    }
+
+    /// The only selected track header and its row, or nil when no row, several rows, or any row
+    /// whose selection did not read.
+    private static func exclusivelySelectedRow(runtime: Runtime) -> (index: Int, header: AXUIElement)? {
+        let headers = allTrackHeaders(runtime: runtime)
+        let values = headers.map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
+        guard values.allSatisfy({ $0 != nil }), values.filter({ $0 == true }).count == 1,
+              let selected = values.firstIndex(where: { $0 == true }) else { return nil }
+        return (selected, headers[selected])
+    }
+
+    /// True when the retained `header` is still row `index` and the only selected row, polled for
+    /// up to ~600 ms.
+    private static func waitForExclusiveSelection(of header: AXUIElement, at index: Int, runtime: Runtime) -> Bool {
+        for attempt in 0..<7 {
+            if attempt > 0 { usleep(100_000) }
+            if let row = exclusivelySelectedRow(runtime: runtime), row.index == index, CFEqual(row.header, header) {
+                return true
+            }
+        }
         return false
+    }
+
+    private enum MixerSelectionOutcome: Equatable {
+        /// The retained header is the only selected row and the Mixer's selected child is the
+        /// written strip.
+        case selected
+        /// Nothing was written to the Mixer. The reason names the evidence that did not hold.
+        case refused(String)
+        /// A strip was written and the retained header did not settle as the only selected row.
+        case unsettled
+        /// The caller's permission did not hold at a write boundary; nothing was written there.
+        case custodyLost
+    }
+
+    /// Select a track on Logic 13 by writing the main Mixer's `AXSelectedChildren`.
+    ///
+    /// No Mixer strip identifies its track: a strip and a track header share no identifier or
+    /// linked element (Logic 13.0 (7801), full attribute dump). The strip for a header is known only
+    /// from how Logic lays the Mixer out, so the route writes only when that layout is established
+    /// for the whole Mixer, and refuses with zero Mixer writes otherwise
+    /// (`docs/observations/2026-11-28-logic13-track-select-mixer-strip.json`, measured on the
+    /// standard fixture):
+    ///
+    /// - The Mixer is in Tracks view. In Tracks view the strips were the tracks' strips in header
+    ///   order, then Stereo Out and Master. In All view Logic put Preview between the audio and
+    ///   instrument strips and Click after them, so a row's ordinal named another channel.
+    /// - No type filter is off. With Audio off in Tracks view the audio strips left the Mixer and
+    ///   every later strip moved up.
+    /// - The strips at the header rows are the tracks' own: every header's name equals the name
+    ///   field of the strip at its row, for every row. This counts the track strips; it is not a
+    ///   lookup by name, and a single disagreement anywhere refuses.
+    /// - The exclusively selected header's strip is the Mixer's selected child, at that row.
+    ///
+    /// At the write it renews the strip, both retained headers and the caller's permission, with
+    /// no AX read in between. Afterwards only the same retained header, settled as the only
+    /// selected row with the written strip as the Mixer's selected child, is a success. Anything
+    /// else is `.unsettled`, a failure the caller keeps; the original strip is written back once.
+    ///
+    /// The route runs with AXHelp reads disabled: a Help read in the tracks area ends an inline
+    /// rename (`docs/observations/2026-10-02-ko-KR-reading-axhelp-in-the-tracks-area-ends-an-inline-rename.json`).
+    private static func selectViaMixerStrip(
+        header: AXUIElement, index: Int, runtime: Runtime,
+        permitted: () -> Bool, willWrite: (() -> Void)?
+    ) -> MixerSelectionOutcome {
+        AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: false, stop: { false })) {
+            selectViaMixerStripWithoutHelp(header: header, index: index, runtime: runtime,
+                                           permitted: permitted, willWrite: willWrite)
+        }
+    }
+
+    private static func selectViaMixerStripWithoutHelp(
+        header: AXUIElement, index: Int, runtime: Runtime,
+        permitted: () -> Bool, willWrite: (() -> Void)?
+    ) -> MixerSelectionOutcome {
+        guard let original = exclusivelySelectedRow(runtime: runtime) else {
+            return .refused("selection_not_exclusive")
+        }
+        guard original.index != index else { return .refused("target_already_selected_row") }
+        guard case .found(let window) = arrangeWindowRead(runtime: runtime),
+              case .success(.some(let document)) = projectPickerDocumentRead(window, runtime: runtime),
+              case .found(let mixer) = AXMixerStripBinding.currentMixerLookup(in: window, runtime: runtime),
+              AXHelpers.isAttributeSettable(mixer, kAXSelectedChildrenAttribute, runtime: runtime.ax) == true,
+              let census = mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime.ax)?.strips else {
+            return .refused("mixer_unavailable")
+        }
+        if let layout = mixerTrackLayoutRefusal(mixer: mixer, census: census, runtime: runtime) {
+            return .refused(layout)
+        }
+        guard case .observed(let originalChild) = AXMixerStripBinding.selectedChildRead(
+                of: mixer, census: census, runtime: runtime.ax),
+              census.firstIndex(where: { CFEqual($0, originalChild) }) == original.index else {
+            return .refused("mixer_selected_child_not_at_selected_row")
+        }
+        let source = AXMixerStripBinding.Binding(window: window, mixer: mixer, strip: originalChild, document: document)
+        let candidate = AXMixerStripBinding.Binding(window: window, mixer: mixer, strip: census[index], document: document)
+        func rowHeld(_ row: Int, _ element: AXUIElement) -> Bool {
+            findTrackHeader(at: row, runtime: runtime).map { CFEqual($0, element) } ?? false
+        }
+        func settled(_ row: Int, _ element: AXUIElement, child: AXUIElement) -> Bool {
+            guard let selected = exclusivelySelectedRow(runtime: runtime), selected.index == row,
+                  CFEqual(selected.header, element),
+                  case .observed(let current) = AXMixerStripBinding.selectedChildRead(
+                    of: mixer, census: census, runtime: runtime.ax) else { return false }
+            return CFEqual(current, child)
+        }
+        // The last AX reads before the setter renew every custody the write depends on. The
+        // caller's permission is asked after them, with no read in between.
+        guard candidate.currentIndex(runtime: runtime) == index,
+              source.currentIndex(runtime: runtime) == original.index,
+              rowHeld(index, header), rowHeld(original.index, original.header) else {
+            return .refused("mixer_or_header_changed_before_write")
+        }
+        guard permitted() else { return .custodyLost }
+        willWrite?()
+        _ = AXHelpers.setAttribute(mixer, kAXSelectedChildrenAttribute, [candidate.strip] as CFArray,
+                                   runtime: runtime.ax)
+        var unchanged = false
+        for attempt in 0..<7 {
+            if attempt > 0 { usleep(100_000) }
+            if settled(index, header, child: candidate.strip) { return .selected }
+            unchanged = settled(original.index, original.header, child: originalChild)
+        }
+        // From here the answer is `.unsettled` whatever the restore does: the requested header
+        // did not settle, so no caller may read the row back as selected.
+        guard !unchanged, source.currentIndex(runtime: runtime) == original.index,
+              rowHeld(original.index, original.header), permitted() else { return .unsettled }
+        willWrite?()
+        _ = AXHelpers.setAttribute(mixer, kAXSelectedChildrenAttribute, [originalChild] as CFArray,
+                                   runtime: runtime.ax)
+        for attempt in 0..<7 {
+            if attempt > 0 { usleep(100_000) }
+            if settled(original.index, original.header, child: originalChild) { break }
+        }
+        return .unsettled
+    }
+
+    /// Nil when the Mixer's layout establishes that strip `i` is header row `i`'s, for every row;
+    /// otherwise the reason it does not. Read by role, position and state; a title is only a
+    /// cross-check against the shipped ten-locale labels.
+    private static func mixerTrackLayoutRefusal(
+        mixer: AXUIElement, census: [AXUIElement], runtime: Runtime
+    ) -> String? {
+        let ax = runtime.ax
+        func string(_ element: AXUIElement, _ attribute: String) -> String? {
+            guard case .success(.some(let value)) = AXHelpers.getAttributeResult(element, attribute, runtime: ax)
+                    as Result<AnyObject?, AXHelpers.AXStatusError>,
+                  CFGetTypeID(value) == CFStringGetTypeID() else { return nil }
+            return value as? String
+        }
+        func flag(_ element: AXUIElement) -> Bool? {
+            guard case .success(.some(let value)) = AXHelpers.getAttributeResult(element, kAXValueAttribute as String,
+                    runtime: ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
+                  let number = value as? NSNumber else { return nil }
+            switch number.doubleValue { case 0: return false; case 1: return true; default: return nil }
+        }
+        func children(_ element: AXUIElement) -> [AXUIElement]? {
+            guard case .success(let values) = AXHelpers.childrenResult(element, runtime: ax) else { return nil }
+            return values
+        }
+        func role(_ element: AXUIElement) -> String? { string(element, kAXRoleAttribute as String) }
+        // The Mixer's own toolbar is its sibling under one owner (Logic 13.0: an AXGroup holding the
+        // mode AXRadioGroup and the eight type-filter checkboxes, next to the strip area).
+        guard let owner: AXUIElement = AXHelpers.getAttribute(mixer, kAXParentAttribute as String, runtime: ax),
+              let siblings = children(owner), siblings.contains(where: { CFEqual($0, mixer) }) else {
+            return "mixer_view_unread"
+        }
+        var controls: [AXUIElement] = []
+        for sibling in siblings where !CFEqual(sibling, mixer) {
+            guard let siblingRole = role(sibling) else { return "mixer_view_unread" }
+            guard siblingRole == kAXGroupRole as String else { continue }
+            guard let inner = children(sibling) else { return "mixer_view_unread" }
+            controls.append(contentsOf: inner)
+        }
+        var modeGroups: [[AXUIElement]] = []
+        var filterGroups: [[AXUIElement]] = []
+        for control in controls {
+            guard let controlRole = role(control) else { return "mixer_view_unread" }
+            guard controlRole == kAXRadioGroupRole as String || controlRole == kAXGroupRole as String else { continue }
+            guard let members = children(control) else { return "mixer_view_unread" }
+            let roles = members.map(role)
+            if controlRole == kAXRadioGroupRole as String, members.count == 3,
+               roles.allSatisfy({ $0 == kAXRadioButtonRole as String }) { modeGroups.append(members) }
+            if controlRole == kAXGroupRole as String, members.count == 8,
+               roles.allSatisfy({ $0 == kAXCheckBoxRole as String }) { filterGroups.append(members) }
+        }
+        // Single, Tracks, All: Tracks is the selected radio at position 1, and the three titles are
+        // those labels in that order.
+        guard modeGroups.count == 1, let modes = modeGroups.first else { return "mixer_view_unread" }
+        let modeLabels = [AXLocalePolicy.mixerPresentationSingle, AXLocalePolicy.mixerPresentationTracks,
+                          AXLocalePolicy.mixerPresentationAll]
+        let selected = modes.map(flag)
+        guard selected.allSatisfy({ $0 != nil }), selected.filter({ $0 == true }).count == 1,
+              zip(modes, modeLabels).allSatisfy({ $1.containsNormalized(string($0, kAXDescriptionAttribute as String)) })
+        else { return "mixer_view_unread" }
+        guard selected[1] == true else { return "mixer_not_in_tracks_view" }
+        guard filterGroups.count == 1, let filters = filterGroups.first else { return "mixer_type_filters_unread" }
+        let filterValues = filters.map(flag)
+        guard filterValues.allSatisfy({ $0 != nil }) else { return "mixer_type_filters_unread" }
+        guard filterValues.allSatisfy({ $0 == true }) else { return "mixer_type_filter_off" }
+        // Every header's strip: the strip at its row carries its name in its own name field.
+        let headers = allTrackHeaders(runtime: runtime)
+        guard !headers.isEmpty, census.count >= headers.count else { return "mixer_strips_differ_from_track_headers" }
+        func firstTextField(_ element: AXUIElement) -> AXUIElement? {
+            children(element)?.first { role($0) == kAXTextFieldRole as String }
+        }
+        for (row, header) in headers.enumerated() {
+            guard let headerField = firstTextField(header),
+                  let headerName = string(headerField, kAXDescriptionAttribute as String),
+                  let stripField = firstTextField(census[row]),
+                  let stripName = string(stripField, kAXValueAttribute as String) else {
+                return "mixer_strip_names_unread"
+            }
+            guard headerName.utf8.elementsEqual(stripName.utf8) else { return "mixer_strips_differ_from_track_headers" }
+        }
+        return nil
     }
 
     /// Enumerate all track header rows.

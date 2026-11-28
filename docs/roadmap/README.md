@@ -35,8 +35,8 @@ then a reporter needs a build of main.
   2026-11-23**; its branch `fix/1596-postevent-tcc` (`2e030d36`) is not on main, so #1596 is not fixed.
 - **Qualification on Logic 13.0 (7801):** 17 of 138 registered operations are live-qualified; the other
   121 are listed with a reason in `docs/qualification/not-qualified-logic13.json` (69
-  `unknown_param_probe_only`, 21 `readback_not_compared`, 10 `recipe_refused`, 8
-  `semantic_validator_unavailable`, and 13 in six smaller classes). Nothing on that list is claimed.
+  `unknown_param_probe_only`, 21 `readback_not_compared`, 9 `recipe_refused`, 8
+  `semantic_validator_unavailable`, and 14 in seven smaller classes). Nothing on that list is claimed.
 - **New product limitation:** `transport.pause` refuses with `readback_unavailable` when the control
   bar displays Beats, because tempo is not readable there. Recorded on #1621; it is a second defect in
   that issue, no separate issue exists.
