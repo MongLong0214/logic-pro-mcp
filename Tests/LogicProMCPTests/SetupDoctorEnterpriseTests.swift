@@ -955,3 +955,45 @@ private struct FrozenV2Report: Codable {
         case checks, summary, headline
     }
 }
+
+
+// #1596: the TCC database reader is the one doctor input that carries other software's names. A
+// private bundle identifier that contains a word the relevance filter looks for must reach neither
+// the JSON report nor the verbose text.
+@Test func test1596TCCDatabaseClientNamesNeverReachDoctorJSONOrVerboseOutput() throws {
+    let privateClients = [
+        "com.synthetic.review-token-9f3a.logicpromcp",
+        "com.synthetic.review-token-9f3a.claude",
+        "/Users/someone/clients/acme/Synthetic-9f3a-terminal.app",
+        "/Users/someone/clients/acme/review-token-9f3a-iterm",
+    ]
+    for authValue in [0, 2] {
+        let rows = privateClients.map {
+            SetupDoctor.TCCRow(service: "kTCCServiceAccessibility", client: $0, authValue: authValue, indirectObjectIdentifier: "")
+        } + [
+            SetupDoctor.TCCRow(service: "kTCCServiceAppleEvents", client: "com.apple.Terminal", authValue: authValue, indirectObjectIdentifier: "com.synthetic.review-token-9f3a"),
+        ]
+        var runtime = enterpriseRuntime()
+        let probe = SetupDoctor.mapTCCQueryOutcome(.rows(rows))
+        runtime.tccCrossContextProbe = { probe }
+        let report = makeReport(runtime: runtime)
+        let crossContext = try #require(check(report, "permissions.tcc_cross_context"))
+        #expect(crossContext.evidence["findings"]?.isEmpty == false)
+
+        let json = encodeJSON(report)
+        let verbose = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
+        for output in [json, verbose] {
+            for fragment in ["synthetic", "Synthetic", "review-token", "9f3a", "someone", "acme", "/Users"] {
+                #expect(!output.contains(fragment), "\(fragment) in doctor output")
+            }
+            #expect(output.contains("principal_hint=another application"))
+        }
+    }
+}
+
+@Test func test1596TCCClientLabelIsAlwaysAFixedLabel() {
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicProMCP") == "LogicProMCP (homebrew)")
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "/x/other-logicpromcp") == "another executable")
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "com.apple.Terminal") == "com.apple.Terminal")
+    #expect(TCCResponsibility.publicLabel(forTCCClient: "com.example.unlisted") == "another application")
+}

@@ -43,7 +43,7 @@ If the MCP client launches from a different environment, register with an absolu
 
 ### `tools/list` is empty or times out
 
-Check the MCP client logs, confirm the command path, and run `LogicProMCP --check-permissions`. macOS TCC permissions apply to the server's responsible process: usually the app that launches it, but the LogicProMCP binary itself under Claude Desktop. See [Which process needs the permission](#which-process-needs-the-permission).
+Check the MCP client logs, confirm the command path, and run `LogicProMCP --check-permissions`. macOS TCC permissions apply to the server's responsible process: the process named as the `TCC principal`, which is either the app that launches it or the LogicProMCP binary itself. See [Which process needs the permission](#which-process-needs-the-permission).
 
 ### Concurrent large reads appear to time out ("no response")
 
@@ -61,36 +61,28 @@ The server produces every response, complete and well-formed, under concurrent l
 
 ### Which process needs the permission
 
-macOS checks Accessibility, PostEvent and Automation against the server's *responsible process*, and the launcher decides which process that is:
+One rule covers Accessibility, PostEvent, Automation to Logic Pro and Automation to System Events: grant the process that `logic_system permissions`, called from the affected client, or `LogicProMCP --check-permissions` run the way that client runs it, names as the **TCC principal**. Do not guess it from the launcher. macOS checks these permissions against the server's *responsible process*, and the launcher decides which process that is. Some clients start MCP servers with responsibility disclaimed, so the principal is the LogicProMCP binary itself and a grant on the client app does not apply. Other clients leave it inherited, so the principal is the client app.
 
-- **Claude Desktop** starts every stdio MCP server through its `disclaimer` helper with TCC responsibility disclaimed. The principal is the **LogicProMCP binary at its real path**, for example `/opt/homebrew/Cellar/logic-pro-mcp/3.19.0/bin/LogicProMCP`. A grant on Claude does not apply to the server.
-- **Claude Code in a terminal, Terminal, iTerm, Cursor, VS Code**: the server inherits the launcher, so the grant belongs to that app.
+The principal is reported as a public label only: `LogicProMCP` with an install kind (`homebrew`, `source build`, `app bundle` or `other install`), a bundle identifier from a short list of known clients such as Terminal, or `another executable` / `another application`. It is never a directory or a copied name. You see it as the `TCC principal:` line, as `tcc_principal` and `tcc_principal_is_self` in `logic_system permissions`, and in the evidence of `permissions.launch_context` in `doctor`.
 
-`LogicProMCP --check-permissions`, `logic_system permissions` and `doctor` report the measured principal by a public label only (a fixed label: `LogicProMCP` and an install kind such as `homebrew`, `source build`, `app bundle` or `other install`; any other executable is `another executable` or `another application`, and a bundle identifier appears only for a short list of known clients such as Terminal; never a directory or a copied name): the `TCC principal:` line, and `tcc_principal` / `tcc_principal_is_self` in the evidence of `permissions.launch_context`. Run the check from the client that actually launches the server (for Claude Desktop, ask Claude to run `logic_system permissions`); a Terminal run measures Terminal.
+Procedure:
 
-Homebrew installs each version under a new `Cellar/<version>` path, and the release binary carries only an ad-hoc signature. A grant for one version therefore does not carry over to the next, and the old entry stays in the list looking enabled.
+1. From the affected client, read the principal label. For a desktop client, ask it to run `logic_system permissions`; for a terminal client, run `LogicProMCP --check-permissions` in it. A run from another app measures that app, not the client that is failing.
+2. Keep the entries that are already granted. Remove an entry only when you know it belongs to a binary no client launches any more, such as an old Homebrew Cellar version. Never delete granted entries to start over.
+3. In **System Settings -> Privacy & Security**, add or enable the entry for that principal under **Accessibility** and under **Automation** (Logic Pro and System Events; PostEvent is reported separately, so read its line too). If the principal is the LogicProMCP binary itself, find its path locally in your own Terminal while the client is running: `ps -axo pid=,comm= | grep LogicProMCP`. The path is never shown in MCP output. To add it by hand use **+** and press Cmd-Shift-G to paste the path. Do not use `which LogicProMCP`: Terminal may resolve a different copy. If two copies of the same install kind are running (for example two Homebrew versions), the public label cannot tell them apart, so quit the other client first so that exactly one remains; then the path `ps` prints is the one the principal refers to.
+4. Verify from that same client: run `logic_system permissions` (or `--check-permissions`) again and read the same principal line and the four states.
 
-### Claude Desktop: Accessibility or PostEvent not granted (macOS 26 and 27)
+A Homebrew upgrade installs a new `Cellar/<version>` path and the release binary carries only an ad-hoc signature, so a grant for one version does not carry over to the next and the old entry stays in the list looking enabled. Repeat the procedure after each `brew upgrade logic-pro-mcp`.
 
-When the `TCC principal:` line says `this LogicProMCP binary itself` and Accessibility or PostEvent is reported as not granted, the binary Claude Desktop launches has no matching grant (if both are reported granted, leave the entry alone). Whether turning on the Accessibility switch also restores PostEvent has not been measured on macOS 27, so do not assume it: step 5 reads both lines back.
-
-Several LogicProMCP copies can exist at once (Homebrew, a source build, a downloaded release). Only the copy the client actually launches matters, and a working grant on another copy must stay in place. The public label cannot tell two copies of the same install kind apart; the absolute path in step 2 is what does.
-
-1. Leave the client running with the LogicProMCP server started (for Claude Desktop, open a chat that has the server connected).
-2. In your own Terminal, print the absolute path of the server the client is running: `ps -axo pid=,comm= | grep LogicProMCP` (or `pgrep -fl LogicProMCP`). The path appears only in your Terminal and is never sent in MCP output. If two copies are listed, the path of the one the client started is the one to use; the `command` in the client's MCP configuration (a bare `LogicProMCP` there resolves through the client's own `PATH`, not Terminal's) tells you which. Do not use `which LogicProMCP`: Terminal may resolve a different copy.
-3. Quit the client. In **System Settings -> Privacy & Security -> Accessibility**, leave entries that are enabled and working. Remove an entry only when you know it belongs to a binary that no client launches any more, such as an old Cellar version. Never delete granted entries to start over.
-4. Request for that exact path from Terminal: `LogicProMCP --request-permissions "<path from step 2>"`. The target's file name must be exactly `LogicProMCP`, otherwise it is refused before anything starts. The command prints `Requesting for: LogicProMCP (<install kind>)` and finishes with a `Receipt from LogicProMCP:` line showing the Accessibility and PostEvent state before and after. It reports success only from that receipt, which the LogicProMCP child itself writes; a target that exits 0 without one is reported as a failure. It requests from a disclaimed copy of that binary, so macOS lists the binary rather than Terminal, and it refuses, requesting nothing, if it cannot start that copy. Turn the new `LogicProMCP` entry on. Alternatively, add the step 2 binary with **+**: press Cmd-Shift-G and paste its path.
-5. Reopen the client and verify from that same client: ask it to run `logic_system permissions`. The `TCC principal` line must name the install kind you targeted and show Accessibility and PostEvent granted. A Terminal run measures Terminal and does not verify the client.
-
-Repeat steps 2-5 after each `brew upgrade logic-pro-mcp`: the new Cellar path is a different binary.
+What is not measured: behaviour on macOS 27 is reported by users and has not been reproduced by the maintainers. One reporter on 27.2.1 still saw denial after adding the binary by hand. This procedure is not claimed to fix macOS 27; the diagnosis output (the principal line, its `tcc_principal_is_self` flag and the four states) is what is needed to investigate further, so include it when you report a problem. Whether the Accessibility switch also covers PostEvent on macOS 27 is likewise not measured.
 
 ### Accessibility denied
 
-Grant Accessibility to the reported `TCC principal` in **System Settings -> Privacy & Security -> Accessibility**: the launcher app, or the LogicProMCP binary itself under Claude Desktop (see above).
+Apply the rule in [Which process needs the permission](#which-process-needs-the-permission): grant Accessibility to the reported `TCC principal`.
 
 ### Automation denied or not verifiable
 
-Launch Logic Pro once, then grant Automation access for the launcher app under **Privacy & Security -> Automation -> Logic Pro**.
+Launch Logic Pro once, then under **Privacy & Security -> Automation** allow the reported `TCC principal` (see [Which process needs the permission](#which-process-needs-the-permission)) to control **Logic Pro**. When the principal is the LogicProMCP binary itself, the entry to enable is that binary, not the launcher app.
 
 `--check-permissions`, `logic_system health`, and `doctor` report each TCC target as one of three states — read them differently:
 
@@ -102,16 +94,13 @@ Launch Logic Pro once, then grant Automation access for the launcher app under *
 
 ### `-1743` / System Events Automation denied
 
-`-1743`, `errAEEventNotPermitted`, or "not authorized to send Apple events" from `tell application "System Events"` means the responsible process for the server or harness is denied Automation to System Events. This is a launcher-permission gap, not a Logic Pro limitation, and Logic Pro Automation being granted is separate and not sufficient. System Events Automation is part of both `--check-permissions` and doctor readiness.
+`-1743`, `errAEEventNotPermitted`, or "not authorized to send Apple events" from `tell application "System Events"` means the reported `TCC principal` is denied Automation to System Events. This is a permission gap on that principal, not a Logic Pro limitation, and Logic Pro Automation being granted is separate and not sufficient. System Events Automation is part of both `--check-permissions` and doctor readiness.
 
-Fix it one of two ways:
-
-- Grant System Events Automation to the responsible launcher in **System Settings -> Privacy & Security -> Automation**.
-- Or run the server/harness under a responsible app that already has it, such as Terminal, iTerm, or your editor.
+Fix it by applying the rule in [Which process needs the permission](#which-process-needs-the-permission): under **System Settings -> Privacy & Security -> Automation**, enable **System Events** for the process the principal line names, which is the LogicProMCP binary itself when `tcc_principal_is_self` is `true`. Running the server under a client that already holds the grant also works, because then that client is the principal.
 
 ### PostEvent denied
 
-`permissions.post_event_access=fail` means CGEvent-family operations cannot post trusted keyboard or click events for the reported `TCC principal`. Grant Accessibility to that principal: the launcher app, or [the LogicProMCP binary under Claude Desktop](#claude-desktop-accessibility-or-postevent-not-granted-macos-26-and-27). Then rerun the check from the same client:
+`permissions.post_event_access=fail` means CGEvent-family operations cannot post trusted keyboard or click events for the reported `TCC principal`. Apply the rule in [Which process needs the permission](#which-process-needs-the-permission), then rerun the check from the same client:
 
 ```bash
 LogicProMCP --check-permissions

@@ -138,7 +138,8 @@ extension SetupDoctor {
         if service == "kTCCServicePostEvent" { return "post_event" }
         if service == "kTCCServiceAppleEvents" {
             if indirectObjectIdentifier == "com.apple.systemevents" { return "appleevents:systemevents" }
-            if indirectObjectIdentifier.hasPrefix("com.apple.") {
+            if LogicProVariantPolicy.knownBundleIDs.contains(indirectObjectIdentifier),
+               indirectObjectIdentifier.hasPrefix("com.apple.") {
                 return "appleevents:\(indirectObjectIdentifier.dropFirst("com.apple.".count))"
             }
             return "appleevents"
@@ -147,9 +148,10 @@ extension SetupDoctor {
     }
 
 
+    /// Every `client` value from the database goes through the same fixed-label rule as the rest of
+    /// the permission output; the row's own text is never copied.
     private static func redactedTCCPrincipal(_ client: String) -> String {
-        if client.contains("/") { return URL(fileURLWithPath: client).lastPathComponent }
-        return client
+        TCCResponsibility.publicLabel(forTCCClient: client)
     }
 
 

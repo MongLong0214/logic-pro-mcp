@@ -66,10 +66,6 @@ enum MainEntrypoint {
         // Injected so doctor's color/TTY gating is pinnable in tests (AC-5.4).
         isStdoutTTY: () -> Bool = { isatty(STDOUT_FILENO) != 0 },
         doctorEnvironment: [String: String] = ProcessInfo.processInfo.environment,
-        // #1596: the one permission path that prompts; run only when a person passes the flag.
-        requestPermissions: ([String], (String) -> Void) -> Int32 = { arguments, writeStderr in
-            PermissionRequestCommand.run(arguments: arguments, writeStderr: writeStderr)
-        },
         // #284: injected so the qualification entry point is drivable in tests without spawning a
         // real run. Restored 2026-09-14 with the rest of the subsystem.
         qualificationCommand: ([String]) async -> QualificationCommandResult = { arguments in
@@ -725,14 +721,6 @@ enum MainEntrypoint {
             return 0
         }
 
-        if let command = arguments.dropFirst().first,
-           command == PermissionRequestCommand.flag || command == PermissionRequestCommand.disclaimedChildFlag {
-            var report = ""
-            let code = requestPermissions(arguments) { report += $0 }
-            writeStderr(report)
-            return Int(code)
-        }
-
         if arguments.contains("--check-permissions") {
             let status = permissionCheck()
             writeStderr(status.summary + "\n")
@@ -815,8 +803,6 @@ enum MainEntrypoint {
           LogicProMCP <install|update|uninstall> --dry-run [--json]
                                                Print a read-only lifecycle plan and exit
           LogicProMCP --check-permissions      Print macOS permission status and exit (non-zero if not ready)
-          LogicProMCP --request-permissions    Ask macOS for Accessibility and PostEvent for this binary itself
-                                               (the principal under a disclaiming launcher); prompts; exit
           LogicProMCP --qualify --out <attestation.json> [--require-atlas] [--mutate-open-project] [--cases <cases.json>] [--waivers <waivers.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
                                                Drive the packaged binary over stdio and write a live qualification attestation.
                                                Exits non-zero if any case FAILED (a declared deferral is not a failure).

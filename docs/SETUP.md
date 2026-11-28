@@ -59,14 +59,11 @@ Claude Desktop can launch the same configured MCP server separately for chat and
 
 Open **System Settings -> Privacy & Security**:
 
-1. **Accessibility**: enable the process macOS evaluates for the server:
-   - **Claude Desktop**: the `LogicProMCP` binary itself, not Claude. Claude Desktop launches MCP servers with TCC responsibility disclaimed. With Claude Desktop running the server, run `ps -axo pid=,comm= | grep LogicProMCP` in your own Terminal to print the absolute path of the copy it started (shown only in your Terminal), then request for exactly that path: `LogicProMCP --request-permissions "<that path>"`. Turn on the entry it adds, leave entries that are already enabled alone, reopen Claude Desktop, and verify with `logic_system permissions` from Claude. See [Troubleshooting](TROUBLESHOOTING.md#claude-desktop-accessibility-or-postevent-not-granted-macos-26-and-27) for the full procedure. A Homebrew upgrade installs a new Cellar path, so repeat the request after each `brew upgrade`.
-   - **Claude Code, Terminal, iTerm, Cursor, VS Code**: the app that launches `LogicProMCP`.
-2. **Automation**: allow that same process to control **Logic Pro** and **System Events**.
+Grant **Accessibility** and **Automation** (to **Logic Pro** and to **System Events**) to one process: the **TCC principal** that `logic_system permissions`, called from the affected client, or `LogicProMCP --check-permissions` run the way that client runs it, names. It is the client app when the client lets the server inherit responsibility, and the LogicProMCP binary itself when the client disclaims it, so do not assume it is the launcher. Read the label from the client, keep entries that are already granted, add or enable the entry for that principal, and verify from the same client. The steps, including how to find the binary's path locally, are in [Troubleshooting](TROUBLESHOOTING.md#which-process-needs-the-permission).
 
 If you use **Apple Creator Studio** Logic Pro (`com.apple.mobilelogic`), grant Automation separately from desktop Logic Pro (`com.apple.logic10`). macOS treats them as distinct apps even though both appear as "Logic Pro".
 
-`--check-permissions` and doctor readiness cover Accessibility, Automation for Logic Pro, Automation for System Events, and trusted PostEvent access. PostEvent is reported separately because CGEvent fallback paths need it; whether the Accessibility switch also covers it is not measured on macOS 27, so read the PostEvent line. The `TCC principal:` line names the process the results were measured for. See [Troubleshooting](TROUBLESHOOTING.md#which-process-needs-the-permission).
+`--check-permissions` and doctor readiness cover Accessibility, Automation for Logic Pro, Automation for System Events, and trusted PostEvent access. PostEvent is reported separately because CGEvent fallback paths need it; whether the Accessibility switch also covers it is not measured on macOS 27, so read the PostEvent line. The `TCC principal:` line names the process the results were measured for. Behaviour on macOS 27 is reported by users and has not been reproduced by the maintainers. See [Troubleshooting](TROUBLESHOOTING.md#which-process-needs-the-permission).
 
 Verify:
 

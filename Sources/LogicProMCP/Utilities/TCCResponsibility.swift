@@ -14,8 +14,7 @@ enum TCCResponsibility {
     /// The responsible process, identified only by a label that is safe to show to anyone.
     /// The executable's directory is never part of it: it can hold a client or project name,
     /// and every public surface (MCP result, CLI, doctor, support bundle) prints this value.
-    /// The real path stays inside the spawn code (`PermissionRequestCommand`).
-    struct Principal: Equatable, Sendable {
+        struct Principal: Equatable, Sendable {
         let pid: pid_t
         /// Public-safe identifier built from fixed strings only (see `publicLabel`). nil when the
         /// path could not be read.
@@ -72,6 +71,51 @@ enum TCCResponsibility {
         return knownBundleIdentifiers.contains(bundle) ? "\(bundle) (app bundle)" : "another application"
     }
 
+    /// Fixed labels for the clients a TCC database row may name, keyed by the lowercased bundle
+    /// identifier or the lowercased application name without `.app`. The values are literals in this
+    /// file; nothing from the row is ever copied into them.
+    private static let knownTCCClientLabels: [String: String] = [
+        "com.anthropic.claudefordesktop": "com.anthropic.claudefordesktop",
+        "claude desktop": "Claude Desktop.app",
+        "claude": "Claude.app",
+        "com.apple.terminal": "com.apple.Terminal",
+        "terminal": "Terminal.app",
+        "com.googlecode.iterm2": "com.googlecode.iterm2",
+        "iterm": "iTerm.app",
+        "iterm2": "iTerm.app",
+        "com.microsoft.vscode": "com.microsoft.VSCode",
+        "com.microsoft.vscodeinsiders": "com.microsoft.VSCodeInsiders",
+        "visual studio code": "Visual Studio Code.app",
+        "vs code": "Visual Studio Code.app",
+        "com.todesktop.230313mzl4w4u92": "com.todesktop.230313mzl4w4u92",
+        "cursor": "Cursor.app",
+        "com.exafunction.windsurf": "com.exafunction.windsurf",
+        "windsurf": "Windsurf.app",
+        "dev.zed.zed": "dev.zed.Zed",
+        "zed": "Zed.app",
+    ]
+
+    /// The public-safe label for the `client` column of a TCC database row (doctor's cross-context
+    /// enrichment). The same rule as `publicLabel`: a row naming an executable called exactly
+    /// `LogicProMCP` gets the fixed product label, a client on the fixed list gets its fixed label,
+    /// and everything else is `another executable` or `another application`. A bundle identifier or
+    /// name that is not on the list is never copied, even when it contains a word the relevance
+    /// filter looks for.
+    static func publicLabel(forTCCClient client: String) -> String {
+        let lowered = client.lowercased()
+        if let label = knownTCCClientLabels[lowered] { return label }
+        if client.contains("/") {
+            let basename = (client as NSString).lastPathComponent
+            if basename == productExecutableName {
+                return publicLabel(forExecutablePath: client, bundleIdentifier: { _ in nil })
+            }
+            let name = basename.lowercased().hasSuffix(".app") ? String(basename.dropLast(4)).lowercased() : basename.lowercased()
+            if let label = knownTCCClientLabels[name] { return label }
+            return basename.lowercased().hasSuffix(".app") ? "another application" : "another executable"
+        }
+        return client == productExecutableName ? productExecutableName : "another application"
+    }
+
     static func bundleIdentifier(forExecutablePath path: String) -> String? {
         guard let range = path.range(of: ".app/Contents/") else { return nil }
         let appPath = String(path[..<path.index(range.lowerBound, offsetBy: 4)])
@@ -79,8 +123,6 @@ enum TCCResponsibility {
     }
 
     private typealias ResponsibleForPID = @convention(c) (pid_t) -> pid_t
-    private typealias SetDisclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
-
     private static func symbol<T>(_ name: String, as _: T.Type) -> T? {
         guard let handle = dlopen(nil, RTLD_NOW), let pointer = dlsym(handle, name) else { return nil }
         return unsafeBitCast(pointer, to: T.self)
@@ -129,112 +171,5 @@ enum TCCResponsibility {
             label: pathForPID(responsible).map(labelForPath),
             isSelf: responsible == selfPID
         )
-    }
-
-    enum SpawnOutcome: Equatable, Sendable {
-        case exited(Int32)
-        /// This system does not expose the disclaim spawn attribute.
-        case disclaimUnavailable
-        case spawnFailed(Int32)
-    }
-
-    /// File descriptors the disclaimed child inherits from `runDisclaimed`: the parent's one-shot
-    /// handoff (read end) and the receipt channel back to the parent (write end).
-    static let handoffDescriptor: Int32 = 3
-    static let receiptDescriptor: Int32 = 4
-
-    struct DisclaimedRun: Equatable, Sendable {
-        var outcome: SpawnOutcome
-        /// Whatever the child wrote to its receipt descriptor (capped). Untrusted until parsed.
-        var receipt: Data
-    }
-
-    /// A pipe whose descriptors are close-on-exec and sit above the fixed numbers the child gets.
-    private static func makePipe() -> (read: Int32, write: Int32)? {
-        var fds: [Int32] = [-1, -1]
-        guard pipe(&fds) == 0 else { return nil }
-        let moved = fds.map { fcntl($0, F_DUPFD_CLOEXEC, 10) }
-        fds.forEach { close($0) }
-        guard moved.allSatisfy({ $0 >= 0 }) else { moved.filter { $0 >= 0 }.forEach { close($0) }; return nil }
-        return (moved[0], moved[1])
-    }
-
-    /// Run `executable` as its own responsible process, inheriting stdin/stdout/stderr, and
-    /// wait for it. This is the same arrangement a disclaiming MCP client uses for servers, so a
-    /// permission request made by the child is recorded for the child's binary.
-    ///
-    /// The child also inherits two pipes: `handoffDescriptor` (readable, holds `handoff`) and
-    /// `receiptDescriptor` (writable). The exit status alone proves nothing, because any program
-    /// can exit 0; the caller decides from the receipt.
-    static func runDisclaimed(
-        executable: String,
-        arguments: [String],
-        handoff: String
-    ) -> DisclaimedRun {
-        func failed(_ outcome: SpawnOutcome) -> DisclaimedRun { DisclaimedRun(outcome: outcome, receipt: Data()) }
-        guard let setDisclaim = symbol("responsibility_spawnattrs_setdisclaim", as: SetDisclaim.self) else {
-            return failed(.disclaimUnavailable)
-        }
-        var attributes: posix_spawnattr_t?
-        guard posix_spawnattr_init(&attributes) == 0 else { return failed(.spawnFailed(errno)) }
-        defer { posix_spawnattr_destroy(&attributes) }
-        let disclaimStatus = setDisclaim(&attributes, 1)
-        guard disclaimStatus == 0 else { return failed(.spawnFailed(disclaimStatus)) }
-
-        guard let handoffPipe = makePipe() else { return failed(.spawnFailed(errno)) }
-        guard let receiptPipe = makePipe() else {
-            close(handoffPipe.read); close(handoffPipe.write)
-            return failed(.spawnFailed(errno))
-        }
-        var held = [handoffPipe.read, handoffPipe.write, receiptPipe.read, receiptPipe.write]
-        func closeAll() { held.forEach { close($0) }; held = [] }
-        func closeOne(_ fd: Int32) { close(fd); held.removeAll { $0 == fd } }
-        defer { closeAll() }
-
-        let bytes = Array(handoff.utf8)
-        // Small enough for the pipe buffer, so this cannot block before the child exists.
-        guard bytes.count <= 512, write(handoffPipe.write, bytes, bytes.count) == bytes.count else {
-            return failed(.spawnFailed(EIO))
-        }
-        closeOne(handoffPipe.write)
-
-        var actions: posix_spawn_file_actions_t?
-        guard posix_spawn_file_actions_init(&actions) == 0 else { return failed(.spawnFailed(errno)) }
-        defer { posix_spawn_file_actions_destroy(&actions) }
-        guard posix_spawn_file_actions_adddup2(&actions, handoffPipe.read, handoffDescriptor) == 0,
-              posix_spawn_file_actions_adddup2(&actions, receiptPipe.write, receiptDescriptor) == 0 else {
-            return failed(.spawnFailed(errno))
-        }
-
-        let argv = ([executable] + arguments).map { strdup($0) } + [nil]
-        defer { argv.forEach { free($0) } }
-        let envp = ProcessInfo.processInfo.environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
-        defer { envp.forEach { free($0) } }
-        var pid: pid_t = 0
-        let spawnStatus = posix_spawn(&pid, executable, &actions, &attributes, argv, envp)
-        guard spawnStatus == 0 else { return failed(.spawnFailed(spawnStatus)) }
-        closeOne(handoffPipe.read)
-        closeOne(receiptPipe.write)
-
-        // Read to EOF (the child's exit closes its end); keep a bounded prefix only.
-        var receipt = Data()
-        var chunk = [UInt8](repeating: 0, count: 1024)
-        while true {
-            let count = read(receiptPipe.read, &chunk, chunk.count)
-            if count > 0 {
-                if receipt.count < 8192 { receipt.append(contentsOf: chunk.prefix(count)) }
-            } else if count == 0 || errno != EINTR {
-                break
-            }
-        }
-
-        var status: Int32 = 0
-        while waitpid(pid, &status, 0) == -1 {
-            if errno != EINTR { return failed(.spawnFailed(errno)) }
-        }
-        // WIFEXITED / WEXITSTATUS are macros Swift does not import.
-        let terminationSignal = status & 0x7f
-        let outcome: SpawnOutcome = terminationSignal == 0 ? .exited((status >> 8) & 0xff) : .exited(128 + terminationSignal)
-        return DisclaimedRun(outcome: outcome, receipt: receipt)
     }
 }
