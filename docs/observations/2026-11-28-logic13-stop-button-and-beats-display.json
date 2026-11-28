@@ -37,8 +37,8 @@
       "role": "AXButton",
       "identifier": "controlBar/stopButton",
       "actions": ["AXPress"],
-      "description_while_playing": "정지   0",
-      "description_while_stopped": "처음으로 이동   ↩",
+      "description_while_playing": "Stop 0 (ko, localized)",
+      "description_while_stopped": "Go to Beginning (ko, localized)",
       "value": ""
     },
     {
@@ -46,7 +46,7 @@
       "role": "AXCheckBox",
       "subrole": "AXToggle",
       "identifier": "controlBar/playButton",
-      "description": "재생",
+      "description": "Play (ko, localized)",
       "actions": ["AXPress"],
       "value_while_playing": "1",
       "value_while_stopped": "0"
