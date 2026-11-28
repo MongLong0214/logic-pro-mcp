@@ -1190,6 +1190,7 @@
       "2026-10-29-291-output-compensation-deadline-wall",
       "2026-10-29-862-mcu-plugin-edit-lacks-strip-identity",
       "2026-11-08-logic13-control-bar-toolbar",
+      "2026-11-28-logic13-set-volume-header-fader-latency",
       "2026-11-28-logic13-stop-button-and-beats-display",
       "2026-11-28-logic13-track-select-mixer-strip"
     ],
@@ -1635,6 +1636,7 @@
       "2026-10-21-midi-file-import-creates-an-external-midi-lane-regardless-of-program-or-selection",
       "2026-10-21-midi-import-panel-drops-an-early-go-to-key-and-holds-its-buttons-directly",
       "2026-11-08-logic13-control-bar-toolbar",
+      "2026-11-28-logic13-set-volume-header-fader-latency",
       "2026-11-28-logic13-track-select-mixer-strip"
     ],
     "schema_v1_records": [
@@ -3080,9 +3082,9 @@
     "manual_reverify": {
       "date": "2026-11-28",
       "members": [
-        "2026-11-28-logic13-track-select-mixer-strip"
+        "2026-11-28-logic13-set-volume-header-fader-latency"
       ],
-      "reason": "#1600: admit exactly the named Logic 13.0 build 7801 / ko-KR track-selection observation as a manual-reverification gap without a committed evidence file. Replay needs a live Logic 13, disposable project copies, an inline rename opened through the Track menu and an independent Accessibility reader; the trials are transcribed inline in the record. This grants no other build, locale, Mixer view or write authority."
+      "reason": "the set_volume latency record is a manual live measurement whose evidence files stay in the author's cache"
     },
     "records_from_a_superseded_build": {
       "date": "2026-11-17",
@@ -3461,9 +3463,9 @@
     "records_without_evidence": {
       "date": "2026-11-28",
       "members": [
-        "2026-11-28-logic13-track-select-mixer-strip"
+        "2026-11-28-logic13-set-volume-header-fader-latency"
       ],
-      "reason": "#1600: admit exactly the named Logic 13.0 build 7801 / ko-KR track-selection observation as a manual-reverification gap without a committed evidence file. Replay needs a live Logic 13, disposable project copies, an inline rename opened through the Track menu and an independent Accessibility reader; the trials are transcribed inline in the record. This grants no other build, locale, Mixer view or write authority."
+      "reason": "the set_volume latency record is a manual live measurement whose evidence files stay in the author's cache"
     },
     "surfaces_without_records": {
       "date": "2026-11-20",
