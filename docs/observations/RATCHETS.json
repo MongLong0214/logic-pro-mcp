@@ -1191,6 +1191,7 @@
       "2026-10-29-862-mcu-plugin-edit-lacks-strip-identity",
       "2026-11-08-logic13-control-bar-toolbar",
       "2026-11-28-logic13-export-panel-list-view-destination",
+      "2026-11-28-logic13-goto-readback-display-precision",
       "2026-11-28-logic13-stop-button-and-beats-display",
       "2026-11-28-logic13-track-select-mixer-strip"
     ],
@@ -3082,9 +3083,10 @@
     "manual_reverify": {
       "date": "2026-11-28",
       "members": [
-        "2026-11-28-logic13-export-panel-list-view-destination"
+        "2026-11-28-logic13-export-panel-list-view-destination",
+        "2026-11-28-logic13-goto-readback-display-precision"
       ],
-      "reason": "record the #1553 export panel List view measurements, which have no committed evidence files and a manual reverify"
+      "reason": "#1601 and #1553: admit exactly the two named Logic 13.0 build 7801 / ko-KR observations (the goto readback at the default display's bar and beat precision, and the Export panel's List-view destination selection) as manual-reverification gaps. Replay needs a live Logic 13 and disposable project copies; the trials are transcribed in each record. No other build, locale, display mode or browser view is claimed."
     },
     "records_from_a_superseded_build": {
       "date": "2026-11-17",
@@ -3465,7 +3467,7 @@
       "members": [
         "2026-11-28-logic13-export-panel-list-view-destination"
       ],
-      "reason": "record the #1553 export panel List view measurements, which have no committed evidence files and a manual reverify"
+      "reason": "#1601 and #1553: admit exactly the two named Logic 13.0 build 7801 / ko-KR observations (the goto readback at the default display's bar and beat precision, and the Export panel's List-view destination selection) as manual-reverification gaps. Replay needs a live Logic 13 and disposable project copies; the trials are transcribed in each record. No other build, locale, display mode or browser view is claimed."
     },
     "surfaces_without_records": {
       "date": "2026-11-20",
