@@ -13550,6 +13550,95 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    private func mixerSelectedChildIndex(_ f: Fixture) -> Int? {
+        guard let selected = f.builder.attributeValue(f.mixer, kAXSelectedChildrenAttribute as String) as? [AXUIElement],
+              selected.count == 1 else { return nil }
+        return f.strips.firstIndex { CFEqual($0, selected[0]) }
+    }
+
+    private func focusedStripIndex(_ f: Fixture) -> Int? {
+        guard let focus = f.builder.attributeValue(f.app, kAXFocusedUIElementAttribute as String) else { return nil }
+        return f.strips.firstIndex { CFEqual($0, focus as! AXUIElement) }
+    }
+
+    @Test("A refused challenge that selects the original header still restores the original Mixer child and focus")
+    func mixerFallbackRestoresTheOriginalChildWhenAChallengeSelectsTheOriginalHeader() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        // Strip 2 selects header 0, the header that was selected when the request
+        // started, while its selected child and focus are strip 2.
+        configureTracksViewMixerOrder(f) { $0 == 2 ? 0 : $0 }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            let written = f.mixerSelectionWrites.map { write in f.strips.firstIndex { CFEqual($0, write) } ?? -1 }
+            #expect(written == [1, 2, 0], "The exact original child is written back although the header already matches")
+            #expect(pairs.isEmpty)
+            #expect(association.effects.reason == "association_selection_unverified")
+            #expect(association.effects.restoration == "restored")
+            #expect(selectedHeaders(f) == [true, false, false, false])
+            #expect(mixerSelectedChildIndex(f) == 0, "The Mixer's selected child is the original strip")
+            #expect(focusedStripIndex(f) == 0, "Focus is the original strip")
+        }
+    }
+
+    private final class ForeignFocusProbe: @unchecked Sendable {
+        var foreignReads = 0
+        var landed = false
+    }
+
+    @Test("A foreign focus read after the Mixer write retires custody instead of adopting a user's scroll")
+    func mixerFallbackRefusesAForeignFocusInsteadOfAdoptingAScroll() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        configureTracksViewMixerOrder(f) { $0 }
+        let foreign = f.builder.element(1_965_901)
+        f.builder.setRole(foreign, kAXTextFieldRole as String)
+        let probe = ForeignFocusProbe()
+        // The write selects header, child and a different control in the same window
+        // takes focus; the user scrolls the Tracks area meanwhile. Focus reaches
+        // the strip only after three foreign reads.
+        f.mixerSelection = { candidate in
+            guard let stripIndex = f.strips.firstIndex(where: { CFEqual($0, candidate) }) else { return false }
+            for (index, header) in f.headers.enumerated() {
+                f.builder.setAttribute(header, kAXSelectedAttribute as String, index == stripIndex)
+            }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, foreign)
+            f.builder.setAttribute(f.scroll, kAXValueAttribute as String, NSNumber(value: 0.4))
+            f.routingRead = { element, attribute in
+                guard CFEqual(element, f.app), attribute == kAXFocusedUIElementAttribute as String,
+                      !probe.landed else { return }
+                probe.foreignReads += 1
+                if probe.foreignReads >= 3 {
+                    probe.landed = true
+                    f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+                }
+            }
+            return true
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            #expect(probe.foreignReads >= 1, "The foreign focus was positively read")
+            #expect(!probe.landed, "Nothing waited for the foreign focus to turn into the strip's")
+            #expect(pairs.isEmpty)
+            #expect(f.scrollWrites.isEmpty, "The user's scroll is not written back")
+            #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.4)
+            #expect(f.mixerSelectionWrites.count == 1, "No inverse follows a refused custody")
+        }
+    }
+
     @Test("An explicitly requested held Mixer strip is challenged before unrelated held strips")
     func mixerSelectedChildrenPrioritizesTheRequestedPeer() async throws {
         let f = try Fixture(withViewport: true, fourTracks: true)
@@ -13713,8 +13802,18 @@ struct Issue965HeldSelectionAssociationTests {
             if ["missing_peer", "duplicate_peer", "foreign_peer"].contains(mode) {
                 #expect(f.selections.isEmpty && f.mixerSelectionWrites.isEmpty)
             }
-            if mode == "nonreciprocal" || mode == "inverse_failure" || mode == "census_drift" {
+            if mode == "inverse_failure" || mode == "census_drift" {
                 #expect(association.effects.restoration != "restored")
+            }
+            if mode == "nonreciprocal" {
+                // The header never followed the child, so nothing is paired. The
+                // Mixer's selected child did move; the exact original child is
+                // written back and header, child and focus are read to match.
+                let child = try #require(AXHelpers.getAttribute(f.mixer,
+                    kAXSelectedChildrenAttribute as String, runtime: f.logic().ax) as [AXUIElement]?)
+                #expect(child.count == 1 && CFEqual(child[0], f.strips[1]))
+                #expect(selectedHeaders(f) == [true, false])
+                #expect(association.effects.restoration == "restored")
             }
         }
     }

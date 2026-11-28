@@ -133,7 +133,9 @@
       "child_first_wait_removed": "fails, writes [1] instead of [1,2,3,0] and headers left on a challenge",
       "unclaimed_ordering_removed": "fails, 0 pairs instead of 4",
       "settlement_waits_removed": "fails for header-first and for focus-late landings",
-      "all_changes_present": "pass"
+      "all_changes_present": "pass",
+      "original_header_challenge_without_cleanup_fix": "fails, writes [1, 2] instead of [1, 2, 0], selected child and focus left on strip 2",
+      "foreign_focus_without_the_refusal": "fails, a second Mixer write follows and the loop waited for the foreign focus to become the strip's"
     }
   ],
   "conclusion": "On this host a Mixer selected-child write lands within 127 ms (220 writes) and the header selection follows the selected child by 0 to 46 ms; the product's 930 ms settlement is about seven times the slowest landing. The selected child lands before the header, so a sample that reads the header and then the child can see the new child under the old header (1 of 180 Mixer writes in the traced product, and in 33 of 220 independent polls the child led by more than 1 ms). The candidate retained custody under the old header, the header then landed under a different expectation, and the run reported not_restored; that is the failure the candidate showed in 4 of 23 trials. Waiting for the header while the old header holds the new child, together with ordering unclaimed strips first and settling a header-first or focus-late landing, produced partial coverage with the selection restored in 20 of 20 fresh-copy trials and 60 of 60 soak runs. The rail write is acknowledged and never lands (6 of 6, 6 s). Changing the track selection changes the Event List's scroll position (0.5 became 0, and the list became disabled while a track with no events was selected), so the List Editors scrollbars were not excluded from the viewport census and coverage stays unavailable while List Editors is open. The Marker List did not scroll with the selection.",
@@ -144,7 +146,8 @@
     "The Event List was measured on one 70-note region recorded into one track. The Tempo and Signature lists could not overflow on this fixture, so their scroll behaviour was not measured. Whether the Event List scroll reset restores to the original position through the existing viewport restore was not tested because the open pane's scrollbar still stops the association before any write.",
     "All view stays unstable (a header and strip pairing is refused there) and the Mixer-hidden case stays unavailable; the repair does not change them.",
     "Projects with stacks, hidden tracks, shared channel strips or auxes were not measured.",
-    "The Stereo send test used a single audio strip and ordinal 0 of an empty slot list."
+    "The Stereo send test used a single audio strip and ordinal 0 of an empty slot list.",
+    "The live trials above ran on the head before the cleanup of an original header left under another strip and the refusal of a foreign focus; those two changes are covered by unit tests only until the live trials are repeated."
   ],
   "supersedes": null,
   "canon_not_applicable": {

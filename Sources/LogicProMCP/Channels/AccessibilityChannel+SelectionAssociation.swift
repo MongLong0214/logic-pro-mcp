@@ -2196,14 +2196,22 @@ extension AccessibilityChannel {
                         do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
                         continue
                     }
-                    guard let focus: AXUIElement = AXHelpers.getAttribute(app,
-                            kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                          CFEqual(focus, candidate) || (originalRailFocus.map({ CFEqual($0, focus) }) == true),
+                    let observedFocus: AXUIElement? = AXHelpers.getAttribute(app,
+                        kAXFocusedUIElementAttribute as String, runtime: logic.ax)
+                    let focusLanded = observedFocus.map { focus in
+                        CFEqual(focus, candidate) || (originalRailFocus.map({ CFEqual($0, focus) }) == true)
+                    } == true
+                    // Logic 13 can publish this child before its focus or a
+                    // rebuilt viewport settles. Retry only a state this request
+                    // owns: the focus read failed, the focus has not left the
+                    // preceding strip, or the child's own focus landed and only
+                    // the viewport read failed. A positively observed foreign
+                    // focus is not a pending landing; the same window may hold a
+                    // user's scroll that a later adoption would overwrite.
+                    guard focusLanded, let focus = observedFocus,
                           let afterViewport = observedCurrentViewport() else {
-                        // Logic 13 can publish this child before its focus or a
-                        // rebuilt viewport settles. Leaving here would drop the
-                        // cleanup custody of a selection that already moved.
-                        if attempt < Self.selectionSettlementDelays.count {
+                        let pendingFocus = observedFocus.map { CFEqual($0, expectedFocus) } ?? true
+                        if (focusLanded || pendingFocus), attempt < Self.selectionSettlementDelays.count {
                             do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
                             continue
                         }
@@ -2838,7 +2846,11 @@ extension AccessibilityChannel {
                     }
                     continue
                 }
-                if expectedIndex == originalIndex {
+                // A refused challenge can leave the original header selected
+                // under another strip. The header alone is not the original
+                // selection: write the exact original child back whenever the
+                // retained child differs, then verify header, child and focus.
+                if expectedIndex == originalIndex, selectedChildRestored() {
                     restored = permitsRead() && observationFocusIsRestored() && selectedChildRestored()
                 } else if await referenceIsCurrent() {
                     restored = await select(originalIndex, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
@@ -2865,12 +2877,16 @@ extension AccessibilityChannel {
                 observed.append((challenge, challengeStrip))
             }
             if allHeldHeaders {
-                if expectedIndex == originalIndex {
+                if expectedIndex == originalIndex, selectedChildRestored() {
                     restored = permitsRead() && observationFocusIsRestored() && selectedChildRestored()
                 } else if await referenceIsCurrent() {
                     let precedingStrip = associationStrip
+                    // Only a header transition back to the original is a pair
+                    // witness; restoring the child under an already original
+                    // header is cleanup alone.
+                    let headerWasOriginal = expectedIndex == originalIndex
                     let returned = await select(originalIndex, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
-                    if returned, CFEqual(associationStrip, originalAssociationStrip),
+                    if returned, !headerWasOriginal, CFEqual(associationStrip, originalAssociationStrip),
                        !CFEqual(precedingStrip, originalAssociationStrip) { originalPairVerified = true }
                     restored = returned && observationFocusIsRestored() && selectedChildRestored()
                 } else { restored = false }
