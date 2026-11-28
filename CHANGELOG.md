@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+- `transport.stop` through Accessibility now presses the control bar's Stop button (identifier
+  `controlBar/stopButton`) while Play is on, and answers State A only when Play reads off (#1621).
+  On Logic 13 the Play checkbox is not a stop: pressed while playing it restarted playback and left
+  Play on, so the old press ended in `readback_mismatch`. A bar without that button keeps the
+  Play-checkbox press, and Stop on a stopped transport still presses nothing. Measured on one Logic
+  13.0 host in ko-KR; the default CGEvent route stopped playback there before the change.
+- `transport.pause` and `transport.play` from a paused start no longer refuse in the Beats display
+  (#1621). With the tempo unread, a playhead that reads to the tick is compared across a one-second
+  gap; a display that shows neither the tempo nor the tick still refuses, and the refusal now names
+  the display mode as the cause. Two playhead readings of different grain are no longer compared.
 - Stem export now identifies the destination volume sidebar by its unique exact volume-name row
   instead of requiring it to be the export panel's only outline (#1553), so List-view browser
   outlines without that row are ignored. Duplicate matches, unreadable censuses, failed selection

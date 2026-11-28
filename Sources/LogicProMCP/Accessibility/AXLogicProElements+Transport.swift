@@ -672,6 +672,24 @@ extension AXLogicProElements {
         return candidates.count == 1 ? candidates[0] : nil
     }
 
+    /// The identifier Logic 13 gives the control bar's Stop button. It is not localized, and it
+    /// is the only handle on that button that does not depend on its description, which changes
+    /// with the transport (`정지   0` while playing, `처음으로 이동   ↩` when stopped).
+    static let controlBarStopButtonIdentifier = "controlBar/stopButton"
+
+    /// The control bar's Stop button: an AXButton, not a checkbox, so `controlBarCheckboxes` never
+    /// sees it. Nil when the bar has none (Logic 12 exposes none that is known), and only a button
+    /// that carries the identifier is taken; a label match would be a guess in ten locales.
+    static func findControlBarStopButton(
+        in controlBar: AXUIElement,
+        runtime: Runtime = .production
+    ) -> AXUIElement? {
+        AXHelpers.censusDescendant(
+            of: controlBar, role: kAXButtonRole as String,
+            identifier: controlBarStopButtonIdentifier, maxDepth: 4, runtime: runtime.ax
+        ).element
+    }
+
     /// Find an AXCheckBox inside Logic Pro's control bar by its name.
     /// Common names (Korean): `녹음` (Record), `재생` (Play), `사이클` (Cycle),
     /// `카운트 인` (Count-in), `메트로놈 클릭` (Metronome).

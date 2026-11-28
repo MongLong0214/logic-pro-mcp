@@ -136,6 +136,16 @@ extension AccessibilityChannel {
             )
             stopRecordPreAction = transportPreActionReceipt(result)
         }
+        // #1621: Logic 13's Play checkbox is not a toggle that stops. Pressed while playing it
+        // restarts playback from the start position and Play stays on (measured 2026-11-28, ko:
+        // the playhead went from bar 15 to bar 12 and kept moving, AXValue stayed 1). The Stop
+        // button is a separate AXButton, so Stop presses that one when it is there and Play is on.
+        if name == "Stop",
+           let result = AccessibilityChannel.pressControlBarStopButton(
+               stopRecordPreAction: stopRecordPreAction, runtime: runtime
+           ) {
+            return result
+        }
         if name == "AutoPunch" {
             return AccessibilityChannel.defaultToggleAutopunch(
                 runtime: runtime,
@@ -229,7 +239,7 @@ extension AccessibilityChannel {
         ))
     }
 
-    private struct TransportPreActionReceipt {
+    fileprivate struct TransportPreActionReceipt {
         let writeAttempted: Bool
         let applied: Bool
 
@@ -3614,6 +3624,76 @@ extension AccessibilityChannel {
                 "attempts": attempts,
                 "safe_to_retry": true
             ]
+        ))
+    }
+
+    /// `transport.stop` on a control bar that has a Stop button: press it while Play is on, and
+    /// confirm by Play reading off.
+    ///
+    /// Nil leaves the old path in charge, and the old path is right in each of these: no Stop
+    /// button (an older Logic), Play unlocatable or unreadable (it refuses honestly), and Play
+    /// already off (it answers with no write). The last one matters here, because the Stop button
+    /// pressed on a stopped transport is Go to Beginning and moves the playhead.
+    fileprivate static func pressControlBarStopButton(
+        stopRecordPreAction: TransportPreActionReceipt,
+        runtime: AXLogicProElements.Runtime
+    ) -> ChannelResult? {
+        guard let controlBar = AXLogicProElements.getControlBar(runtime: runtime),
+              let stopButton = AXLogicProElements.findControlBarStopButton(in: controlBar, runtime: runtime),
+              let play = AXLogicProElements.findControlBarCheckbox(
+                  among: AXLogicProElements.controlBarCheckboxes(in: controlBar, runtime: runtime),
+                  matching: AXLocalePolicy.transportPlayControl, runtime: runtime),
+              controlBarCheckboxValue(play, runtime: runtime) == true else {
+            return nil
+        }
+        var extras: [String: Any] = [
+            "button": "Stop",
+            "control": "Stop",
+            "requested": false,
+            "action": "axpress",
+            "attempts": ["axpress"],
+        ]
+        if stopRecordPreAction.writeAttempted {
+            extras["record_clear_outcome"] = stopRecordPreAction.applied ? "applied" : "unconfirmed_after_write"
+        }
+        if stopRecordPreAction.applied {
+            extras["record_clear_applied"] = true
+        }
+        guard AXHelpers.performAction(stopButton, kAXPressAction, runtime: runtime.ax) else {
+            var failed = extras
+            failed["attempts"] = ["axpress:failed"]
+            failed["write_attempted"] = true
+            failed["safe_to_retry"] = false
+            failed["fallback_unsafe"] = true
+            failed["terminal"] = true
+            failed["terminal_scope"] = "mcp_request_only"
+            failed["human_intervention_required"] = false
+            failed["human_intervention_requests"] = 0
+            failed["human_dependent_transitions"] = 0
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "AXPress was attempted on the control bar Stop button, but its return value does not prove whether the action landed. Automatic handling terminated without another write.",
+                extras: failed
+            ))
+        }
+        if let observed = waitForControlBarCheckboxValue(play, runtime: runtime, matching: { $0 == false }) {
+            extras["observed"] = observed
+            return .success(HonestContract.encodeStateA(extras: extras))
+        }
+        extras["observed"] = controlBarCheckboxValue(play, runtime: runtime) as Any? ?? NSNull()
+        extras["write_attempted"] = true
+        extras["safe_to_retry"] = false
+        extras["fallback_unsafe"] = true
+        extras["terminal"] = true
+        extras["terminal_scope"] = "mcp_request_only"
+        extras["automatic_read_attempts_exhausted"] = true
+        extras["human_intervention_required"] = false
+        extras["human_intervention_requests"] = 0
+        extras["human_dependent_transitions"] = 0
+        return .error(HonestContract.encodeStateC(
+            error: .readbackMismatch,
+            hint: "The control bar Stop button was pressed, but the Play checkbox did not read off after the bounded readback. This MCP request terminated without another press.",
+            extras: extras
         ))
     }
 
