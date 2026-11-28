@@ -81,7 +81,7 @@
       "operations": 3
     }
   ],
-  "conclusion": "The refusal after a name click is the focus guard seeing a text field. When that field's value equals the committed name nothing is pending: focus moves to the Tracks group and the key then lands, State A in 9 of 9 operations. AXPress on the mute checkbox does not flip it while the field is focused, so the press route is not available. A rename editor with pending text keeps its text and the refusal. Focus on the track contents at project open is an ordinary start state and does not refuse the toggles.",
+  "conclusion": "The refusal after a name click is the focus guard seeing a text field. When that field's value equals the committed name nothing is pending: focus moves to the Tracks group and the key then lands, State A in every operation of the 3 trials. AXPress on the mute checkbox does not flip it while the field is focused, so the press route is not available. A rename editor with pending text keeps its text and the refusal. Focus on the track contents at project open is an ordinary start state and does not refuse the toggles.",
   "limits": [
     "One machine, ko-KR, one project.",
     "No real mouse click was made; the state was produced with AXFocused.",
