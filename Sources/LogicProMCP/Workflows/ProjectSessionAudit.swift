@@ -71,7 +71,7 @@ enum ProjectSessionAudit {
     struct ProjectEvidence: Codable, Sendable {
         let name: String
         let filePath: String?
-        let sampleRate: Int
+        let sampleRate: Int?
         let tempo: Double
         let timeSignature: String
         let trackCount: Int

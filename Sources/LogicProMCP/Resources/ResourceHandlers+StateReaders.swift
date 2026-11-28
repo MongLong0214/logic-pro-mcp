@@ -538,8 +538,7 @@ extension ResourceHandlers {
         // values whenever the poller has run at least once. Instead, we:
         //   1. Start with cached values (preserves the AX-only `name`).
         //   2. Fill tempo from live transport when available.
-        //   3. Fill sample-rate from saved metadata, falling back to live
-        //      transport when the saved field is unavailable.
+        //   3. Fill sample-rate from saved metadata only; otherwise unknown (nil).
         //   4. Fill trackCount from the trusted live track cache when
         //      ProjectInfo itself is still at its default count.
         //   5. Fill any remaining defaults from file metadata.
@@ -582,11 +581,9 @@ extension ResourceHandlers {
         if let sampleRate = metadata?.sampleRate {
             info.sampleRate = sampleRate
             fileContributed = true
-        } else if transportFresh {
-            info.sampleRate = cachedTransport.sampleRate
-            cacheContributedLive = true
-            cacheContributionDates.append(cachedTransport.lastUpdated)
         }
+        // Otherwise unknown: the transport value is the struct default (nothing
+        // measures it live), so it must not be reported as the project's rate.
         // timeSignature
         if cacheFresh && cached.timeSignature != "4/4" {
             cacheContributedLive = true
