@@ -82,6 +82,14 @@
       "independent_selection_before_equals_after": "20 of 20 (header 2, Mixer child 2)"
     },
     {
+      "what": "repaired product after review fixes (original-header cleanup, foreign-focus refusal), Tracks view, List Editors closed, fresh copy per trial",
+      "trials": 10,
+      "associations": "partial / association_population_not_observed with 4 rows, 10 of 10",
+      "product_restoration": "restored 10 of 10",
+      "independent_selection_before_equals_after": "10 of 10",
+      "aborted_before_any_write": "1 (a failed open left the project chooser in front), repeated"
+    },
+    {
       "what": "repaired product, 60 inspect_session runs on one open copy, new process each",
       "partial": 60,
       "product_restoration_restored": 60,
@@ -146,8 +154,7 @@
     "The Event List was measured on one 70-note region recorded into one track. The Tempo and Signature lists could not overflow on this fixture, so their scroll behaviour was not measured. Whether the Event List scroll reset restores to the original position through the existing viewport restore was not tested because the open pane's scrollbar still stops the association before any write.",
     "All view stays unstable (a header and strip pairing is refused there) and the Mixer-hidden case stays unavailable; the repair does not change them.",
     "Projects with stacks, hidden tracks, shared channel strips or auxes were not measured.",
-    "The Stereo send test used a single audio strip and ordinal 0 of an empty slot list.",
-    "The live trials above ran on the head before the cleanup of an original header left under another strip and the refusal of a foreign focus; those two changes are covered by unit tests only until the live trials are repeated."
+    "The Stereo send test used a single audio strip and ordinal 0 of an empty slot list."
   ],
   "supersedes": null,
   "canon_not_applicable": {

@@ -1247,6 +1247,341 @@
    "target": 3
   }
  ],
+ "rerun_after_review_fixes": {
+  "binary": "built from the head carrying the review fixes (source identical to 224fde3f)",
+  "note": "r10 aborted before any write: a failed open left Logic's project chooser in front; its Cancel was pressed and the trial repeated as u1",
+  "trials": [
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r1",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r2",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r3",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r4",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r5",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r6",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r7",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r8",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "r9",
+    "ui": [
+     null,
+     "restored"
+    ]
+   },
+   {
+    "abort": {
+     "front": [
+      "프로젝트 선택",
+      true
+     ]
+    },
+    "trial": "r10"
+   },
+   {
+    "after": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "before": [
+     [
+      2
+     ],
+     [
+      2
+     ]
+    ],
+    "cov": "partial",
+    "reasons": [
+     "association_population_not_observed"
+    ],
+    "restored": {
+     "headers": true,
+     "mixer": true
+    },
+    "rows": 4,
+    "trial": "u1",
+    "ui": [
+     null,
+     "restored"
+    ]
+   }
+  ]
+ },
  "soak_same_open_fixture_new_process_each": {
   "coverage": {
    "partial": 60
@@ -2681,6 +3016,9 @@
  ],
  "unit_tests_without_each_change": {
   "child_first_wait_removed": "mixerFallbackSettlesAChildThatLandsBeforeItsHeader FAILED 5 expectations: writes [1] instead of [1,2,3,0]; pairs 0; reason set; restoration not restored; headers left on a challenge",
+  "foreign_focus": "fails on f7682feb: a second Mixer write follows and the loop waited for the foreign focus",
+  "original_header_challenge_selection_scope": "fails on f7682feb: writes lack the original child; child and focus left on the challenge strip",
+  "original_header_challenge_whole_project": "fails on f7682feb: writes [1, 2] instead of [1, 2, 0]; child and focus left on strip 2",
   "settlement_waits_removed": "mixerFallbackSettlesATwoTurnLanding FAILED 5 expectations for each of headerFirst true and false",
   "unclaimed_ordering_removed": "mixerFallbackPrefersStripsNotAlreadyObservedForAnotherHeader FAILED 7 expectations: writes [1,0] instead of [1,2,3,0]; pairs 0 instead of 4",
   "with_all_changes": "the same 4 tests pass"

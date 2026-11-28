@@ -13587,6 +13587,34 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    @Test("A refused narrow challenge that selects the original header still restores the original Mixer child and focus")
+    func narrowMixerFallbackRestoresTheOriginalChildWhenTheChallengeSelectsTheOriginalHeader() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        // Strip 1 selects header 0, the header selected when the request started.
+        configureTracksViewMixerOrder(f) { $0 == 1 ? 0 : $0 }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let runtime = f.logic()
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: runtime, expectedProject: nil, requiresProjectReference: false))
+            let challenged = AXTrackBinding.Binding(window: f.window, header: f.headers[1],
+                document: association.document, runtime: runtime, observedStackHeader: false,
+                observedHeaders: association.headers)
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                narrowChallengeHeaders: [challenged])
+            let written = f.mixerSelectionWrites.map { write in f.strips.firstIndex { CFEqual($0, write) } ?? -1 }
+            #expect(written == [1, 0], "The exact original child is written back although the header already matches")
+            #expect(pairs.isEmpty)
+            #expect(association.effects.restoration == "restored")
+            #expect(selectedHeaders(f) == [true, false, false, false])
+            #expect(mixerSelectedChildIndex(f) == 0, "The Mixer's selected child is the original strip")
+            #expect(focusedStripIndex(f) == 0, "Focus is the original strip")
+        }
+    }
+
     private final class ForeignFocusProbe: @unchecked Sendable {
         var foreignReads = 0
         var landed = false
