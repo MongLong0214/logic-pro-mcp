@@ -203,7 +203,8 @@ struct MixerDispatcher: OperationTraceDispatching {
                   params["destination"] != nil,
                   removing || destination.map(isOutputSink) == true,
                   creating || expected.map(isOutputSink) == true else {
-                return toolInvalidParamsResult("set_send_output_verified requires an exact physical Mixer target_ref and source-census ordinal: occupied physical/stereo/existing-bus replacement requires replace_existing:true; fresh sole-empty Stereo creation requires expected_current:no_send and replace_existing:false")
+                return toolInvalidParamsResult("set_send_output_verified requires an exact physical Mixer target_ref and source-census ordinal: occupied physical/stereo/existing-bus replacement requires replace_existing:true; fresh sole-empty Stereo creation requires expected_current:no_send and replace_existing:false. "
+                    + Self.busCreationHint)
             }
             guard verifiedGate.tryAcquire() else {
                 return verifiedOpInProgressResult(operation)
@@ -272,8 +273,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 } else { pair = cachedPair; currentPhysical = physical }
                 if creating, pair == nil {
                     return toolTextResult(.error(HonestContract.encodeStateC(error: .staleSnapshot,
-                        hint: "Fresh-empty creation's retained original-header association was unavailable; "
-                            + "this MCP request terminated before writing.",
+                        hint: Self.freshCreationAssociationHint,
                         extras: [
                             "operation": operation,
                             "write_attempted": false,
@@ -826,6 +826,16 @@ struct MixerDispatcher: OperationTraceDispatching {
 
     /// #291 R2 — a `{kind, number|ports}` object as an `OutputAssignment`, or what is wrong with it.
     /// Unknown keys are refused rather than ignored, so a misspelt `ports` is not read as a bus.
+    static let freshCreationAssociationHint =
+        "Fresh-empty creation's retained original-header association was unavailable; this MCP request "
+        + "terminated before writing. Precondition: a project inspect_session capture in this server session must "
+        + "report this strip's track association as observed (its associations.coverage is not unavailable). "
+        + "Without it no Send can be created or replaced on this strip. Nothing was written."
+    static let busCreationHint =
+        "A fresh Send is created to stereo_output only. To send to a bus, create the Stereo Send first, then "
+        + "call again with replace_existing:true, expected_current:{kind:stereo_output} and destination "
+        + "{kind:bus, number:N}; the bus must already have a receiving Aux strip, because no operation creates one."
+
     static func outputAssignmentParam(
         _ value: Value,
         field: String

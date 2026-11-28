@@ -262,3 +262,24 @@ private actor HeldVerifiedChannel: Channel {
         release = nil
     }
 }
+
+// #1618 step 3a: on Logic 13 a bus-destination creation was refused with a generic invalid_params hint
+// and a Stereo creation with an unexplained stale_snapshot. Both hints now name the precondition.
+@Test func sendCreationRefusalsNameThePreconditionAndNextStep() async throws {
+    let result = await MixerDispatcher.handle(
+        command: "set_send_output_verified",
+        params: [
+            "target_ref": .string("mix_x"), "ordinal": .int(0),
+            "destination": .object(["kind": .string("bus"), "number": .int(1)]),
+            "expected_current": .object(["kind": .string("no_send")]),
+            "replace_existing": .bool(false),
+        ],
+        router: ChannelRouter(), cache: StateCache(), verifiedGate: VerifiedOpGate())
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(body["error"] as? String == "invalid_params")
+    let hint = try #require(body["hint"] as? String)
+    #expect(hint.contains("create the Stereo Send first"))
+    #expect(hint.contains("no operation creates one"))
+    #expect(MixerDispatcher.freshCreationAssociationHint.contains("inspect_session"))
+    #expect(MixerDispatcher.freshCreationAssociationHint.contains("Nothing was written"))
+}
