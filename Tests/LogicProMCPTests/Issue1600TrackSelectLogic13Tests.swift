@@ -348,7 +348,7 @@ struct Issue1600TrackSelectLogic13Tests {
     /// restore is refused, so the replacement stays the only selected row. The ordinal read-back
     /// would call that State A; the failure must reach the caller instead, and delete and duplicate,
     /// which act on the selection, must not be sent.
-    @Test func aRecycledRowWithARefusedRestoreIsNotStateAAndStopsDeleteAndDuplicate() async {
+    @Test func aRecycledRowWithARefusedRestoreIsNotStateAAndStopsDeleteAndDuplicate() async throws {
         let f = Logic13SelectFixture(headers: ["A", "B", "C"], strips: inOrder(["A", "B", "C"]), selected: 2)
         f.recycleRowOnSelect = 0
         f.mixerWritesAccepted = 1
@@ -368,7 +368,8 @@ struct Issue1600TrackSelectLogic13Tests {
             let answer = await TrackDispatcher.handle(
                 command: command, params: ["index": .int(0), "expected_name": .string("A")],
                 router: router, cache: StateCache(), liveTrackNames: sharedLiveTrackNames([0: "A"]))
-            #expect(answer.isError == true)
+            let refused = try #require(answer.isError)
+            #expect(refused)
         }
         #expect(await select.selects == 2)
         #expect(await keyCmd.executedOps.isEmpty)
