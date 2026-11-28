@@ -23,16 +23,7 @@ enum AXMixerStripBinding {
         }
 
         private func currentMixerLookup(runtime: AXLogicProElements.Runtime) -> AXLogicProElements.MixerAreaLookup {
-            guard runtime.ax.attributeValuesResult != nil else {
-                return AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
-            }
-            // Only this held-source proof uses the existing fresh census. The
-            // ordinary discovery/poller and older runtimes keep their own path.
-            // No earlier discovery or batched value becomes an identity token.
-            return (try? AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: runtime,
-                requiresCompleteAbsence: true, checking: {
-                    if Task.isCancelled { throw SessionPopulationObservation.AcquisitionError.cancelled }
-                }))?.lookup ?? .childrenUnread
+            AXMixerStripBinding.currentMixerLookup(in: window, runtime: runtime)
         }
 
         /// Re-read owner and complete current membership, not the cached ordinal or strip name.
@@ -62,6 +53,60 @@ enum AXMixerStripBinding {
 
     @TaskLocal static var current: Binding?
     @TaskLocal static var outputAssociation: AccessibilityChannel.HeldSelectionAssociation.Pair?
+
+    /// The Mixer a held strip binding re-derives to prove its owner is current. A caller that
+    /// builds a `Binding` uses this same lookup, so `currentIndex` compares like with like.
+    static func currentMixerLookup(
+        in window: AXUIElement, runtime: AXLogicProElements.Runtime
+    ) -> AXLogicProElements.MixerAreaLookup {
+        guard runtime.ax.attributeValuesResult != nil else {
+            return AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+        }
+        // Only this held-source proof uses the existing fresh census. The
+        // ordinary discovery/poller and older runtimes keep their own path.
+        // No earlier discovery or batched value becomes an identity token.
+        return (try? AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: runtime,
+            requiresCompleteAbsence: true, checking: {
+                if Task.isCancelled { throw SessionPopulationObservation.AcquisitionError.cancelled }
+            }))?.lookup ?? .childrenUnread
+    }
+
+    enum SelectedChildRead {
+        case unavailable, unverified
+        case observed(AXUIElement)
+    }
+
+    /// The Mixer's selected child: the one relationship between a selected track header and a
+    /// strip that the AX tree publishes. Supplied by this exact Mixer owner, not a strip ordinal
+    /// or name join. Individual strip AXSelected booleans are not equivalent.
+    static func selectedChildRead(
+        of mixer: AXUIElement, census: [AXUIElement], runtime: AXHelpers.Runtime,
+        permittingRead: () -> Bool = { true }
+    ) -> SelectedChildRead {
+        let values = AXHelpers.getNonHelpAttributes(mixer, [kAXSelectedChildrenAttribute as String],
+            runtime: runtime, permittingRead: permittingRead)
+        switch values[0] {
+        case .failure(let error) where error.isDefinitiveAbsence: return .unavailable
+        case .success(.none): return .unavailable
+        case .success(.some(let raw)):
+            guard CFGetTypeID(raw) == CFArrayGetTypeID() else { return .unverified }
+            let array = unsafeDowncast(raw, to: CFArray.self)
+            guard CFArrayGetCount(array) == 1 else { return .unverified }
+            let element = unsafeBitCast(CFArrayGetValueAtIndex(array, 0), to: CFTypeRef.self)
+            guard CFGetTypeID(element) == AXUIElementGetTypeID() else { return .unverified }
+            let child = unsafeBitCast(element, to: AXUIElement.self)
+            // Renew reciprocal membership after the relationship read: a
+            // retired child can retain its old parent and CF identity.
+            guard let current = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime),
+                  current.strips.count == census.count,
+                  zip(current.strips, census).allSatisfy({ CFEqual($0, $1) }),
+                  current.strips.filter({ CFEqual($0, child) }).count == 1,
+                  let parent: AXUIElement = AXHelpers.getAttribute(child, kAXParentAttribute as String,
+                    runtime: runtime), CFEqual(parent, mixer) else { return .unverified }
+            return .observed(child)
+        default: return .unverified
+        }
+    }
 }
 
 /// The unique input control observed on one physical strip in a captured AX frame.

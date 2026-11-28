@@ -1087,38 +1087,14 @@ extension AccessibilityChannel {
             return true
         }
 
-        private enum SelectedChildRead {
-            case unavailable, unverified
-            case observed(AXUIElement)
-        }
+        private typealias SelectedChildRead = AXMixerStripBinding.SelectedChildRead
 
         /// A relationship supplied by this exact Mixer owner, not a strip ordinal
         /// or name join. Individual strip AXSelected booleans are not equivalent.
         private func selectedChildRead() -> SelectedChildRead {
-            let values = AXHelpers.getNonHelpAttributes(mixer, [kAXSelectedChildrenAttribute as String],
-                runtime: logic.ax, permittingRead: {
-                    (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
-                })
-            switch values[0] {
-            case .failure(let error) where error.isDefinitiveAbsence: return .unavailable
-            case .success(.none): return .unavailable
-            case .success(.some(let raw)):
-                guard CFGetTypeID(raw) == CFArrayGetTypeID() else { return .unverified }
-                let array = unsafeDowncast(raw, to: CFArray.self)
-                guard CFArrayGetCount(array) == 1 else { return .unverified }
-                let element = unsafeBitCast(CFArrayGetValueAtIndex(array, 0), to: CFTypeRef.self)
-                guard CFGetTypeID(element) == AXUIElementGetTypeID() else { return .unverified }
-                let child = unsafeBitCast(element, to: AXUIElement.self)
-                // Renew reciprocal membership after the relationship read: a
-                // retired child can retain its old parent and CF identity.
-                guard let current = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: logic.ax),
-                      Self.same(strips, current.strips),
-                      current.strips.filter({ CFEqual($0, child) }).count == 1,
-                      let parent: AXUIElement = AXHelpers.getAttribute(child, kAXParentAttribute as String,
-                        runtime: logic.ax), CFEqual(parent, mixer) else { return .unverified }
-                return .observed(child)
-            default: return .unverified
-            }
+            AXMixerStripBinding.selectedChildRead(of: mixer, census: strips, runtime: logic.ax, permittingRead: {
+                (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+            })
         }
 
         /// Capture only while the old complete census and its actual reciprocal
