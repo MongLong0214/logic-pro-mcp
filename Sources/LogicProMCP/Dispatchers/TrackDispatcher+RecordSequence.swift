@@ -412,7 +412,7 @@ extension TrackDispatcher {
             }
             gotoResult = await TransportDispatcher.finalizeGotoPositionResult(
                 routedGoto, requestedPosition: "1.1.1.1", beforeTransport: beforePosition,
-                router: router, cache: cache
+                router: router, cache: cache, requireAllComponents: true
             )
         }
         if let lease = displayModeLease {
@@ -873,7 +873,7 @@ extension TrackDispatcher {
             }
             let gotoResult = await TransportDispatcher.finalizeGotoPositionResult(
                 routedGoto, requestedPosition: "1.1.1.1", beforeTransport: beforePosition,
-                router: router, cache: cache
+                router: router, cache: cache, requireAllComponents: true
             )
             guard !(gotoResult.isError ?? false) else {
                 return failure("playhead_unverified", stage: "relocation_playhead",

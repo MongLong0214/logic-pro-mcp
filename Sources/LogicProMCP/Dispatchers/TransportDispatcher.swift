@@ -867,7 +867,8 @@ struct TransportDispatcher: OperationTraceDispatching {
         requestedPosition: String,
         beforeTransport: TransportState?,
         router: ChannelRouter,
-        cache: StateCache
+        cache: StateCache,
+        requireAllComponents: Bool = false
     ) async -> CallTool.Result {
         guard result.isSuccess else {
             return toolTextResult(result)
@@ -958,23 +959,19 @@ struct TransportDispatcher: OperationTraceDispatching {
         // A matching post-write value is a landing observation, not evidence that this invocation
         // moved the playhead. State A needs a readable pre-write position that differs from the
         // request and a post-write one that equals it, at the precision the display shows.
-        if verificationWithheld == nil, observedEffect, !unreadableRequestedBeyondDefault {
+        // record_sequence imports at the playhead, so it accepts only a tick-exact reading (#1420).
+        if verificationWithheld == nil, observedEffect, !unreadableRequestedBeyondDefault,
+           !(requireAllComponents && !unobservedMusicalComponents.isEmpty) {
             return toolTextResult(HonestContract.encodeStateA(extras: extras))
         }
 
-        if verificationWithheld == nil, afterPrefix == false, !requestedPosition.contains(":") {
-            return toolTextResult(
-                HonestContract.encodeStateC(
-                    error: .readbackMismatch,
-                    hint: "goto_position wrote a position, but the playhead reads a different one.",
-                    extras: extras
-                ),
-                isError: true
-            )
-        }
-
+        // A readable position that differs from the request is a mismatch; anything else could
+        // not be compared. Both stay State B: the write was issued and is not confirmed.
+        let reason: HonestContract.UncertainReason =
+            verificationWithheld == nil && afterPrefix == false && !requestedPosition.contains(":")
+                ? .readbackMismatch : .readbackUnavailable
         return toolTextResult(
-            HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras),
+            HonestContract.encodeStateB(reason: reason, extras: extras),
             isError: true
         )
     }

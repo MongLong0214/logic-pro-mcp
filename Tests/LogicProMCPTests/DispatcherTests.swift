@@ -789,9 +789,8 @@ private func liveTransportJSON(
 
     #expect(result.isError!)
     let object = try #require(parseDispatcherObject(dispatcherText(result)))
-    // #1601: a playhead that reads a different position is State C.
-    #expect(object["state"] as? String == "C")
-    #expect(object["error"] as? String == "readback_mismatch")
+    #expect(!((object["verified"] as? Bool)!))
+    #expect(object["reason"] as? String == "readback_mismatch")
     #expect(object["verification_source"] as? String == "transport_state")
     #expect(object["requested"] as? String == "9.1.1.1")
     #expect(object["observed"] as? String == "8.1.1.1")

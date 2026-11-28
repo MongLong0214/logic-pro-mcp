@@ -94,11 +94,12 @@ struct Issue1601GotoReadableDisplayTests {
         #expect(!(try #require(o["verified"] as? Bool)))
     }
 
-    @Test("a different bar and beat is State C")
-    func differentPositionIsStateC() async throws {
+    @Test("a different bar and beat is an unverified mismatch")
+    func differentPositionIsMismatch() async throws {
         let o = try await run(["12.4", "7.1"], bar: 9, navigate: true)
-        #expect(o["state"] as? String == "C")
-        #expect(o["error"] as? String == "readback_mismatch")
+        #expect(o["state"] as? String == "B")
+        #expect(o["reason"] as? String == "readback_mismatch")
+        #expect(!(try #require(o["verified"] as? Bool)))
     }
 
     @Test("a playhead that already read the request cannot show this call moved it")
