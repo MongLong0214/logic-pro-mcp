@@ -1192,7 +1192,8 @@
       "2026-11-08-logic13-control-bar-toolbar",
       "2026-11-28-logic13-set-volume-header-fader-latency",
       "2026-11-28-logic13-stop-button-and-beats-display",
-      "2026-11-28-logic13-track-select-mixer-strip"
+      "2026-11-28-logic13-track-select-mixer-strip",
+      "2026-11-29-logic13-focus-settle-times"
     ],
     "records_from_a_superseded_build": [
       "2026-09-03-sort-settle-witness-accepts-prescroll-order",
@@ -1637,7 +1638,8 @@
       "2026-10-21-midi-import-panel-drops-an-early-go-to-key-and-holds-its-buttons-directly",
       "2026-11-08-logic13-control-bar-toolbar",
       "2026-11-28-logic13-set-volume-header-fader-latency",
-      "2026-11-28-logic13-track-select-mixer-strip"
+      "2026-11-28-logic13-track-select-mixer-strip",
+      "2026-11-29-logic13-focus-settle-times"
     ],
     "schema_v1_records": [
       "2026-09-03-sort-settle-witness-accepts-prescroll-order",
@@ -3080,11 +3082,12 @@
       "reason": "ko-KR re-read on 13.0 (7801)"
     },
     "manual_reverify": {
-      "date": "2026-11-28",
+      "date": "2026-11-29",
       "members": [
-        "2026-11-28-logic13-set-volume-header-fader-latency"
+        "2026-11-28-logic13-set-volume-header-fader-latency",
+        "2026-11-29-logic13-focus-settle-times"
       ],
-      "reason": "the set_volume latency record is a manual live measurement whose evidence files stay in the author's cache"
+      "reason": "New record 2026-11-29-logic13-focus-settle-times is a manual-reverify timing measurement with no evidence file, like the other focus timing records."
     },
     "records_from_a_superseded_build": {
       "date": "2026-11-17",
@@ -3461,11 +3464,12 @@
       "reason": "ko-KR re-read on 13.0 (7801)"
     },
     "records_without_evidence": {
-      "date": "2026-11-28",
+      "date": "2026-11-29",
       "members": [
-        "2026-11-28-logic13-set-volume-header-fader-latency"
+        "2026-11-28-logic13-set-volume-header-fader-latency",
+        "2026-11-29-logic13-focus-settle-times"
       ],
-      "reason": "the set_volume latency record is a manual live measurement whose evidence files stay in the author's cache"
+      "reason": "New record 2026-11-29-logic13-focus-settle-times is a manual-reverify timing measurement with no evidence file, like the other focus timing records."
     },
     "surfaces_without_records": {
       "date": "2026-11-20",
