@@ -288,7 +288,7 @@ actor AccessibilityChannel: Channel {
                 mixerState: { AccessibilityChannel.defaultGetMixerState(runtime: logicRuntime) },
                 mixerStates: { AccessibilityChannel.defaultGetMixerStates(runtime: logicRuntime, stoppingWhen: $0) },
                 channelStrip: { AccessibilityChannel.defaultGetChannelStrip(params: $0, runtime: logicRuntime) },
-                setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime, headerCache: .shared) },
+                setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
                 projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) },
                 markers: { AccessibilityChannel.defaultGetMarkers(runtime: logicRuntime) },
                 openMarkerList: { await AccessibilityChannel.defaultOpenMarkerList(runtime: logicRuntime) },
