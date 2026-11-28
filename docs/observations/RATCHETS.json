@@ -3080,7 +3080,6 @@
     "manual_reverify": {
       "date": "2026-11-28",
       "members": [
-        "2026-11-28-logic13-stop-button-and-beats-display",
         "2026-11-28-logic13-track-select-mixer-strip"
       ],
       "reason": "#1600: admit exactly the named Logic 13.0 build 7801 / ko-KR track-selection observation as a manual-reverification gap without a committed evidence file. Replay needs a live Logic 13, disposable project copies, an inline rename opened through the Track menu and an independent Accessibility reader; the trials are transcribed inline in the record. This grants no other build, locale, Mixer view or write authority."
