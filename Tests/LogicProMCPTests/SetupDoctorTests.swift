@@ -62,7 +62,7 @@ private func doctorRuntime(
     runtime.keyCommandsPresetStaged = { true }
     runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
-    runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
+    runtime.tccCrossContextProbe = { .recorded("recognised_entries=1;unrecognised_entries=0;service=accessibility;principal_hint=Terminal") }
     runtime.blockingDialogInfo = { nil }
     runtime.fileExistsAtPath = { _ in exists }
     runtime.isRegularFile = { _ in exists }

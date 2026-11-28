@@ -235,7 +235,7 @@ import Testing
         ),
     ]
     let findings = SetupDoctor.tccFindings(rows)
-    #expect(findings.contains(where: { $0.contains("appleevents:mobilelogic") }))
+    #expect(findings.contains("service=appleevents:logic-pro-creator-studio;principal_hint=com.apple.Terminal"))
 }
 
 @Test func processUtilsPreferredLogicPIDPrefersResolvedTarget() {

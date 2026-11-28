@@ -261,9 +261,11 @@ enum SetupDoctor {
         let responsibleHint: String
     }
 
+    /// The TCC database enrichment. `recorded` carries counts and fixed labels for recognised clients
+    /// only. It never asserts a grant or a denial, and it never produces a pass: readiness comes from
+    /// the live permission probes (#1596).
     enum TCCCrossContextProbe: Equatable, Sendable {
-        case granted(String)
-        case denied(String)
+        case recorded(String)
         case skipped(reason: DoctorSkipReason)
     }
 

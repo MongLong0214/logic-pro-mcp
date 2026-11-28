@@ -265,7 +265,7 @@ This check is skipped when Claude Desktop is not the selected client. When Claud
 
 <a id="doctor-permissionsaccessibility"></a>
 ### `permissions.accessibility`
-Reports the launcher app's current Accessibility authorization. A non-pass result is a terminal observation for this unattended run; doctor emits no remediation for this check.
+Reports the current Accessibility authorization of the measured TCC principal, which the permission report names (the client app or the LogicProMCP binary itself). A non-pass result is a terminal observation for this unattended run; doctor emits no remediation for this check.
 
 <a id="doctor-permissionsautomation-logic-pro"></a>
 ### `permissions.automation_logic_pro`

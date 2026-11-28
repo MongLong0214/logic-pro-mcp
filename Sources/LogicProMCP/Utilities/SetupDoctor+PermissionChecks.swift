@@ -135,23 +135,23 @@ extension SetupDoctor {
 
     static func tccCrossContextCheck(runtime: Runtime) -> Check {
         switch runtime.tccCrossContextProbe() {
-        case let .granted(detail):
+        case let .recorded(detail):
+            // Never a pass and never a grant claim: a database row is historical context, and the
+            // measured principal is judged only by the live probes.
             return check(
                 id: "permissions.tcc_cross_context",
                 domain: "permissions",
-                status: .pass,
-                summary: "TCC database confirms a known MCP host grant.",
-                evidence: ["tcc_db_readable": "true", "full_disk_access": "true", "findings": detail],
-                remediationType: .none
-            )
-        case let .denied(detail):
-            return check(
-                id: "permissions.tcc_cross_context",
-                domain: "permissions",
-                status: .warn,
-                summary: "TCC database shows a known MCP host explicitly denied a required permission.",
-                evidence: ["tcc_db_readable": "true", "full_disk_access": "true", "findings": detail],
-                remediationType: .none
+                status: .skipped,
+                summary: "TCC database holds historical entries for recognised MCP clients. They do not establish any grant for the measured principal; live permission probes remain authoritative.",
+                evidence: [
+                    "tcc_db_readable": "true",
+                    "full_disk_access": "true",
+                    "reason": DoctorSkipReason.principalNotFound.rawValue,
+                    "findings": detail,
+                ],
+                remediationType: .none,
+                optional: true,
+                skipReason: .principalNotFound
             )
         case let .skipped(reason):
             let readable: String

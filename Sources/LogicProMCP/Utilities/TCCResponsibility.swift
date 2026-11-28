@@ -98,22 +98,29 @@ enum TCCResponsibility {
         "zed": "Zed.app",
     ]
 
+    /// The fixed label of a recognised MCP host or terminal named by a TCC database `client` value,
+    /// or nil. Matching is exact: a bundle identifier, or the basename without `.app`, must equal a
+    /// key of the closed table. A substring is never enough, so `com.example.logicpromcp.sample` is
+    /// not a host.
+    static func knownTCCClientLabel(for client: String) -> String? {
+        if let label = knownTCCClientLabels[client.lowercased()] { return label }
+        let basename = client.contains("/") ? (client as NSString).lastPathComponent : client
+        let name = basename.lowercased().hasSuffix(".app") ? String(basename.dropLast(4)).lowercased() : basename.lowercased()
+        return knownTCCClientLabels[name]
+    }
+
     /// The public-safe label for the `client` column of a TCC database row (doctor's cross-context
-    /// enrichment). The same rule as `publicLabel`: a row naming an executable called exactly
-    /// `LogicProMCP` gets the fixed product label, a client on the fixed list gets its fixed label,
-    /// and everything else is `another executable` or `another application`. A bundle identifier or
-    /// name that is not on the list is never copied, even when it contains a word the relevance
-    /// filter looks for.
+    /// enrichment). A recognised host gets its fixed label (`knownTCCClientLabel`). An executable
+    /// called exactly `LogicProMCP` gets the fixed product label. Everything else is `another
+    /// executable` or `another application`. A bundle identifier or name that is not on the list is
+    /// never copied.
     static func publicLabel(forTCCClient client: String) -> String {
-        let lowered = client.lowercased()
-        if let label = knownTCCClientLabels[lowered] { return label }
+        if let label = knownTCCClientLabel(for: client) { return label }
         if client.contains("/") {
             let basename = (client as NSString).lastPathComponent
             if basename == productExecutableName {
                 return publicLabel(forExecutablePath: client, bundleIdentifier: { _ in nil })
             }
-            let name = basename.lowercased().hasSuffix(".app") ? String(basename.dropLast(4)).lowercased() : basename.lowercased()
-            if let label = knownTCCClientLabels[name] { return label }
             return basename.lowercased().hasSuffix(".app") ? "another application" : "another executable"
         }
         return client == productExecutableName ? productExecutableName : "another application"

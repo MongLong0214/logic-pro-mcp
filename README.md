@@ -204,7 +204,7 @@ Live measurement on Logic Pro 13.0 is in progress (PR #1590 adds the Logic versi
 
 Start with `LogicProMCP doctor` and `LogicProMCP --check-permissions`, then see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). The items that most often apply:
 
-- **Permissions look granted but fail.** Grants belong to the launcher app and to the exact binary; after an upgrade or rebuild, remove stale entries and grant again.
+- **Permissions look granted but fail.** Grants belong to the TCC principal that the permission report names: the client app, or the exact LogicProMCP binary when the client disclaims responsibility. After an upgrade or rebuild, remove only entries for binaries no client launches any more, then grant the measured principal again.
 - **Homebrew refuses the tap.** Homebrew 6.0+ needs `brew trust monglong0214/logic-pro-mcp`.
 - **MIDI channels degraded or ports missing.** Usually a second server launch holds the port group; stop the duplicate and restart.
 - **Health says Logic is not ready.** Logic needs to be running with a project open, no blocking dialog, and not sitting at the project chooser.

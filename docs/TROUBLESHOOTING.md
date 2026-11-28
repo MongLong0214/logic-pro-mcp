@@ -69,7 +69,11 @@ Procedure:
 
 1. From the affected client, read the principal label. For a desktop client, ask it to run `logic_system permissions`; for a terminal client, run `LogicProMCP --check-permissions` in it. A run from another app measures that app, not the client that is failing.
 2. Keep the entries that are already granted. Remove an entry only when you know it belongs to a binary no client launches any more, such as an old Homebrew Cellar version. Never delete granted entries to start over.
-3. In **System Settings -> Privacy & Security**, add or enable the entry for that principal under **Accessibility** and under **Automation** (Logic Pro and System Events; PostEvent is reported separately, so read its line too). If the principal is the LogicProMCP binary itself, find its path locally in your own Terminal while the client is running: `ps -axo pid=,comm= | grep LogicProMCP`. The path is never shown in MCP output. To add it by hand use **+** and press Cmd-Shift-G to paste the path. Do not use `which LogicProMCP`: Terminal may resolve a different copy. If two copies of the same install kind are running (for example two Homebrew versions), the public label cannot tell them apart, so quit the other client first so that exactly one remains; then the path `ps` prints is the one the principal refers to.
+3. In **System Settings -> Privacy & Security**, make the entry for that principal effective under **Accessibility** and under **Automation** (Logic Pro and System Events; PostEvent is reported separately, so read its line too).
+   - **Accessibility**: if the principal is missing, add it with **+** (Cmd-Shift-G pastes a path), then enable it.
+   - **Automation**: macOS has no **+** here. An entry appears only after that principal has asked for Automation once. If the entry is listed, enable its toggles. If it is absent, nothing in System Settings can add it. Use the feature from the affected client so that macOS shows its own prompt, and answer that prompt yourself. LogicProMCP does not automate or answer permission prompts.
+   - If the principal is the LogicProMCP binary itself, find its path locally in your own Terminal while the client is running: `ps -axww -o pid=,comm= | grep LogicProMCP`. The `-ww` flag removes the width limit, so a long path is not cut before its `LogicProMCP` suffix. The path is never shown in MCP output. Do not use `which LogicProMCP`: Terminal may resolve a different copy.
+   - **Stop rule.** If that listing shows zero, or more than one, `LogicProMCP` process while only the affected client is running, or if the principal line reads a generic label (`another executable`, `another application`) or an unresolved one (`unidentified process`, or `tcc_principal` unresolved), STOP and do not change any grant. Instead, quit other clients until exactly one remains and run the listing again, or share the `--check-permissions` output in the issue.
 4. Verify from that same client: run `logic_system permissions` (or `--check-permissions`) again and read the same principal line and the four states.
 
 A Homebrew upgrade installs a new `Cellar/<version>` path and the release binary carries only an ad-hoc signature, so a grant for one version does not carry over to the next and the old entry stays in the list looking enabled. Repeat the procedure after each `brew upgrade logic-pro-mcp`.
@@ -82,7 +86,7 @@ Apply the rule in [Which process needs the permission](#which-process-needs-the-
 
 ### Automation denied or not verifiable
 
-Launch Logic Pro once, then under **Privacy & Security -> Automation** allow the reported `TCC principal` (see [Which process needs the permission](#which-process-needs-the-permission)) to control **Logic Pro**. When the principal is the LogicProMCP binary itself, the entry to enable is that binary, not the launcher app.
+Launch Logic Pro once, then under **Privacy & Security -> Automation** enable **Logic Pro** for the reported `TCC principal` (see [Which process needs the permission](#which-process-needs-the-permission)). When the principal is the LogicProMCP binary itself, the entry to enable is that binary, not the launcher app. If the principal has no Automation entry at all, step 3 of the procedure applies: that entry appears only after the principal has asked once, and it cannot be added by hand.
 
 `--check-permissions`, `logic_system health`, and `doctor` report each TCC target as one of three states — read them differently:
 
@@ -96,7 +100,7 @@ Launch Logic Pro once, then under **Privacy & Security -> Automation** allow the
 
 `-1743`, `errAEEventNotPermitted`, or "not authorized to send Apple events" from `tell application "System Events"` means the reported `TCC principal` is denied Automation to System Events. This is a permission gap on that principal, not a Logic Pro limitation, and Logic Pro Automation being granted is separate and not sufficient. System Events Automation is part of both `--check-permissions` and doctor readiness.
 
-Fix it by applying the rule in [Which process needs the permission](#which-process-needs-the-permission): under **System Settings -> Privacy & Security -> Automation**, enable **System Events** for the process the principal line names, which is the LogicProMCP binary itself when `tcc_principal_is_self` is `true`. Running the server under a client that already holds the grant also works, because then that client is the principal.
+Fix it by applying the rule in [Which process needs the permission](#which-process-needs-the-permission): under **System Settings -> Privacy & Security -> Automation**, enable **System Events** for the process the principal line names, which is the LogicProMCP binary itself when `tcc_principal_is_self` is `true`. Switching to another client helps only when the principal measured from that client is that client. Run `logic_system permissions` from the other client: if its principal line names the client app (`tcc_principal_is_self` is `false`), the grant on that client applies. If it names the LogicProMCP binary (`tcc_principal_is_self` is `true`), the grant belongs to the binary, and a grant on the client does not change that. A client that disclaims responsibility is not covered by its own grant.
 
 ### PostEvent denied
 
@@ -257,7 +261,7 @@ pkill -f LogicProMCP
 LogicProMCP doctor
 ```
 
-If permissions look wrong after reinstalling, remove stale TCC entries in System Settings and grant them again to the actual launcher app.
+If permissions look wrong after reinstalling, remove only the entries for binaries no client launches any more, then run the procedure in [Which process needs the permission](#which-process-needs-the-permission) from the affected client and grant the principal its line names. After a reinstall that principal can be the LogicProMCP binary at its new path, not the client app, so do not grant the launcher by default.
 
 ## Still stuck?
 
