@@ -73,7 +73,7 @@ struct Issue1601GotoReadableDisplayTests {
     func gotoBarVerifiesAtBarBeat() async throws {
         let o = try await run(["12.4", "9.1"], bar: 9, navigate: true)
         #expect(o["state"] as? String == "A")
-        #expect(o["verified"] as? Bool == true)
+        #expect(try #require(o["verified"] as? Bool))
         #expect(o["observed"] as? String == "9.1")
         #expect(o["unobserved_position_components"] as? [String] == ["subdivision", "tick"])
         #expect(o["verified_precision"] as? String == "bar.beat")
@@ -91,7 +91,7 @@ struct Issue1601GotoReadableDisplayTests {
         let o = try await run(["9.1", "5.2"], position: "5.2.3.50")
         #expect(o["state"] as? String == "B")
         #expect(o["reason"] as? String == "readback_unavailable")
-        #expect(o["verified"] as? Bool == false)
+        #expect(!(try #require(o["verified"] as? Bool)))
     }
 
     @Test("a different bar and beat is State C")
