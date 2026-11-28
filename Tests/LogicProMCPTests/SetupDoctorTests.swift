@@ -62,7 +62,7 @@ private func doctorRuntime(
     runtime.keyCommandsPresetStaged = { true }
     runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
-    runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
+    runtime.tccCrossContextProbe = { .recorded("recognised_entries=1;unrecognised_entries=0;service=accessibility;principal_hint=Terminal") }
     runtime.blockingDialogInfo = { nil }
     runtime.fileExistsAtPath = { _ in exists }
     runtime.isRegularFile = { _ in exists }
@@ -953,7 +953,7 @@ private func issue26RepositoryRootURL() -> URL {
     let launch = try #require(report.checks.first { $0.id == "permissions.launch_context" })
     #expect(report.status == .ok)
     #expect(launch.status == .pass)
-    #expect(launch.summary == "This report could not identify the responsible process; permission results remain bound to the unresolved launch context.")
+    #expect(launch.summary == "The responsible process could not be measured, so permission results are shown without an identity; the identity is unresolved (launch context hint: unknown).")
     #expect(launch.remediation.type == .none)
     #expect(launch.remediation.value == "")
     #expect(!(SetupDoctor.renderHuman(report, useColor: false).contains("run under Terminal")))

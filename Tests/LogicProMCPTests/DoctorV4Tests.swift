@@ -52,7 +52,7 @@ private func doctorV4Runtime(
     runtime.keyCommandsPresetStaged = { true }
     runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { launchContext }
-    runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
+    runtime.tccCrossContextProbe = { .recorded("recognised_entries=1;unrecognised_entries=0;service=accessibility;principal_hint=Terminal") }
     runtime.blockingDialogInfo = { blockingDialog }
     runtime.fileExistsAtPath = { path in
         path == "/opt/homebrew/bin/LogicProMCP" || path == "/usr/local/bin/LogicProMCP"

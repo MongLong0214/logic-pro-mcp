@@ -82,26 +82,46 @@ enum LogicProVariantPolicy {
     }
 
     private static func loadRecords() -> [LogicProVariantRecord] {
-        if let records = loadManifestRecords() {
-            return records
-        }
-        // #1627: a packaged install (Homebrew) ships no manifest.json, so the built-in records are
-        // its normal source and say nothing. Only a path the user configured and that could not be
-        // used is worth a line.
-        if let configured = ProcessInfo.processInfo.environment[manifestEnvironmentKey]?
-            .trimmingCharacters(in: .whitespacesAndNewlines), !configured.isEmpty {
-            fputs(
-                "LogicProVariantPolicy: \(manifestEnvironmentKey) names a manifest that could not be "
-                    + "used; using the built-in Logic Pro variants\n",
-                stderr
-            )
+        resolveRecords(
+            manifestURL: findRepoFile(relativePath: "manifest.json"),
+            configuredPath: ProcessInfo.processInfo.environment[manifestEnvironmentKey],
+            warn: { fputs($0 + "\n", stderr) }
+        )
+    }
+
+    /// What an unusable manifest says. Neither sentence carries a path: an automatically discovered
+    /// one can be an unrelated parent directory's file, whose name (and any line break in it) does
+    /// not belong in a log, and a configured one is already known to the person who set it.
+    static let unusableDiscoveredManifestWarning =
+        "LogicProVariantPolicy: a Logic Pro variant manifest was found but could not be used; "
+        + "using the built-in Logic Pro variants"
+    static var unusableConfiguredManifestWarning: String {
+        "LogicProVariantPolicy: \(manifestEnvironmentKey) names a manifest that could not be used; "
+            + "using the built-in Logic Pro variants"
+    }
+
+    /// The manifest's variants, or the built-in ones with at most one line saying why.
+    ///
+    /// #1627: a packaged install (Homebrew) ships no manifest.json, so the built-in records are its
+    /// normal source and say nothing. Two cases are worth a line: a manifest that was FOUND but
+    /// cannot be used, and a configured path that names nothing at all. Neither line names a path.
+    static func resolveRecords(
+        manifestURL: URL?, configuredPath: String?, warn: (String) -> Void
+    ) -> [LogicProVariantRecord] {
+        let isConfigured = !(configuredPath ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if let manifestURL {
+            if let records = manifestRecords(at: manifestURL) {
+                return records
+            }
+            warn(isConfigured ? unusableConfiguredManifestWarning : unusableDiscoveredManifestWarning)
+        } else if isConfigured {
+            warn(unusableConfiguredManifestWarning)
         }
         return emergencyFallback()
     }
 
-    private static func loadManifestRecords() -> [LogicProVariantRecord]? {
-        guard let url = findRepoFile(relativePath: "manifest.json"),
-              let data = try? Data(contentsOf: url),
+    private static func manifestRecords(at url: URL) -> [LogicProVariantRecord]? {
+        guard let data = try? Data(contentsOf: url),
               let root = try? JSONDecoder().decode(ManifestRoot.self, from: data),
               !root.supportedLogicProVariants.isEmpty else {
             return nil
@@ -175,7 +195,7 @@ enum LogicProVariantPolicy {
         return nil
     }
 
-    private static func emergencyFallback() -> [LogicProVariantRecord] {
+    static func emergencyFallback() -> [LogicProVariantRecord] {
         [
             LogicProVariantRecord(
                 name: "desktop",
