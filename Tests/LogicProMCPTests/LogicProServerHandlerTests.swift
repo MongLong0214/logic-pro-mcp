@@ -136,7 +136,10 @@ func testLogicProServerHandlersReadResourcesWithoutRegisteredTransport() async t
     let trackData = try #require(trackEnvelope["data"] as? [[String: Any]])
 
     #expect(serverResourceText(transport).contains("\"tempo\""))
-    #expect(trackData.allSatisfy { $0["placeholder"] as? Bool == true })
+    // #1603: a cold first read now populates from Logic when it is running, so live rows are valid.
+    let trackSource = try #require(trackEnvelope["source"] as? String)
+    let allPlaceholders = trackData.allSatisfy { $0["placeholder"] as? Bool ?? false }
+    #expect(trackSource == "ax_live" || allPlaceholders)
     #expect(serverResourceText(health).contains("\"logic_pro_running\""))
 }
 

@@ -538,6 +538,20 @@ actor LogicProServer {
 
     // MARK: - Tool Registration (10 dispatchers)
 
+    /// Resume when `work` finishes or after `seconds`, whichever is first. `work` is not
+    /// awaited past the bound (a queued refresh waiter cannot be cancelled).
+    static func awaitBounded(seconds: Double, _ work: @escaping @Sendable () async -> Void) async {
+        final class Once: @unchecked Sendable {
+            let lock = NSLock(); var done = false
+            func take() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
+        }
+        let once = Once()
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            Task { await work(); if once.take() { c.resume() } }
+            Task { try? await Task.sleep(for: .seconds(seconds)); if once.take() { c.resume() } }
+        }
+    }
+
     func makeHandlers(
         dialogPresent: @escaping @Sendable () -> Bool = { false },
         supportBundleExporter: SystemDispatcher.SupportBundleExporter? = nil
@@ -760,7 +774,10 @@ actor LogicProServer {
                         uri: params.uri,
                         cache: cache,
                         router: router,
-                        targetRegistry: targetRegistry
+                        targetRegistry: targetRegistry,
+                        populateColdTracks: { [poller] in
+                            await Self.awaitBounded(seconds: 8) { _ = await poller.refreshNow() }
+                        }
                     )
                 }
             },
