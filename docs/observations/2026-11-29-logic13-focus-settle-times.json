@@ -1,0 +1,83 @@
+{
+  "schema": 3,
+  "id": "2026-11-29-logic13-focus-settle-times",
+  "date": "2026-11-29",
+  "subject": "Logic 13 focus and activation timing on the mute, solo, arm, select and rename paths: when Logic reads frontmost, when its Accessibility server answers a focused-window read, and how long the control takes to change after a posted key",
+  "question": "After the server activates Logic from another application, how long until Logic reads frontmost and until its focused window and focused element answer, how much do those reads cost when Logic is already frontmost, and how long after a posted M key does the Mute checkbox value change?",
+  "verdict": "works",
+  "issues": [],
+  "surface": "arrange.track_headers",
+  "host": {
+    "app": "Logic Pro",
+    "version": "13.0",
+    "build": "7801",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "On a disposable copy of a four-track project open in Logic 13 with the Mixer shown, activate Finder, wait 300 ms, call NSRunningApplication.activate on Logic and poll NSWorkspace frontmostApplication, then AXFocusedWindow and AXFocusedUIElement of the application element every 5 ms for 20 rounds. Then, with Logic frontmost, time the same three reads 20 times. Then call logic_tracks mute 10 times in one server process with stderr timing marks.",
+    "expected": "Logic reads frontmost 300 to 370 ms after activate; the focused window and element answer about 960 ms after activate because the first Accessibility read blocks until Logic responds; the three reads cost under 1 ms each round when Logic is already frontmost; the key post to value change is about 12 ms."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:confirmExclusiveSelectionRefusal",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:awaitLogicKeyWindowReady",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:awaitLogicFrontmost",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift:awaitRenameFieldFocus"
+  ],
+  "evidence": [],
+  "method": "A compiled probe activated Finder, waited 300 ms, activated Logic and polled every 5 ms for frontmost, AXFocusedWindow and AXFocusedUIElement, 20 rounds, on a ditto copy of the qualification fixture opened and verified as the front document before the probe. A second loop timed the three reads with Logic already frontmost, 20 rounds. Per-part timings of one mute call came from stderr marks in a throwaway build, steady state, with the track already selected.",
+  "observations": [
+    {
+      "what": "activate from Finder, first positive frontmost read",
+      "rounds": 20,
+      "min_ms": 304,
+      "median_ms": 325,
+      "max_ms": 365
+    },
+    {
+      "what": "activate from Finder, focused window and focused element answered",
+      "rounds": 20,
+      "median_ms": 965,
+      "note": "the first read after activation blocks until Logic responds"
+    },
+    {
+      "what": "three reads with Logic already frontmost",
+      "rounds": 20,
+      "min_ms": 0.1,
+      "max_ms": 0.6
+    },
+    {
+      "what": "posted M key to Mute checkbox value change",
+      "median_ms": 12
+    },
+    {
+      "what": "AXPress on the Mute, Solo and Record Enable checkboxes",
+      "calls": 60,
+      "value_changed": 0,
+      "note": "every call reached the keyboard rung"
+    },
+    {
+      "what": "one Accessibility tree walk of the track headers",
+      "approx_ms": 80
+    },
+    {
+      "what": "server activateLogicPro call (AppKit activate plus osascript)",
+      "approx_ms": 135
+    },
+    {
+      "what": "press rung poll that ends without a change",
+      "approx_ms": 251
+    }
+  ],
+  "conclusion": "Frontmost and the key window become observable in about 325 and 965 ms after an activation from another application, and in 0.6 ms or less when Logic is already in front. The press rung never lands, so its poll of about 251 ms is spent in full on every call. The activation call costs about 135 ms.",
+  "limits": [
+    "One Logic 13.0 build 7801 host, ko-KR only, one fixture, one run of 20 rounds.",
+    "Timings include this Mac's load at the time and are not a guarantee for another host.",
+    "The per-part mute breakdown comes from a throwaway instrumented build, not from the shipped one."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime focus and activation timing. It adds no Apple label vocabulary and claims no string-corpus value."
+  }
+}
