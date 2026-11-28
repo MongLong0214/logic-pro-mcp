@@ -48,6 +48,11 @@
       "final_reads": 1
     },
     {
+      "what": "fixed sleep before each readback in the unrepaired write loop, ms",
+      "value": 25,
+      "reads_after_the_repair": "the first read after each write already returned the new value in the 13 steps of a call"
+    },
+    {
       "what": "after, 20 calls, wall ms",
       "median": 6.2,
       "p90": 8.1,
