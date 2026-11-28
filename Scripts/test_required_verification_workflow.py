@@ -585,6 +585,13 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         # A run that is still in progress passes the ended check and fails only on a later one.
         active = self.run_validate_run("in_progress", None, "final")
         self.assertIn("exactly one pull request identity", active.stderr)
+        # So does a run whose remaining jobs wait for a runner: GitHub reports it as queued
+        # (seen on run 46143548361 on 2026-11-28), and it is alive at the start and at the end.
+        for stage in ("", "final"):
+            queued = self.run_validate_run("queued", None, stage)
+            self.assertNotEqual(queued.returncode, 75, queued.stderr)
+            self.assertNotIn("requires an active non-cancelled run", queued.stderr)
+            self.assertIn("exactly one pull request identity", queued.stderr)
         # The ended exit never reaches the success post; it posts a failure that says why.
         ended_exit = wrapper.index('[ "$validate_status" -ne 75 ] || run_ended=1')
         self.assertLess(ended_exit, wrapper.index('post_status success "$receipt"'))
