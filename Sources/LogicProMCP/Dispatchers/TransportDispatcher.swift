@@ -439,7 +439,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         guard let tempo = await observedTempo(router: router) else {
             return stillnessUnmeasuredResult(
                 reason: "tempo_unreadable",
-                hint: "Play is on, but the tempo was not read, so the gap that tells a paused playhead from a playing one could not be sized. Nothing was sent, and the transport was not called paused or playing.",
+                hint: "Play is on, but the tempo is not readable in the current Control Bar display mode, so the gap that tells a paused playhead from a playing one could not be sized. Nothing was sent, and the transport was not called paused or playing. To fix it, switch the Control Bar display to one that shows the tempo (for example Beats & Project, not Beats & Time).",
                 extras: extras
             )
         }
@@ -642,7 +642,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         guard let tempo = await observedTempo(router: router) else {
             return stillnessUnmeasuredResult(
                 reason: "tempo_unreadable",
-                hint: "Play is on, but the tempo was not read, so the gap that tells a moving playhead from a paused one could not be sized. Nothing was sent, and the transport was not called paused or playing.",
+                hint: "Play is on, but the tempo is not readable in the current Control Bar display mode, so the gap that tells a moving playhead from a paused one could not be sized. Nothing was sent, and the transport was not called paused or playing. To fix it, switch the Control Bar display to one that shows the tempo (for example Beats & Project, not Beats & Time).",
                 extras: extras
             )
         }
