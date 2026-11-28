@@ -564,7 +564,8 @@ struct MCUDisplayState: Sendable, Codable {
 /// Project-level info.
 struct ProjectInfo: Sendable, Codable {
     var name: String = ""
-    var sampleRate: Int = 44100
+    /// nil = unknown. Only the saved project metadata measures it; no default is reported.
+    var sampleRate: Int? = nil
     var bitDepth: Int = 24
     var tempo: Double = 120.0
     var timeSignature: String = "4/4"
