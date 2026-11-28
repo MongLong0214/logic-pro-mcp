@@ -1,0 +1,401 @@
+{
+ "note": "trials on fresh fixture copies; probe is an independent AX read of the Playhead Position group",
+ "rows": [
+  {
+   "build": "base",
+   "trial": 1,
+   "probe": "goto_bar-ax-before",
+   "playhead_group_slider_values": [
+    "12",
+    "4"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 1,
+   "op": "goto_bar",
+   "elapsed_s": 2.68,
+   "state": "B",
+   "reason": "readback_unavailable",
+   "observed": "9.1",
+   "observed_before": "12.4",
+   "verified": false,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 1,
+   "probe": "goto_bar-ax-after",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 1,
+   "probe": "goto_position-ax-before",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 1,
+   "op": "goto_position",
+   "elapsed_s": 2.6,
+   "state": "B",
+   "reason": "readback_unavailable",
+   "observed": "5.2",
+   "observed_before": "9.1",
+   "verified": false,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 1,
+   "probe": "goto_position-ax-after",
+   "playhead_group_slider_values": [
+    "5",
+    "2"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 2,
+   "probe": "goto_bar-ax-before",
+   "playhead_group_slider_values": [
+    "12",
+    "4"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 2,
+   "op": "goto_bar",
+   "elapsed_s": 2.8,
+   "state": "B",
+   "reason": "readback_unavailable",
+   "observed": "9.1",
+   "observed_before": "12.4",
+   "verified": false,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 2,
+   "probe": "goto_bar-ax-after",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 2,
+   "probe": "goto_position-ax-before",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 2,
+   "op": "goto_position",
+   "elapsed_s": 3.02,
+   "state": "B",
+   "reason": "readback_unavailable",
+   "observed": "5.2",
+   "observed_before": "9.1",
+   "verified": false,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 2,
+   "probe": "goto_position-ax-after",
+   "playhead_group_slider_values": [
+    "5",
+    "2"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 3,
+   "probe": "goto_bar-ax-before",
+   "playhead_group_slider_values": [
+    "12",
+    "4"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 3,
+   "op": "goto_bar",
+   "elapsed_s": 3.11,
+   "state": "B",
+   "reason": "readback_unavailable",
+   "observed": "9.1",
+   "observed_before": "12.4",
+   "verified": false,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 3,
+   "probe": "goto_bar-ax-after",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 3,
+   "probe": "goto_position-ax-before",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 3,
+   "op": "goto_position",
+   "elapsed_s": 3.07,
+   "state": "B",
+   "reason": "readback_unavailable",
+   "observed": "5.2",
+   "observed_before": "9.1",
+   "verified": false,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "base",
+   "trial": 3,
+   "probe": "goto_position-ax-after",
+   "playhead_group_slider_values": [
+    "5",
+    "2"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 1,
+   "probe": "goto_bar-ax-before",
+   "playhead_group_slider_values": [
+    "12",
+    "4"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 1,
+   "op": "goto_bar",
+   "elapsed_s": 2.64,
+   "state": "A",
+   "reason": null,
+   "observed": "9.1",
+   "observed_before": "12.4",
+   "verified": true,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 1,
+   "probe": "goto_bar-ax-after",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 1,
+   "probe": "goto_position-ax-before",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 1,
+   "op": "goto_position",
+   "elapsed_s": 2.59,
+   "state": "A",
+   "reason": null,
+   "observed": "5.2",
+   "observed_before": "9.1",
+   "verified": true,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 1,
+   "probe": "goto_position-ax-after",
+   "playhead_group_slider_values": [
+    "5",
+    "2"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 2,
+   "probe": "goto_bar-ax-before",
+   "playhead_group_slider_values": [
+    "12",
+    "4"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 2,
+   "op": "goto_bar",
+   "elapsed_s": 2.86,
+   "state": "A",
+   "reason": null,
+   "observed": "9.1",
+   "observed_before": "12.4",
+   "verified": true,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 2,
+   "probe": "goto_bar-ax-after",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 2,
+   "probe": "goto_position-ax-before",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 2,
+   "op": "goto_position",
+   "elapsed_s": 2.34,
+   "state": "A",
+   "reason": null,
+   "observed": "5.2",
+   "observed_before": "9.1",
+   "verified": true,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 2,
+   "probe": "goto_position-ax-after",
+   "playhead_group_slider_values": [
+    "5",
+    "2"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 3,
+   "probe": "goto_bar-ax-before",
+   "playhead_group_slider_values": [
+    "12",
+    "4"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 3,
+   "op": "goto_bar",
+   "elapsed_s": 2.39,
+   "state": "A",
+   "reason": null,
+   "observed": "9.1",
+   "observed_before": "12.4",
+   "verified": true,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 3,
+   "probe": "goto_bar-ax-after",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 3,
+   "probe": "goto_position-ax-before",
+   "playhead_group_slider_values": [
+    "9",
+    "1"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 3,
+   "op": "goto_position",
+   "elapsed_s": 2.26,
+   "state": "A",
+   "reason": null,
+   "observed": "5.2",
+   "observed_before": "9.1",
+   "verified": true,
+   "unobserved": [
+    "subdivision",
+    "tick"
+   ]
+  },
+  {
+   "build": "fix",
+   "trial": 3,
+   "probe": "goto_position-ax-after",
+   "playhead_group_slider_values": [
+    "5",
+    "2"
+   ]
+  }
+ ]
+}
