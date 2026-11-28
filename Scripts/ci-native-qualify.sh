@@ -190,7 +190,10 @@ if run.get("path") != ".github/workflows/ci.yml":
 # that ended in between is a dead attempt: the status below names this attempt's URL and receipt,
 # the consumer accepts only the CURRENT attempt's status, and every re-run is a new attempt, so a
 # status posted for a dead attempt can never be consumed. Exit 75 tells the caller it ended.
-ended = run.get("status") != "in_progress" or run.get("conclusion") is not None
+# A run whose remaining jobs are waiting for a runner reports "queued", not "in_progress"; it is
+# still alive and its native job will consume this attempt's status. Only a completed run, or one
+# that already carries a conclusion, has ended.
+ended = run.get("status") == "completed" or run.get("conclusion") is not None
 if ended and sys.argv[8] == "final":
     print("ERROR: the CI run (attempt %s) ended (status=%s, conclusion=%s) before this native result "
           "could be published. Nothing is posted as success for it: any re-run is a new attempt, and "
