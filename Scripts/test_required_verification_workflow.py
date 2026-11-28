@@ -756,11 +756,35 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             [(None, "success")], release_jobs=carried, artifact_attempts=(1, 2), receipt_id=41)
         self.assertEqual(result.returncode, 1)
         self.assertIn("an artifact exists for this attempt", result.stderr)
-        # No release-build job for this attempt at all.
+
+    def test_rerun_with_no_release_build_entry_for_this_attempt_is_carried_over(self):
+        # `gh run rerun --failed`: attempt 2 has no release-build entry; attempt 1's succeeded.
+        only_first = ((1, 1, "success"),)
         result = self.run_native_consumer(
-            [(None, "success")], release_jobs=((1, 1, "success"),), artifact_attempts=(1,), receipt_id=41)
+            [(None, "success")], release_jobs=only_first, artifact_attempts=(1,), receipt_id=41)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # Most recent earlier success wins (attempt 3 absent; 1 failed, 2 succeeded).
+        result = self.run_native_consumer(
+            [(None, "success")], attempt="3",
+            release_jobs=((1, 1, "failure"), (2, 2, "success")), artifact_attempts=(2,), receipt_id=42)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # No earlier success, missing artifact, duplicate artifact, or a current artifact: refused.
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=((1, 1, "failure"),), artifact_attempts=(1,), receipt_id=41)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("expected one release-build job for attempt 2", result.stderr)
+        self.assertIn("no earlier successful attempt that ran it", result.stderr)
+        for attempts in ((), (1, 1)):
+            result = self.run_native_consumer(
+                [(None, "success")], release_jobs=only_first, artifact_attempts=attempts, receipt_id=41)
+            self.assertEqual(result.returncode, 1, attempts)
+            self.assertIn("expected one current 'release-runtime-123-1' artifact", result.stderr)
+        result = self.run_native_consumer(
+            [(None, "success")], release_jobs=only_first, artifact_attempts=(1, 2), receipt_id=41)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("an artifact exists for this attempt", result.stderr)
+        # The status is still bound to the current attempt.
+        self.assertEqual(self.run_native_consumer(
+            [("1", "success")], release_jobs=only_first, artifact_attempts=(1,), receipt_id=41).returncode, 3)
 
     def test_native_producer_picks_the_artifact_attempt_like_the_consumer(self):
         wrapper = read("Scripts/ci-native-qualify.sh")
@@ -794,7 +818,8 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         # release-build really ran in this attempt: only this attempt counts.
         self.assertEqual(select(2, (1, 1, "success"), (2, 2, "success")).stdout.strip(), "2")
         self.assertNotEqual(select(2, (1, 1, "failure"), (2, 1, "success")).returncode, 0)
-        self.assertNotEqual(select(2, (1, 1, "success")).returncode, 0)
+        self.assertEqual(select(2, (1, 1, "success")).stdout.strip(), "1")
+        self.assertNotEqual(select(2, (1, 1, "failure")).returncode, 0)
 
     def test_combined_status_rejects_a_wrong_top_level_sha(self):
         workflow = read(".github/workflows/ci.yml")

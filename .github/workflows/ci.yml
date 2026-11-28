@@ -647,23 +647,28 @@ jobs:
           release_jobs = [job for page in jobs_pages for job in page["jobs"]
                           if job.get("name") == "release-build"]
           here = [job for job in release_jobs if job.get("run_attempt") == int(expected_attempt)]
-          if len(here) != 1:
-              raise SystemExit(f"expected one release-build job for attempt {expected_attempt}, found {len(here)}")
+          if len(here) > 1:
+              raise SystemExit(f"expected at most one release-build job for attempt {expected_attempt}, found {len(here)}")
           artifact_attempt = expected_attempt
-          if when(here[0].get("started_at")) < run_started:
-              origin = [job["run_attempt"] for job in release_jobs
-                        if isinstance(job.get("run_attempt"), int)
-                        and not isinstance(job["run_attempt"], bool)
-                        and 0 < job["run_attempt"] < int(expected_attempt)
-                        and job.get("conclusion") == "success"
-                        and job.get("started_at") == here[0].get("started_at")
-                        and job.get("completed_at") == here[0].get("completed_at")]
+          if not here or when(here[0].get("started_at")) < run_started:
+              def earlier(job):
+                  return (isinstance(job.get("run_attempt"), int)
+                          and not isinstance(job["run_attempt"], bool)
+                          and 0 < job["run_attempt"] < int(expected_attempt)
+                          and job.get("conclusion") == "success")
+              if here:
+                  origin = [job["run_attempt"] for job in release_jobs if earlier(job)
+                            and job.get("started_at") == here[0].get("started_at")
+                            and job.get("completed_at") == here[0].get("completed_at")]
+              else:
+                  # No entry for this attempt: release-build did not run; latest earlier success is carried over.
+                  origin = [job["run_attempt"] for job in release_jobs if earlier(job)]
               if not origin:
                   raise SystemExit("carried-over release-build has no earlier successful attempt that ran it")
               if any(row.get("name") == f"release-runtime-{run_id}-{expected_attempt}"
                      for row in artifacts):
                   raise SystemExit("an artifact exists for this attempt, so an earlier attempt's is not used")
-              artifact_attempt = str(min(origin))
+              artifact_attempt = str(min(origin) if here else max(origin))
           name = f"release-runtime-{run_id}-{artifact_attempt}"
           matches = [row for row in artifacts if row.get("name") == name]
           if len(matches) != 1:
