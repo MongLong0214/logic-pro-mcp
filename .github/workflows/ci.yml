@@ -430,7 +430,8 @@ jobs:
           python3 Scripts/ci-test-shard-manifest.py verify-xunit \
             --expected "$runtime/shard-$SHARD.txt" \
             --xunit-directory "$xunit_dir" \
-            --actual "$out/actual-shard-$SHARD.txt"
+            --actual "$out/actual-shard-$SHARD.txt" \
+            --not-run Tests/not-run-on-hosted.json
           find .build -type f -path '*/debug/codecov/default.profdata' \
             > "$RUNNER_TEMP/profiles-$SHARD.txt"
           test "$(grep -c . "$RUNNER_TEMP/profiles-$SHARD.txt")" = 1
@@ -541,6 +542,7 @@ jobs:
           done
           python3 Scripts/ci-test-shard-manifest.py verify-union \
             --inventory "$runtime/inventory.txt" \
+            --not-run Tests/not-run-on-hosted.json \
             "${union_args[@]}"
 
           triple_debug=$(readlink .build/debug)

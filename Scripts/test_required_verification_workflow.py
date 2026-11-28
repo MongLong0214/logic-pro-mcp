@@ -551,6 +551,173 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertIn('post_status failure "Exact artifact failed native Logic qualification"', wrapper)
         self.assertNotIn("LOGIC_PRO_MCP_RUN_LIVE_QA=0", wrapper)
 
+    def run_validate_run(self, status, conclusion, mode):
+        """Run the wrapper's own validate_run Python on a run document, up to the ended check."""
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        start = wrapper.index("validate_run() {")
+        body = wrapper[wrapper.index("<<'PY'\n", start) + len("<<'PY'\n"):]
+        code = body[:body.index("\nPY\n")]
+        with tempfile.TemporaryDirectory() as tmp:
+            run_path = pathlib.Path(tmp, "run.json")
+            run_path.write_text(json.dumps({
+                "id": 7, "repository": {"full_name": "o/r"}, "event": "pull_request",
+                "path": ".github/workflows/ci.yml", "run_attempt": 2,
+                "status": status, "conclusion": conclusion}))
+            return subprocess.run(
+                [sys.executable, "-c", code, str(run_path), "a" * 40, "7", "o/r",
+                 str(pathlib.Path(tmp, "attempt.txt")), tmp, "2", mode],
+                text=True, capture_output=True, check=False)
+
+    def test_a_run_that_ended_before_publishing_posts_nothing_a_rerun_could_consume(self):
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        self.assertNotIn("allow-ended", wrapper)
+        self.assertNotIn("re-run the native-logic-e2e job to consume it", wrapper)
+        for status, conclusion in (("completed", "success"), ("completed", "cancelled")):
+            result = self.run_validate_run(status, conclusion, "final")
+            self.assertEqual(result.returncode, 75, result.stderr)
+            self.assertIn("fresh attempt is needed", result.stderr)
+            self.assertIn("native qualification must be repeated", result.stderr)
+            self.assertNotIn("consume it", result.stderr + result.stdout)
+        # The same document is refused at the start too, with the ordinary message.
+        started = self.run_validate_run("completed", "success", "")
+        self.assertNotEqual(started.returncode, 75)
+        self.assertIn("requires an active non-cancelled run", started.stderr)
+        # A run that is still in progress passes the ended check and fails only on a later one.
+        active = self.run_validate_run("in_progress", None, "final")
+        self.assertIn("exactly one pull request identity", active.stderr)
+        # The ended exit never reaches the success post; it posts a failure that says why.
+        ended_exit = wrapper.index('[ "$validate_status" -ne 75 ] || run_ended=1')
+        self.assertLess(ended_exit, wrapper.index('post_status success "$receipt"'))
+        self.assertIn("repeat it on a fresh attempt", wrapper)
+
+    def run_publication_tail(self, cancel_at=None, fork=False):
+        """Run the wrapper's real publication tail, validate_run and the fork pull request
+        resolver with only the GitHub calls stubbed.
+
+        The stubbed API reports an in-progress run until the request named by `cancel_at`
+        ("artifacts" or "pulls"), which also cancels the run: the windows between the last
+        artifact/job call, or the fork pull request lookup, and the success POST. With `fork` the
+        run carries an empty `pull_requests` array, as the run of a fork pull request does, so
+        its identity has to come from the pull request lookup.
+        """
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        function = wrapper[wrapper.index("validate_run() {"):]
+        function = function[:function.index("\n}\n") + 3]
+        resolver = wrapper[wrapper.index("lookup_fork_pull_request() {"):
+                           wrapper.index('trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run.json"')]
+        tail = wrapper[wrapper.index('trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \\\n  > "$work/artifacts-success.json"'):]
+        tail = tail[:tail.index("succeeded=1\n")]
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp, "repo")
+            repo.mkdir()
+            git = lambda *args: subprocess.run(
+                ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                text=True, capture_output=True, check=True).stdout.strip()
+            git("init", "-q", "-b", "main")
+            git("commit", "-q", "--allow-empty", "-m", "base")
+            base = git("rev-parse", "HEAD")
+            git("checkout", "-q", "-b", "topic")
+            git("commit", "-q", "--allow-empty", "-m", "head")
+            head = git("rev-parse", "HEAD")
+            git("checkout", "-q", "main")
+            git("merge", "-q", "--no-ff", "-m", "merge", "topic")
+            merge = git("rev-parse", "HEAD")
+            pull = {"state": "open",
+                    "head": {"sha": head, "repo": {"full_name": "fork/r"}},
+                    "base": {"sha": base, "ref": "main", "repo": {"full_name": "o/r",
+                                                                    "url": "https://api.github.com/repos/o/r"}}}
+            run = {
+                "id": 7, "repository": {"full_name": "o/r"}, "event": "pull_request",
+                "path": ".github/workflows/ci.yml", "run_attempt": 2, "head_sha": head,
+                "status": "in_progress", "conclusion": None,
+                "pull_requests": [] if fork else [pull],
+                "head_repository": {"full_name": "fork/r", "owner": {"login": "fork"}},
+                "head_branch": "topic",
+            }
+            work = pathlib.Path(tmp, "work")
+            work.mkdir()
+            (work / "active.json").write_text(json.dumps(run))
+            (work / "run-raw.json").write_text(json.dumps(run))
+            (work / "pulls-response.json").write_text(json.dumps([pull]))
+            (work / "cancelled.json").write_text(json.dumps(
+                dict(run, status="completed", conclusion="cancelled")))
+            (work / "artifact.json").write_text('{"id": 1}\n')
+            harness = f"""set -euo pipefail
+SHA={merge} RUN_ID=7 REPO=o/r CANDIDATE_ROOT={repo} work={work}
+run_attempt=2 artifact_attempt=2 receipt=receipt run_ended=0 CANCEL_AT={cancel_at or "none"}
+trusted_api() {{
+  echo "$2" >> "$work/calls"
+  case "$2" in
+    */artifacts*) [ "$CANCEL_AT" != artifacts ] || touch "$work/cancelled" ;;
+    "repos/$REPO/pulls?"*)
+      [ "$CANCEL_AT" != pulls ] || touch "$work/cancelled"
+      cat "$work/pulls-response.json" ;;
+    "repos/$REPO/actions/runs/$RUN_ID")
+      if [ -e "$work/cancelled" ]; then cat "$work/cancelled.json"; else cat "$work/active.json"; fi ;;
+  esac
+}}
+{resolver}
+fetch_run_jobs() {{ :; }}
+select_artifact_attempt() {{ echo 2; }}
+validate_artifacts() {{ echo '{{"id": 1}}' > "$3"; }}
+post_status() {{ echo "$1" >> "$work/posts"; }}
+{function}
+{tail}
+echo REACHED_THE_END_OF_THE_TAIL
+"""
+            result = subprocess.run(["bash", "-c", harness], text=True, capture_output=True, check=False)
+            posts = (work / "posts").read_text().split() if (work / "posts").exists() else []
+            calls = (work / "calls").read_text().split()
+            return result, posts, calls
+
+    def test_cancellation_during_the_artifact_refresh_posts_no_success(self):
+        # Control: the run is alive for the whole tail, so success is posted, after the last
+        # artifact call and following one more liveness read.
+        alive, posts, calls = self.run_publication_tail()
+        self.assertEqual(alive.returncode, 0, alive.stderr)
+        self.assertEqual(posts, ["success"])
+        self.assertEqual(calls[-1], "repos/o/r/actions/runs/7")
+        self.assertTrue(calls[-2].startswith("repos/o/r/actions/runs/7/artifacts"), calls)
+        # The run is cancelled while the artifacts are read again: nothing is posted as success
+        # and the caller is told the attempt ended (75), which posts the failure naming why.
+        cancelled, posts, calls = self.run_publication_tail(cancel_at="artifacts")
+        self.assertEqual(cancelled.returncode, 75, cancelled.stdout + cancelled.stderr)
+        self.assertEqual(posts, [])
+        self.assertNotIn("REACHED_THE_END_OF_THE_TAIL", cancelled.stdout)
+        self.assertIn("fresh attempt is needed", cancelled.stderr)
+        self.assertEqual(calls[-1], "repos/o/r/actions/runs/7")
+
+    def test_fork_identity_is_resolved_before_the_final_liveness_read(self):
+        # A fork pull request run has no pull request in its run document, so the real resolver
+        # makes one more API call. It runs here, not stubbed out of the path, and the liveness
+        # read is still the last call before the success POST.
+        alive, posts, calls = self.run_publication_tail(fork=True)
+        self.assertEqual(alive.returncode, 0, alive.stderr)
+        self.assertEqual(posts, ["success"])
+        lookups = [index for index, call in enumerate(calls) if call.startswith("repos/o/r/pulls?")]
+        self.assertEqual(len(lookups), 1, calls)
+        self.assertEqual(calls[-1], "repos/o/r/actions/runs/7")
+        self.assertEqual(lookups[0], len(calls) - 2, calls)
+        # Cancelled while the pull request is looked up: the read after it sees the end.
+        cancelled, posts, calls = self.run_publication_tail(cancel_at="pulls", fork=True)
+        self.assertEqual(cancelled.returncode, 75, cancelled.stdout + cancelled.stderr)
+        self.assertEqual(posts, [])
+        self.assertNotIn("REACHED_THE_END_OF_THE_TAIL", cancelled.stdout)
+        self.assertIn("fresh attempt is needed", cancelled.stderr)
+        self.assertEqual(calls[-1], "repos/o/r/actions/runs/7")
+        # Cancelled while the artifacts are read again: also caught on the fork branch.
+        cancelled, posts, calls = self.run_publication_tail(cancel_at="artifacts", fork=True)
+        self.assertEqual(cancelled.returncode, 75, cancelled.stdout + cancelled.stderr)
+        self.assertEqual(posts, [])
+
+    def test_no_api_call_follows_the_final_liveness_read(self):
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        tail = wrapper[wrapper.index('> "$work/artifacts-success.json"'):wrapper.index('post_status success "$receipt"')]
+        read_run = tail.index('trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"')
+        self.assertLess(tail.index("lookup_fork_pull_request"), read_run)
+        self.assertEqual(tail[read_run:].count("trusted_api"), 1)
+        self.assertNotIn("lookup_fork_pull_request", tail[read_run:])
+
     def test_native_candidate_binds_the_run_base_and_head(self):
         wrapper = read("Scripts/ci-native-qualify.sh")
         self.assertIn('run.get("head_sha") != head_sha', wrapper)
@@ -855,13 +1022,44 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         for required in (
             'pgrep -xq "Logic Pro"',
             ".build/release/LogicProMCP --check-permissions",
-            "realReleaseBinaryExecutesEveryOperationWithIndependentReadback",
-            "runnerRejectsPartialStateObservedFromRealServer",
             "verify_candidate_bytes",
             "Scripts/logic_canon.py status",
         ):
             self.assertIn(required, gate)
         self.assertNotIn("skip", gate.lower())
+        # The live tests are the data file's `live` entries: the script names none of them.
+        self.assertNotIn("QualificationRunnerTests", gate)
+        self.assertNotIn("realReleaseBinary", gate)
+        self.assertNotIn("live_tests=(", gate)
+
+    def test_the_logic_host_runs_the_candidates_host_tests_after_the_live_ones(self):
+        gate = read("Scripts/release-qualify.sh")
+        debug_loop = gate.index("run_live_lane debug\n")
+        host = gate.index('bash "$TRUSTED_ROOT/Scripts/host-tests.sh" Tests/not-run-on-hosted.json')
+        final = gate.index("trap - EXIT INT TERM")
+        self.assertLess(gate.index("run_live_lane release\n"), debug_loop)
+        self.assertLess(debug_loop, host)
+        self.assertLess(host, final)
+        # The trusted copy decides which operator exemptions exist, before anything is driven.
+        trusted = gate.index('verify-trusted --not-run "$NOT_RUN" --trusted "$TRUSTED_ROOT/$NOT_RUN"')
+        self.assertLess(trusted, gate.index('test_inventory="$(swift test list)"'))
+        self.assertLess(trusted, gate.index('pgrep -xq "Logic Pro"'))
+        # Each live test is judged from its own xUnit output, not from the exit status.
+        self.assertIn("--xunit-output", gate)
+        self.assertIn("verify-host --not-run", gate)
+        # The host rule reads structured results; nothing counts console lines or names tests.
+        self.assertNotIn("host_gated", gate)
+        self.assertNotIn("grep -c", gate)
+        runner = read("Scripts/host-tests.sh")
+        self.assertIn("--xunit-output", runner)
+        self.assertIn("verify-host", runner)
+        self.assertNotIn("grep", runner)
+
+    def test_hosted_shards_and_the_merge_check_the_not_run_list(self):
+        workflow = read(".github/workflows/ci.yml")
+        for command in ("verify-xunit", "verify-union"):
+            start = workflow.index(f"ci-test-shard-manifest.py {command}")
+            self.assertIn("--not-run Tests/not-run-on-hosted.json", workflow[start:start + 400], command)
 
     def test_every_job_that_reads_git_history_checks_out_full_history(self):
         scripts = history_reading_scripts()
@@ -964,7 +1162,7 @@ class RequiredVerificationWorkflow(unittest.TestCase):
 RELEASE_PATH_SCRIPTS = (
     "release.sh", "release-qualify.sh", "release-stable.sh", "release-package.sh",
     "release-fetch-qualified-inputs.sh", "release-build-universal.sh",
-    "release-verify-formula-install-paths.sh", "ci-native-qualify.sh",
+    "release-verify-formula-install-paths.sh", "ci-native-qualify.sh", "host-tests.sh",
 )
 BASH32 = "/bin/bash"
 # Constructs that fail on the macOS stock bash 3.2 (or, for a bare array

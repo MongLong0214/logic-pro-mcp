@@ -62,6 +62,7 @@ target_url=""
 receipt=""
 identity_confirmed=0
 succeeded=0
+run_ended=0
 
 trusted_api() {
   local method="$1" endpoint="$2"
@@ -159,7 +160,11 @@ finish() {
   local status="$?"
   if [ "$succeeded" -ne 1 ] && [ "$identity_confirmed" -eq 1 ] \
       && ! success_already_published; then
-    post_status failure "Exact artifact failed native Logic qualification" || true
+    if [ "$run_ended" -eq 1 ]; then
+      post_status failure "CI run ended before native qualification finished; repeat it on a fresh attempt" || true
+    else
+      post_status failure "Exact artifact failed native Logic qualification" || true
+    fi
   fi
   rm -rf "$work"
   exit "$status"
@@ -181,18 +186,20 @@ if run.get("event") != "pull_request":
     raise SystemExit("native CI qualification requires a pull_request run")
 if run.get("path") != ".github/workflows/ci.yml":
     raise SystemExit("native CI qualification requires the exact ci.yml workflow")
-# The run must be active when qualification starts. At the end a run that already completed is
-# accepted (argv[8] == "allow-ended"): the status below is bound to the exact SHA, attempt,
-# artifact id and digest, which the consumer validates, and a rerun of the consumer job reads it.
+# The run must be active both when qualification starts and when its result is published. A run
+# that ended in between is a dead attempt: the status below names this attempt's URL and receipt,
+# the consumer accepts only the CURRENT attempt's status, and every re-run is a new attempt, so a
+# status posted for a dead attempt can never be consumed. Exit 75 tells the caller it ended.
 ended = run.get("status") != "in_progress" or run.get("conclusion") is not None
-if ended and sys.argv[8] != "allow-ended":
-    raise SystemExit("native CI qualification requires an active non-cancelled run")
-if ended and run.get("status") != "completed":
-    raise SystemExit("native CI qualification requires an in-progress or completed run")
+if ended and sys.argv[8] == "final":
+    print("ERROR: the CI run (attempt %s) ended (status=%s, conclusion=%s) before this native result "
+          "could be published. Nothing is posted as success for it: any re-run is a new attempt, and "
+          "the consumer accepts only the current attempt's status. A fresh attempt is needed, and the "
+          "native qualification must be repeated against it."
+          % (run.get("run_attempt"), run.get("status"), run.get("conclusion")), file=sys.stderr)
+    raise SystemExit(75)
 if ended:
-    print("NOTE: the CI run had already ended (status=%s, conclusion=%s) before this result was "
-          "published; re-run the native-logic-e2e job to consume it."
-          % (run.get("status"), run.get("conclusion")))
+    raise SystemExit("native CI qualification requires an active non-cancelled run")
 run_attempt = run.get("run_attempt")
 if isinstance(run_attempt, bool) or not isinstance(run_attempt, int) or run_attempt < 1:
     raise SystemExit("CI run attempt is not a positive integer")
@@ -231,10 +238,14 @@ with open(sys.argv[5], "w", encoding="utf-8") as output:
 PY
 }
 
-# A fork pull request run has an empty `pull_requests` array. Resolve its identity through the
+# A fork pull request run has an empty `pull_requests` array. Its identity is resolved through the
 # trusted API: exactly one open PR for the run head SHA whose base is this repository's main.
-resolve_run_pull_request() {
+# The API call (lookup_fork_pull_request) and the use of its answer (apply_fork_pull_request) are
+# separate so the final liveness read can come AFTER the call and still see the identity: the read
+# is then the last API call before the success POST on every branch.
+lookup_fork_pull_request() {
   local run_file="$1" head_query
+  rm -f "$work/resolved-pulls.json"
   head_query="$(python3 - "$run_file" <<'PY'
 import json, sys, urllib.parse
 run = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -248,7 +259,7 @@ PY
 )"
   [ -n "$head_query" ] || return 0
   trusted_api GET "repos/$REPO/pulls?$head_query" > "$work/pulls.json"
-  python3 - "$run_file" "$work/pulls.json" "$REPO" <<'PY'
+  python3 - "$run_file" "$work/pulls.json" "$REPO" "$work/resolved-pulls.json" <<'PY'
 import json, sys
 run = json.load(open(sys.argv[1], encoding="utf-8"))
 pulls = json.load(open(sys.argv[2], encoding="utf-8"))
@@ -267,14 +278,28 @@ matches = [
 if len(matches) != 1:
     raise SystemExit(
         f"native CI qualification requires exactly one open main pull request for the run head, found {len(matches)}")
-run["pull_requests"] = matches
-with open(sys.argv[1], "w", encoding="utf-8") as output:
-    json.dump(run, output)
+with open(sys.argv[4], "w", encoding="utf-8") as output:
+    json.dump(matches, output)
+PY
+}
+# No API call: put the resolved identity into a run response that has an empty `pull_requests`.
+apply_fork_pull_request() {
+  local run_file="$1"
+  [ -f "$work/resolved-pulls.json" ] || return 0
+  python3 - "$run_file" "$work/resolved-pulls.json" <<'PY'
+import json, sys
+run = json.load(open(sys.argv[1], encoding="utf-8"))
+if not run.get("pull_requests"):
+    run["pull_requests"] = json.load(open(sys.argv[2], encoding="utf-8"))
+    with open(sys.argv[1], "w", encoding="utf-8") as output:
+        json.dump(run, output)
 PY
 }
 
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run.json"
-resolve_run_pull_request "$work/run.json"
+cp "$work/run.json" "$work/run-raw.json"
+lookup_fork_pull_request "$work/run-raw.json"
+apply_fork_pull_request "$work/run.json"
 validate_run "$work/run.json" "$work/run-attempt.txt"
 
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
@@ -433,15 +458,23 @@ test "$(git -C "$TRUSTED_ROOT" rev-parse HEAD)" = \
 test -z "$(git -C "$TRUSTED_ROOT" status --porcelain)"
 test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$SHA"
 test -z "$(git -C "$CANDIDATE_ROOT" status --porcelain)"
-trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
-resolve_run_pull_request "$work/run-success.json"
-validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" allow-ended
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts-success.json"
 fetch_run_jobs
 test "$(select_artifact_attempt "$work/jobs.json")" = "$artifact_attempt"
 validate_artifacts "$work/artifacts-success.json" "$artifact_attempt" "$work/artifact-success.json"
 cmp -s "$work/artifact.json" "$work/artifact-success.json"
+# Liveness is judged LAST: after the final artifact, job and fork pull request calls and
+# immediately before the success POST, so a run cancelled while those calls were made is seen. The
+# fork identity is looked up first and applied to the final read without another call. What remains is the gap
+# between this read and the POST. It fails safe: the status names this attempt's URL, a dead
+# attempt has no consumer (the consumer accepts only the current attempt's status and every re-run
+# is a new attempt), so a success that lands in that gap can never be used.
+lookup_fork_pull_request "$work/run-raw.json"
+trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
+apply_fork_pull_request "$work/run-success.json"
+validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" final \
+  || { validate_status="$?"; [ "$validate_status" -ne 75 ] || run_ended=1; exit "$validate_status"; }
 post_status success "$receipt"
 succeeded=1
 trap - EXIT INT TERM
