@@ -54,8 +54,10 @@ struct ColdFirstTracksReadTests {
             fileReader: fileReader(), populateColdTracks: {}
         )
         let body = try text(result)
-        #expect(body["readable"] as? Bool == false)
-        #expect(body["verified_empty"] as? Bool == false)
+        let readable = try #require(body["readable"] as? Bool)
+        let verifiedEmpty = try #require(body["verified_empty"] as? Bool)
+        #expect(!readable)
+        #expect(!verifiedEmpty)
     }
 
     @Test
