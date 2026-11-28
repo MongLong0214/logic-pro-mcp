@@ -788,7 +788,7 @@ struct StockPluginFactoryPresetTests {
 
     @Test(
         "on a host with Logic and the shared root, every folder in the three factory-settings roots is a seed or a reasoned exclusion",
-        .requiresLogicHost(
+        .enabled(
             if: hostFactorySettingsRoots.allSatisfy { FileManager.default.fileExists(atPath: $0) },
             "skipped, not passed: a factory-settings root is absent on this host. CI has no Logic and no shared root, so the shared root is checked only on a host that has it."
         )

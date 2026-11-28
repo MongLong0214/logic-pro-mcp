@@ -2,6 +2,8 @@
 """Regression tests for exact Swift test shard and xUnit manifests."""
 
 import importlib.util
+import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -169,8 +171,11 @@ class UnionTests(ManifestFixture):
         script = str(SCRIPT)
         subprocess.run([sys.executable, script, "partition", "--inventory", str(inventory),
                         "--shards", "3", "--output-directory", str(out)], check=True)
+        listed = self.write("not-run.json", json.dumps({"tests": [
+            {"id": "S/a()", "class": "live", "reason": "fixture"}]}))
         shard_args = [arg for index in range(3)
                       for arg in ("--shard", str(manifest.shard_manifest_path(out, index)))]
+        shard_args += ["--not-run", str(listed)]
         subprocess.run([sys.executable, script, "verify-union", "--inventory", str(inventory),
                         *shard_args], check=True)
         manifest.shard_manifest_path(out, 2).write_text("S/zz()\n", encoding="utf-8")
@@ -180,7 +185,16 @@ class UnionTests(ManifestFixture):
         self.assertIn("shard union differs from inventory", failed.stderr)
 
 
-class XUnitTests(ManifestFixture):
+def not_run_document(*rows):
+    return json.dumps({"tests": [
+        {"id": test_id, "class": kind, "reason": "fixture"} for test_id, kind in rows]})
+
+
+class XUnitFixture(ManifestFixture):
+    def verify_xunit(self, expected, directory, actual, not_run=()):
+        listed = self.write("not-run.json", not_run_document(*not_run))
+        manifest.verify_xunit(expected, directory, actual, listed)
+
     def xunit(self, cases: str, name: str = "results.xml") -> Path:
         directory = self.root / "xunit"
         directory.mkdir(exist_ok=True)
@@ -189,6 +203,8 @@ class XUnitTests(ManifestFixture):
             '<?xml version="1.0"?><testsuites><testsuite>' + cases
             + "</testsuite></testsuites>")
 
+
+class XUnitTests(XUnitFixture):
     def test_exact_parameterized_and_skipped_shapes_are_accepted(self):
         expected = self.write(
             "expected.txt",
@@ -201,7 +217,8 @@ class XUnitTests(ManifestFixture):
             '<skipped /></testcase>', name="results-swift-testing.xml")
         actual = self.root / "actual.txt"
 
-        manifest.verify_xunit(expected, self.root / "xunit", actual)
+        self.verify_xunit(expected, self.root / "xunit", actual,
+                          not_run=[("LogicProMCPTests.Suite/skipped()", "operator")])
 
         self.assertEqual(actual.read_text(encoding="utf-8"), expected.read_text(encoding="utf-8"))
 
@@ -214,7 +231,7 @@ class XUnitTests(ManifestFixture):
             'name="Issue497AmbiguousTargetReferenceTerminatesWithoutHumanRoute()" />')
         actual = self.root / "actual.txt"
 
-        manifest.verify_xunit(expected, self.root / "xunit", actual)
+        self.verify_xunit(expected, self.root / "xunit", actual)
 
         self.assertEqual(actual.read_text(encoding="utf-8"), expected.read_text(encoding="utf-8"))
 
@@ -229,7 +246,7 @@ class XUnitTests(ManifestFixture):
             'name="operationTraceDefaultsToOn()" />')
         actual = self.root / "actual.txt"
 
-        manifest.verify_xunit(expected, self.root / "xunit", actual)
+        self.verify_xunit(expected, self.root / "xunit", actual)
 
         self.assertEqual(actual.read_text(encoding="utf-8"), expected.read_text(encoding="utf-8"))
 
@@ -238,7 +255,7 @@ class XUnitTests(ManifestFixture):
         self.xunit('<testcase classname="LogicProMCPTests.Suite" name="unexpected()" />')
 
         with self.assertRaisesRegex(manifest.ManifestError, "unexpected xUnit testcase"):
-            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+            self.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
 
     def test_expected_entries_with_same_canonical_xunit_key_are_refused(self):
         expected = self.write(
@@ -248,7 +265,7 @@ class XUnitTests(ManifestFixture):
         self.xunit('<testcase classname="LogicProMCPTests.Suite" name="test()" />')
 
         with self.assertRaisesRegex(manifest.ManifestError, "canonical xUnit key collision"):
-            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+            self.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
 
     def test_duplicate_testcase_is_refused(self):
         expected = self.write("expected.txt", "LogicProMCPTests.Suite/a()\n")
@@ -256,7 +273,7 @@ class XUnitTests(ManifestFixture):
             '<testcase classname="LogicProMCPTests.Suite" name="a()" />'
             '<testcase classname="LogicProMCPTests.Suite" name="a()" />')
         with self.assertRaisesRegex(manifest.ManifestError, "duplicate xUnit testcase key"):
-            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+            self.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
 
     def test_missing_expected_testcase_is_refused(self):
         expected = self.write(
@@ -266,7 +283,7 @@ class XUnitTests(ManifestFixture):
         self.xunit('<testcase classname="LogicProMCPTests.Suite" name="a()" />')
 
         with self.assertRaisesRegex(manifest.ManifestError, "missing=.*Suite/b"):
-            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+            self.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
 
     def test_expected_manifest_must_be_sorted_and_unique(self):
         cases = (
@@ -279,14 +296,14 @@ class XUnitTests(ManifestFixture):
             with self.subTest(suffix=suffix):
                 expected = self.write(f"expected-{suffix}.txt", contents)
                 with self.assertRaisesRegex(manifest.ManifestError, message):
-                    manifest.verify_xunit(
+                    self.verify_xunit(
                         expected, self.root / "unused-xunit", self.root / f"actual-{suffix}.txt")
 
     def test_malformed_expected_manifest_entry_is_refused(self):
         expected = self.write("expected.txt", "MalformedEntry()\n")
 
         with self.assertRaisesRegex(manifest.ManifestError, "malformed expected manifest entry"):
-            manifest.verify_xunit(
+            self.verify_xunit(
                 expected, self.root / "unused-xunit", self.root / "actual.txt")
 
     def test_missing_extra_failure_and_error_are_refused(self):
@@ -302,26 +319,268 @@ class XUnitTests(ManifestFixture):
                 (xunit_dir / "results.xml").write_text(
                     f"<testsuites><testsuite>{child}</testsuite></testsuites>", encoding="utf-8")
                 with self.assertRaises(manifest.ManifestError):
-                    manifest.verify_xunit(expected, xunit_dir, self.root / f"actual-{suffix}.txt")
+                    self.verify_xunit(expected, xunit_dir, self.root / f"actual-{suffix}.txt")
 
     def test_missing_or_ambiguous_xunit_output_is_refused(self):
         expected = self.write("expected.txt", "LogicProMCPTests.Suite/a()\n")
         empty = self.root / "empty"
         empty.mkdir()
         with self.assertRaisesRegex(manifest.ManifestError, "exactly one"):
-            manifest.verify_xunit(expected, empty, self.root / "actual.txt")
+            self.verify_xunit(expected, empty, self.root / "actual.txt")
 
         self.xunit('<testcase classname="LogicProMCPTests.Suite" name="a()" />')
         self.write("xunit/results-swift-testing.xml", "<testsuites />")
         with self.assertRaisesRegex(manifest.ManifestError, "exactly one"):
-            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual-2.txt")
+            self.verify_xunit(expected, self.root / "xunit", self.root / "actual-2.txt")
 
     def test_xunit_with_no_testcases_is_refused(self):
         expected = self.write("expected.txt", "LogicProMCPTests.Suite/a()\n")
         self.xunit("")
 
         with self.assertRaisesRegex(manifest.ManifestError, "xUnit contains no testcases"):
-            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+            self.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+
+
+class HostedNotRunRuleTests(XUnitFixture):
+    """The hosted rule: a skipped testcase must be listed, and a listed test must be skipped."""
+
+    SUITE = "LogicProMCPTests.Suite"
+    RAN = f'<testcase classname="{SUITE}" name="ran()" />'
+    SKIPPED = f'<testcase classname="{SUITE}" name="gated()"><skipped>no Logic</skipped></testcase>'
+
+    def expected(self, *names):
+        return self.write("expected.txt", "".join(f"{self.SUITE}/{name}()\n" for name in sorted(names)))
+
+    def test_a_skip_that_is_not_listed_fails_whatever_its_condition_looks_like(self):
+        # The hosted verifier sees only the result, so a closure condition, a suite-level trait or a
+        # condition behind a constant all arrive here as the same skipped testcase.
+        self.xunit(self.RAN + self.SKIPPED)
+        with self.assertRaisesRegex(manifest.ManifestError, "skipped but is not in the not-run list.*gated"):
+            self.verify_xunit(self.expected("ran", "gated"), self.root / "xunit",
+                              self.root / "actual.txt")
+
+    def test_a_listed_skip_passes_in_every_class(self):
+        self.xunit(self.RAN + self.SKIPPED)
+        for kind in manifest.NOT_RUN_CLASSES:
+            with self.subTest(kind=kind):
+                self.verify_xunit(self.expected("ran", "gated"), self.root / "xunit",
+                                  self.root / f"actual-{kind}.txt",
+                                  not_run=[(f"{self.SUITE}/gated()", kind)])
+
+    def test_a_logic_host_or_live_entry_that_is_not_skipped_is_stale(self):
+        self.xunit(self.RAN + self.SKIPPED)
+        for kind in ("logic_host", "live"):
+            with self.subTest(kind=kind):
+                with self.assertRaisesRegex(manifest.ManifestError, "stale.*ran"):
+                    self.verify_xunit(self.expected("ran", "gated"), self.root / "xunit",
+                                      self.root / f"actual-{kind}.txt",
+                                      not_run=[(f"{self.SUITE}/gated()", kind),
+                                               (f"{self.SUITE}/ran()", kind)])
+
+    def test_an_ordinary_test_added_as_logic_host_is_refused_because_it_is_not_skipped(self):
+        self.xunit(self.RAN)
+        with self.assertRaisesRegex(manifest.ManifestError, "stale"):
+            self.verify_xunit(self.expected("ran"), self.root / "xunit", self.root / "actual.txt",
+                              not_run=[(f"{self.SUITE}/ran()", "logic_host")])
+
+    def test_an_entry_for_a_test_in_another_shard_is_not_judged_here(self):
+        self.xunit(self.RAN)
+        self.verify_xunit(self.expected("ran"), self.root / "xunit", self.root / "actual.txt",
+                          not_run=[(f"{self.SUITE}/elsewhere()", "logic_host")])
+
+    def test_removing_the_entry_of_a_skipped_test_fails(self):
+        self.xunit(self.SKIPPED)
+        with self.assertRaisesRegex(manifest.ManifestError, "not in the not-run list"):
+            self.verify_xunit(self.expected("gated"), self.root / "xunit", self.root / "actual.txt")
+
+    def test_the_list_must_be_well_formed(self):
+        bad = {
+            "not json": "{",
+            "no tests key": "{}",
+            "extra key": json.dumps({"tests": [], "more": 1}),
+            "unknown class": not_run_document((f"{self.SUITE}/gated()", "somewhere")),
+            "duplicate": not_run_document((f"{self.SUITE}/gated()", "live"), (f"{self.SUITE}/gated()", "live")),
+            "blank reason": json.dumps({"tests": [{"id": "a", "class": "live", "reason": " "}]}),
+            "multiline reason": json.dumps({"tests": [{"id": "a", "class": "live", "reason": "a\nb"}]}),
+            "missing reason": json.dumps({"tests": [{"id": "a", "class": "live"}]}),
+        }
+        for label, text in bad.items():
+            with self.subTest(label):
+                with self.assertRaises(manifest.ManifestError):
+                    manifest.read_not_run(self.write("bad.json", text))
+
+    def test_an_entry_absent_from_the_inventory_is_refused(self):
+        inventory = self.write("inventory.txt", f"{self.SUITE}/ran()\n")
+        listed = self.write("listed.json", not_run_document((f"{self.SUITE}/typo()", "logic_host")))
+        with self.assertRaisesRegex(manifest.ManifestError, "absent from the inventory.*typo"):
+            manifest.verify_not_run_in_inventory(inventory, listed)
+        listed = self.write("ok.json", not_run_document((f"{self.SUITE}/ran()", "logic_host")))
+        manifest.verify_not_run_in_inventory(inventory, listed)
+
+    def test_the_checked_in_list_is_well_formed_and_names_real_tests(self):
+        path = Path(__file__).resolve().parents[1] / "Tests" / "not-run-on-hosted.json"
+        entries = manifest.read_not_run(path)
+        counts = {kind: sum(1 for k, _ in entries.values() if k == kind) for kind in manifest.NOT_RUN_CLASSES}
+        self.assertEqual(counts, {"logic_host": 5, "live": 3, "operator": 1})
+        self.assertEqual(len(manifest.host_test_ids(path)), 5)
+
+
+HOST = ("LogicProMCPTests.LibraryDiskScannerTests/installedLibraryEmitsOnlyPanelCategories()",
+        "LogicProMCPTests.StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()",
+        "LogicProMCPTests.testProcessUtilsLogicProVersionResolvesOffMain()")
+
+
+def testcase(test_id, outcome=""):
+    head, name = test_id.rsplit("/", 1) if "/" in test_id else test_id.rsplit(".", 1)
+    return f'<testcase classname="{head.replace("/", ".")}" name="{name}">{outcome}</testcase>'
+
+
+class HostRunTests(ManifestFixture):
+    """The Logic-host rule: each logic_host ID present, executed and passed, from the xUnit file."""
+
+    def setUp(self):
+        super().setUp()
+        self.listed = self.write("not-run.json", not_run_document(
+            *[(test_id, "logic_host") for test_id in HOST],
+            ("LogicProMCPTests.QualificationRunnerTests/live()", "live"),
+            ("LogicProMCPTests.Other/operator()", "operator")))
+        self.directory = self.root / "xunit"
+        self.directory.mkdir()
+
+    def results(self, *cases):
+        (self.directory / "results.xml").write_text(
+            "<testsuites><testsuite>" + "".join(cases) + "</testsuite></testsuites>", encoding="utf-8")
+
+    def verify(self):
+        manifest.verify_host(self.listed, self.directory)
+
+    def test_the_filter_selects_exactly_the_logic_host_ids(self):
+        pattern = re.compile(manifest.host_filter(self.listed))
+        # SwiftPM matches the module-qualified identifier followed by "/<file>:<line>:<column>".
+        for test_id in HOST:
+            self.assertTrue(pattern.search(test_id + "/File.swift:1:2"), test_id)
+            self.assertTrue(pattern.search(test_id), test_id)
+        for other in (
+            "LogicProMCPTests.LibraryDiskScannerTests/retestInstalledLibraryEmitsOnlyPanelCategories()",
+            "LogicProMCPTests.LibraryDiskScannerTests/installedLibraryEmitsOnlyPanelCategories2()",
+            "LogicProMCPTests.testProcessUtilsLogicProVersionResolvesOffMain()x",
+            "LogicProMCPTests.retestProcessUtilsLogicProVersionResolvesOffMain()",
+            "LogicProMCPTests.QualificationRunnerTests/live()",
+            "Prefix.LogicProMCPTests.testProcessUtilsLogicProVersionResolvesOffMain()",
+        ):
+            self.assertIsNone(pattern.search(other), other)
+
+    def test_all_passing_is_accepted(self):
+        self.results(*[testcase(test_id) for test_id in HOST])
+        self.verify()
+
+    def test_a_skip_fails(self):
+        self.results(testcase(HOST[0], "<skipped>no Logic</skipped>"), testcase(HOST[1]), testcase(HOST[2]))
+        with self.assertRaisesRegex(manifest.ManifestError, "skipped on the Logic host.*installedLibrary"):
+            self.verify()
+
+    def test_a_missing_id_fails(self):
+        self.results(testcase(HOST[0]), testcase(HOST[1]))
+        with self.assertRaisesRegex(manifest.ManifestError, "missing from the results.*testProcessUtils"):
+            self.verify()
+
+    def test_a_failure_or_error_fails(self):
+        for outcome in ("<failure />", "<error />"):
+            with self.subTest(outcome):
+                self.results(testcase(HOST[0], outcome), testcase(HOST[1]), testcase(HOST[2]))
+                with self.assertRaisesRegex(manifest.ManifestError, "failed: .*installedLibrary"):
+                    self.verify()
+
+    def test_a_similarly_named_passing_test_cannot_stand_in_for_a_skipped_one(self):
+        # The reviewer's counter-example: the required test skipped, `retest...` passed.
+        self.results(
+            testcase(HOST[0]), testcase(HOST[1]),
+            testcase(HOST[2], "<skipped>no Logic</skipped>"),
+            testcase("LogicProMCPTests.retestProcessUtilsLogicProVersionResolvesOffMain()"))
+        with self.assertRaises(manifest.ManifestError) as caught:
+            self.verify()
+        self.assertIn("not a host test: LogicProMCPTests/retestProcessUtils", str(caught.exception))
+        self.assertIn("skipped on the Logic host", str(caught.exception))
+
+    def test_a_duplicate_or_a_listed_live_test_in_the_results_fails(self):
+        self.results(*[testcase(test_id) for test_id in HOST], testcase(HOST[0]))
+        with self.assertRaisesRegex(manifest.ManifestError, "ran twice"):
+            self.verify()
+        self.results(*[testcase(test_id) for test_id in HOST],
+                     testcase("LogicProMCPTests.QualificationRunnerTests/live()"))
+        with self.assertRaisesRegex(manifest.ManifestError, "not a host test"):
+            self.verify()
+
+    def test_a_list_with_no_logic_host_entry_fails(self):
+        self.listed = self.write("none.json", not_run_document(("A.b/c()", "live")))
+        self.results(testcase("A.b/c()"))
+        with self.assertRaisesRegex(manifest.ManifestError, "no logic_host test"):
+            self.verify()
+
+
+FAKE_SWIFT = r"""#!/bin/bash
+# Stands in for `swift test`: records its arguments, prints console lines in the renderings that
+# defeated the old line counter, and writes the xUnit file named by --xunit-output from $FAKE_XUNIT.
+printf '%s\n' "$@" > "$FAKE_ARGS"
+while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--xunit-output" ]; then cp "$FAKE_XUNIT" "$2"; fi
+    shift
+done
+printf '\033[32m\xf4\x80\x80\x80 Test x passed after 0.1 seconds.\033[0m\n'
+printf '\xf0\x9f\x9f\xa2 Test y passed after 0.1 seconds.\n'
+exit "${FAKE_EXIT:-0}"
+"""
+
+
+class HostScriptTests(ManifestFixture):
+    """Scripts/host-tests.sh end to end with a stand-in `swift`."""
+
+    SCRIPT = Path(__file__).with_name("host-tests.sh")
+
+    def run_script(self, cases, exit_code=0):
+        listed = self.write("not-run.json", not_run_document(
+            *[(test_id, "logic_host") for test_id in HOST]))
+        xunit = self.write("fake.xml", "<testsuites><testsuite>" + "".join(cases) + "</testsuite></testsuites>")
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        swift = bin_dir / "swift"
+        swift.write_text(FAKE_SWIFT, encoding="utf-8")
+        swift.chmod(0o755)
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", FAKE_XUNIT=str(xunit),
+                   FAKE_ARGS=str(self.root / "args.txt"), FAKE_EXIT=str(exit_code))
+        return subprocess.run(["/bin/bash", str(self.SCRIPT), str(listed), str(self.root / "out")],
+                              env=env, text=True, capture_output=True, check=False)
+
+    def test_all_executed_passes_whatever_the_console_looks_like(self):
+        result = self.run_script([testcase(test_id) for test_id in HOST])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = (self.root / "args.txt").read_text(encoding="utf-8").split("\n")
+        self.assertIn("--xunit-output", arguments)
+        selected = arguments[arguments.index("--filter") + 1]
+        self.assertTrue(selected.startswith("^(?:") and selected.endswith("(?:/|$)"), selected)
+
+    def test_a_skipped_test_fails_even_though_the_console_shows_passes(self):
+        cases = [testcase(HOST[0], "<skipped>no Logic</skipped>"), testcase(HOST[1]), testcase(HOST[2])]
+        result = self.run_script(cases)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("skipped on the Logic host", result.stderr)
+
+    def test_a_missing_test_fails(self):
+        result = self.run_script([testcase(HOST[1]), testcase(HOST[2])])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing from the results", result.stderr)
+
+    def test_a_substring_collision_cannot_make_up_the_count(self):
+        cases = [testcase(HOST[0]), testcase(HOST[1]),
+                 testcase("LogicProMCPTests.retestProcessUtilsLogicProVersionResolvesOffMain()"),
+                 testcase("LogicProMCPTests.anotherPassing()")]
+        result = self.run_script(cases)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not a host test", result.stderr)
+
+    def test_a_failing_swift_exit_fails_even_when_the_results_pass(self):
+        result = self.run_script([testcase(test_id) for test_id in HOST], exit_code=1)
+        self.assertEqual(result.returncode, 1)
 
 
 if __name__ == "__main__":

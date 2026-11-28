@@ -278,24 +278,47 @@ import Testing
     #expect(LogicProVariantPolicy.ancestorOfThisFile(containing: "no-such-file-1a2b3c.json") == nil)
 }
 
-@Test func aManifestThatIsFoundButUnusableIsReportedOnceWithItsPath() throws {
+/// A warning is one physical line and names no path, whatever the directory is called.
+private func expectOneLineWithoutAnyPath(_ lines: [String], from paths: [String]) throws {
+    #expect(lines.count == 1)
+    let line = try #require(lines.first)
+    #expect(line.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) },
+            "the rendered warning carries a control character or line break: \(line.debugDescription)")
+    for path in paths {
+        #expect(!line.contains(path), "the rendered warning names \(path.debugDescription)")
+    }
+    #expect(!line.contains("/"), "the rendered warning carries a path separator: \(line)")
+}
+
+@Test func aManifestThatIsFoundButUnusableSaysSoWithoutNamingAnyPath() throws {
+    // The directory name holds a line break, the case that split one warning across two lines.
     let directory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("lpm-manifest-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("lpm-manifest-\(UUID().uuidString)\nsecond-line", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
     let broken = directory.appendingPathComponent("manifest.json")
     try Data("{\"supported_logic_pro_variants\": [{\"name\": 1}]}".utf8).write(to: broken)
     let empty = directory.appendingPathComponent("empty.json")
     try Data("{\"supported_logic_pro_variants\": []}".utf8).write(to: empty)
+    let paths = [broken.path, empty.path, directory.path, directory.lastPathComponent]
 
     for unusable in [broken, empty] {
+        // Found by the directory walk: nothing configured.
         var lines: [String] = []
         let records = LogicProVariantPolicy.resolveRecords(
             manifestURL: unusable, configuredPath: nil, warn: { lines.append($0) })
         #expect(records == LogicProVariantPolicy.emergencyFallback())
-        #expect(lines.count == 1)
-        #expect(try #require(lines.first).contains(unusable.path))
-        #expect(try #require(lines.first).contains("found but is unusable"))
+        try expectOneLineWithoutAnyPath(lines, from: paths)
+        #expect(lines == [LogicProVariantPolicy.unusableDiscoveredManifestWarning])
+        #expect(!(lines.first ?? "").contains(LogicProVariantPolicy.manifestEnvironmentKey))
+
+        // Configured through the environment variable: it names the variable, not the path.
+        var configuredLines: [String] = []
+        _ = LogicProVariantPolicy.resolveRecords(
+            manifestURL: unusable, configuredPath: unusable.path, warn: { configuredLines.append($0) })
+        try expectOneLineWithoutAnyPath(configuredLines, from: paths)
+        #expect(configuredLines == [LogicProVariantPolicy.unusableConfiguredManifestWarning])
+        #expect((configuredLines.first ?? "").contains(LogicProVariantPolicy.manifestEnvironmentKey))
     }
 }
 
@@ -310,8 +333,8 @@ import Testing
     #expect(lines.isEmpty)
     _ = LogicProVariantPolicy.resolveRecords(
         manifestURL: nil, configuredPath: "/no/such/manifest.json", warn: { lines.append($0) })
-    #expect(lines.count == 1)
-    #expect(try #require(lines.first).contains(LogicProVariantPolicy.manifestEnvironmentKey))
+    try expectOneLineWithoutAnyPath(lines, from: ["/no/such/manifest.json", "no/such"])
+    #expect(lines == [LogicProVariantPolicy.unusableConfiguredManifestWarning])
 
     // A usable manifest says nothing and supplies its own records.
     lines.removeAll()

@@ -435,16 +435,21 @@ test "$(git -C "$TRUSTED_ROOT" rev-parse HEAD)" = \
 test -z "$(git -C "$TRUSTED_ROOT" status --porcelain)"
 test "$(git -C "$CANDIDATE_ROOT" rev-parse HEAD)" = "$SHA"
 test -z "$(git -C "$CANDIDATE_ROOT" status --porcelain)"
-trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
-resolve_run_pull_request "$work/run-success.json"
-validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" final \
-  || { validate_status="$?"; [ "$validate_status" -ne 75 ] || run_ended=1; exit "$validate_status"; }
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
   > "$work/artifacts-success.json"
 fetch_run_jobs
 test "$(select_artifact_attempt "$work/jobs.json")" = "$artifact_attempt"
 validate_artifacts "$work/artifacts-success.json" "$artifact_attempt" "$work/artifact-success.json"
 cmp -s "$work/artifact.json" "$work/artifact-success.json"
+# Liveness is judged LAST: after the final artifact and job API call and immediately before the
+# success POST, so a run cancelled while those calls were made is seen. What remains is the gap
+# between this read and the POST. It fails safe: the status names this attempt's URL, a dead
+# attempt has no consumer (the consumer accepts only the current attempt's status and every re-run
+# is a new attempt), so a success that lands in that gap can never be used.
+trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
+resolve_run_pull_request "$work/run-success.json"
+validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" final \
+  || { validate_status="$?"; [ "$validate_status" -ne 75 ] || run_ended=1; exit "$validate_status"; }
 post_status success "$receipt"
 succeeded=1
 trap - EXIT INT TERM

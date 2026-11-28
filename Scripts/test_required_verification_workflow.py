@@ -590,6 +590,89 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertLess(ended_exit, wrapper.index('post_status success "$receipt"'))
         self.assertIn("repeat it on a fresh attempt", wrapper)
 
+    def run_publication_tail(self, cancel_during_artifact_refresh):
+        """Run the wrapper's real publication tail and validate_run with the GitHub calls stubbed.
+
+        The stubbed API reports an in-progress run until the artifact listing is requested; with
+        `cancel_during_artifact_refresh` that request also cancels the run, which is the window
+        between the last artifact/job call and the success POST.
+        """
+        wrapper = read("Scripts/ci-native-qualify.sh")
+        function = wrapper[wrapper.index("validate_run() {"):]
+        function = function[:function.index("\n}\n") + 3]
+        tail = wrapper[wrapper.index('trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \\\n  > "$work/artifacts-success.json"'):]
+        tail = tail[:tail.index("succeeded=1\n")]
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = pathlib.Path(tmp, "repo")
+            repo.mkdir()
+            git = lambda *args: subprocess.run(
+                ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                text=True, capture_output=True, check=True).stdout.strip()
+            git("init", "-q", "-b", "main")
+            git("commit", "-q", "--allow-empty", "-m", "base")
+            base = git("rev-parse", "HEAD")
+            git("checkout", "-q", "-b", "topic")
+            git("commit", "-q", "--allow-empty", "-m", "head")
+            head = git("rev-parse", "HEAD")
+            git("checkout", "-q", "main")
+            git("merge", "-q", "--no-ff", "-m", "merge", "topic")
+            merge = git("rev-parse", "HEAD")
+            run = {
+                "id": 7, "repository": {"full_name": "o/r"}, "event": "pull_request",
+                "path": ".github/workflows/ci.yml", "run_attempt": 2, "head_sha": head,
+                "status": "in_progress", "conclusion": None,
+                "pull_requests": [{"head": {"sha": head},
+                                   "base": {"sha": base, "ref": "main",
+                                            "repo": {"url": "https://api.github.com/repos/o/r"}}}],
+            }
+            work = pathlib.Path(tmp, "work")
+            work.mkdir()
+            (work / "active.json").write_text(json.dumps(run))
+            (work / "cancelled.json").write_text(json.dumps(
+                dict(run, status="completed", conclusion="cancelled")))
+            (work / "artifact.json").write_text('{"id": 1}\n')
+            harness = f"""set -euo pipefail
+SHA={merge} RUN_ID=7 REPO=o/r CANDIDATE_ROOT={repo} work={work}
+run_attempt=2 artifact_attempt=2 receipt=receipt run_ended=0 CANCEL={int(cancel_during_artifact_refresh)}
+trusted_api() {{
+  echo "$2" >> "$work/calls"
+  case "$2" in
+    */artifacts*) [ "$CANCEL" -eq 0 ] || touch "$work/cancelled" ;;
+    "repos/$REPO/actions/runs/$RUN_ID")
+      if [ -e "$work/cancelled" ]; then cat "$work/cancelled.json"; else cat "$work/active.json"; fi ;;
+  esac
+}}
+resolve_run_pull_request() {{ :; }}
+fetch_run_jobs() {{ :; }}
+select_artifact_attempt() {{ echo 2; }}
+validate_artifacts() {{ echo '{{"id": 1}}' > "$3"; }}
+post_status() {{ echo "$1" >> "$work/posts"; }}
+{function}
+{tail}
+echo REACHED_THE_END_OF_THE_TAIL
+"""
+            result = subprocess.run(["bash", "-c", harness], text=True, capture_output=True, check=False)
+            posts = (work / "posts").read_text().split() if (work / "posts").exists() else []
+            calls = (work / "calls").read_text().split()
+            return result, posts, calls
+
+    def test_cancellation_during_the_artifact_refresh_posts_no_success(self):
+        # Control: the run is alive for the whole tail, so success is posted, after the last
+        # artifact call and following one more liveness read.
+        alive, posts, calls = self.run_publication_tail(cancel_during_artifact_refresh=False)
+        self.assertEqual(alive.returncode, 0, alive.stderr)
+        self.assertEqual(posts, ["success"])
+        self.assertEqual(calls[-1], "repos/o/r/actions/runs/7")
+        self.assertTrue(calls[-2].startswith("repos/o/r/actions/runs/7/artifacts"), calls)
+        # The run is cancelled while the artifacts are read again: nothing is posted as success
+        # and the caller is told the attempt ended (75), which posts the failure naming why.
+        cancelled, posts, calls = self.run_publication_tail(cancel_during_artifact_refresh=True)
+        self.assertEqual(cancelled.returncode, 75, cancelled.stdout + cancelled.stderr)
+        self.assertEqual(posts, [])
+        self.assertNotIn("REACHED_THE_END_OF_THE_TAIL", cancelled.stdout)
+        self.assertIn("fresh attempt is needed", cancelled.stderr)
+        self.assertEqual(calls[-1], "repos/o/r/actions/runs/7")
+
     def test_native_candidate_binds_the_run_base_and_head(self):
         wrapper = read("Scripts/ci-native-qualify.sh")
         self.assertIn('run.get("head_sha") != head_sha', wrapper)
@@ -877,6 +960,27 @@ class RequiredVerificationWorkflow(unittest.TestCase):
             self.assertIn(required, gate)
         self.assertNotIn("skip", gate.lower())
 
+    def test_the_logic_host_runs_the_candidates_host_tests_after_the_live_ones(self):
+        gate = read("Scripts/release-qualify.sh")
+        debug_loop = gate.index('for live_test in ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do')
+        host = gate.index('bash "$TRUSTED_ROOT/Scripts/host-tests.sh" Tests/not-run-on-hosted.json')
+        final = gate.index("trap - EXIT INT TERM")
+        self.assertLess(debug_loop, host)
+        self.assertLess(host, final)
+        # The host rule reads structured results; nothing counts console lines or names tests.
+        self.assertNotIn("host_gated", gate)
+        self.assertNotIn("grep -c", gate)
+        runner = read("Scripts/host-tests.sh")
+        self.assertIn("--xunit-output", runner)
+        self.assertIn("verify-host", runner)
+        self.assertNotIn("grep", runner)
+
+    def test_hosted_shards_and_the_merge_check_the_not_run_list(self):
+        workflow = read(".github/workflows/ci.yml")
+        for command in ("verify-xunit", "verify-union"):
+            start = workflow.index(f"ci-test-shard-manifest.py {command}")
+            self.assertIn("--not-run Tests/not-run-on-hosted.json", workflow[start:start + 400], command)
+
     def test_every_job_that_reads_git_history_checks_out_full_history(self):
         scripts = history_reading_scripts()
         self.assertIn("check-canon-citations.py", scripts)
@@ -978,7 +1082,7 @@ class RequiredVerificationWorkflow(unittest.TestCase):
 RELEASE_PATH_SCRIPTS = (
     "release.sh", "release-qualify.sh", "release-stable.sh", "release-package.sh",
     "release-fetch-qualified-inputs.sh", "release-build-universal.sh",
-    "release-verify-formula-install-paths.sh", "ci-native-qualify.sh",
+    "release-verify-formula-install-paths.sh", "ci-native-qualify.sh", "host-tests.sh",
 )
 BASH32 = "/bin/bash"
 # Constructs that fail on the macOS stock bash 3.2 (or, for a bare array

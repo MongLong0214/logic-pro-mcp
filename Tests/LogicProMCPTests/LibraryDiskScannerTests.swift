@@ -3,7 +3,7 @@ import Testing
 @testable import LogicProMCP
 
 /// Whether this machine has the Logic factory Library installed. Used as an
-/// `.requiresLogicHost(if:)` trait so an absent Library is reported as a skipped test
+/// `.enabled(if:)` trait so an absent Library is reported as a skipped test
 /// rather than as a body that returns early and counts as a pass.
 private let installedLogicLibraryExists: Bool = FileManager.default.fileExists(
     atPath: URL(fileURLWithPath: NSHomeDirectory())
@@ -232,7 +232,7 @@ struct LibraryDiskScannerTests {
     /// implausible-low count (e.g. under 1000 leaves) does NOT ship — the
     /// whole point of v3.0.5 is to fix the 345-leaf undercount.
     @Test("local-machine integration: factory Library reports at least 1000 leaves when present",
-          .requiresLogicHost(if: installedLogicLibraryExists))
+          .enabled(if: installedLogicLibraryExists))
     func scanLocalFactoryLibraryReportsFullCoverage() throws {
         let root = try LibraryDiskScanner.scan()
         #expect(
@@ -604,7 +604,7 @@ struct LibraryDiskScannerTests {
     /// early. An early return reads as a pass, which is how the previous
     /// version of this test asserted nothing on CI for its whole life.
     @Test("installed Library emits no category outside the Panel inventory",
-          .requiresLogicHost(if: installedLogicLibraryExists))
+          .enabled(if: installedLogicLibraryExists))
     func installedLibraryEmitsOnlyPanelCategories() throws {
         let root = try LibraryDiskScanner.scan()
         let unexpected = Set(root.categories).subtracting(Self.panelCategoriesV304)

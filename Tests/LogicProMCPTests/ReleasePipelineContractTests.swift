@@ -182,15 +182,18 @@ import Testing
     let candidateTree = try #require(wrapper.range(
         of: "test \"$(git -C \"$CANDIDATE_ROOT\" rev-parse HEAD)\" = \"$SHA\"",
         range: trustedTree.upperBound..<wrapper.endIndex))
+    let finalArtifact = try #require(wrapper.range(
+        of: "artifact-success.json", range: candidateTree.upperBound..<wrapper.endIndex))
+    // Liveness is read last: after the final artifact and job calls, immediately before success.
     let finalRun = try #require(wrapper.range(
-        of: "run-success.json", range: candidateTree.upperBound..<wrapper.endIndex))
-    let finalArtifact = try #require(wrapper.range(of: "artifact-success.json"))
+        of: "run-success.json", range: finalArtifact.upperBound..<wrapper.endIndex))
     let success = try #require(wrapper.range(of: "post_status success \"$receipt\""))
     #expect(candidateRun.lowerBound < trustedTree.lowerBound)
     #expect(trustedTree.lowerBound < candidateTree.lowerBound)
     #expect(candidateTree.lowerBound < finalRun.lowerBound)
-    #expect(finalRun.lowerBound < finalArtifact.lowerBound)
-    #expect(finalArtifact.lowerBound < success.lowerBound)
+    #expect(candidateTree.lowerBound < finalArtifact.lowerBound)
+    #expect(finalArtifact.lowerBound < finalRun.lowerBound)
+    #expect(finalRun.lowerBound < success.lowerBound)
     #expect(wrapper.contains("post_status success \"$receipt\""))
     #expect(!wrapper.contains("gh run download"))
     #expect(!wrapper.contains("run.get(\"head_sha\") != expected_sha"))

@@ -89,29 +89,33 @@ enum LogicProVariantPolicy {
         )
     }
 
+    /// What an unusable manifest says. Neither sentence carries a path: an automatically discovered
+    /// one can be an unrelated parent directory's file, whose name (and any line break in it) does
+    /// not belong in a log, and a configured one is already known to the person who set it.
+    static let unusableDiscoveredManifestWarning =
+        "LogicProVariantPolicy: a Logic Pro variant manifest was found but could not be used; "
+        + "using the built-in Logic Pro variants"
+    static var unusableConfiguredManifestWarning: String {
+        "LogicProVariantPolicy: \(manifestEnvironmentKey) names a manifest that could not be used; "
+            + "using the built-in Logic Pro variants"
+    }
+
     /// The manifest's variants, or the built-in ones with at most one line saying why.
     ///
     /// #1627: a packaged install (Homebrew) ships no manifest.json, so the built-in records are its
-    /// normal source and say nothing. Two cases are worth a line: a manifest the directory walk (or
-    /// the configured path) FOUND that cannot be used, which names the path, and a configured path
-    /// that names nothing at all.
+    /// normal source and say nothing. Two cases are worth a line: a manifest that was FOUND but
+    /// cannot be used, and a configured path that names nothing at all. Neither line names a path.
     static func resolveRecords(
         manifestURL: URL?, configuredPath: String?, warn: (String) -> Void
     ) -> [LogicProVariantRecord] {
+        let isConfigured = !(configuredPath ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if let manifestURL {
             if let records = manifestRecords(at: manifestURL) {
                 return records
             }
-            warn(
-                "LogicProVariantPolicy: \(manifestURL.path) was found but is unusable; "
-                    + "using the built-in Logic Pro variants"
-            )
-        } else if let configured = configuredPath?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !configured.isEmpty {
-            warn(
-                "LogicProVariantPolicy: \(manifestEnvironmentKey) names a manifest that could not be "
-                    + "used; using the built-in Logic Pro variants"
-            )
+            warn(isConfigured ? unusableConfiguredManifestWarning : unusableDiscoveredManifestWarning)
+        } else if isConfigured {
+            warn(unusableConfiguredManifestWarning)
         }
         return emergencyFallback()
     }

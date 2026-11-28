@@ -2,6 +2,7 @@
 """Partition and verify exact Swift Testing manifests for N coverage shards."""
 
 import argparse
+import json
 from pathlib import Path
 import re
 import sys
@@ -149,9 +150,47 @@ def _expected_xunit_index(expected: set[str]) -> dict[tuple[str, str], str]:
     return index
 
 
-def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path) -> None:
-    expected = set(_read(expected_path, label="expected shard manifest", require_sorted=True))
-    expected_xunit_index = _expected_xunit_index(expected)
+# Every test the hosted shards are expected to report as not run, by full test ID, in
+# Tests/not-run-on-hosted.json. The classes say where each one DOES execute:
+#   logic_host  the Logic host's native qualification (Scripts/host-tests.sh), which must pass it
+#   live        the live loops of Scripts/release-qualify.sh
+#   operator    nowhere automatic; it needs an operator-supplied project
+# The rule is enforced from what the test run reported, never from how a condition is spelled in
+# the sources: a closure `.enabled { }`, a suite-level trait or a condition behind a constant all
+# surface as a skipped testcase in the xUnit output.
+NOT_RUN_CLASSES = ("logic_host", "live", "operator")
+MUST_BE_SKIPPED_ON_HOSTED = ("logic_host", "live")
+
+
+def read_not_run(path: Path) -> dict[str, tuple[str, str]]:
+    """The not-run list as {full test ID: (class, reason)}."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ManifestError(f"cannot read not-run list {path}: {error}") from error
+    if not isinstance(document, dict) or set(document) != {"tests"} \
+            or not isinstance(document["tests"], list):
+        raise ManifestError(f'not-run list must be {{"tests": [...]}}: {path}')
+    entries: dict[str, tuple[str, str]] = {}
+    for row in document["tests"]:
+        if not isinstance(row, dict) or set(row) != {"id", "class", "reason"} \
+                or not all(isinstance(row[key], str) for key in row):
+            raise ManifestError(f"not-run entry needs exactly string id, class and reason: {row!r}")
+        test_id, kind, reason = row["id"], row["class"], row["reason"]
+        if not test_id or test_id != test_id.strip() or "\n" in test_id:
+            raise ManifestError(f"not-run entry has a blank or padded id: {test_id!r}")
+        if kind not in NOT_RUN_CLASSES:
+            raise ManifestError(f"not-run entry {test_id!r} has class {kind!r}; expected {NOT_RUN_CLASSES}")
+        if not reason.strip() or "\n" in reason:
+            raise ManifestError(f"not-run entry {test_id!r} needs a one-line reason")
+        if test_id in entries:
+            raise ManifestError(f"not-run list names {test_id!r} twice")
+        entries[test_id] = (kind, reason)
+    return entries
+
+
+def _xunit_cases(xunit_directory: Path) -> list[tuple[str, str, bool, bool]]:
+    """(classname, name, failed, skipped) of every testcase in the one xUnit file of a run."""
     try:
         xml_files = sorted(path for path in xunit_directory.iterdir()
                            if path.is_file() and path.suffix == ".xml")
@@ -165,15 +204,29 @@ def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path) 
         root = ET.parse(wanted).getroot()
     except (OSError, ET.ParseError) as error:
         raise ManifestError(f"cannot parse xUnit output {wanted}: {error}") from error
-
-    raw_cases: set[tuple[str, str]] = set()
-    actual: set[str] = set()
+    cases = []
     for testcase in root.iter("testcase"):
         classname = testcase.get("classname")
         name = testcase.get("name")
         if not classname or not name:
             raise ManifestError("xUnit testcase lacks classname or name")
-        if testcase.find("failure") is not None or testcase.find("error") is not None:
+        failed = testcase.find("failure") is not None or testcase.find("error") is not None
+        cases.append((classname, name, failed, testcase.find("skipped") is not None))
+    return cases
+
+
+def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path,
+                 not_run_path: Path) -> None:
+    expected = set(_read(expected_path, label="expected shard manifest", require_sorted=True))
+    not_run = read_not_run(not_run_path)
+    expected_xunit_index = _expected_xunit_index(expected)
+    cases = _xunit_cases(xunit_directory)
+
+    raw_cases: set[tuple[str, str]] = set()
+    actual: set[str] = set()
+    skipped: set[str] = set()
+    for classname, name, failed, was_skipped in cases:
+        if failed:
             raise ManifestError(f"xUnit testcase failed: {classname}/{name}")
         raw_case = (classname, name)
         if raw_case in raw_cases:
@@ -186,13 +239,83 @@ def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path) 
         if resolved in actual:
             raise ManifestError(f"xUnit contains a canonical duplicate: {resolved}")
         actual.add(resolved)
+        if was_skipped:
+            skipped.add(resolved)
     if not raw_cases:
         raise ManifestError("xUnit contains no testcases")
     if actual != expected:
         missing = sorted(expected - actual)[:3]
         extra = sorted(actual - expected)[:3]
         raise ManifestError(f"xUnit differs from expected manifest; missing={missing} extra={extra}")
+    # A skip is a test that executed nowhere on this lane, so each one must be accounted for ...
+    unlisted = sorted(skipped - set(not_run))
+    if unlisted:
+        raise ManifestError(
+            f"xUnit testcase was skipped but is not in the not-run list; run it here or list it "
+            f"with the lane that runs it: {unlisted[:3]}")
+    # ... and a listed test that did run here is a stale entry that would let the list rot.
+    stale = sorted(test_id for test_id, (kind, _) in not_run.items()
+                   if kind in MUST_BE_SKIPPED_ON_HOSTED and test_id in expected
+                   and test_id not in skipped)
+    if stale:
+        raise ManifestError(
+            f"not-run list entry was not skipped on the hosted run, so the entry is stale: {stale[:3]}")
     _write_new(actual_path, sorted(actual))
+
+
+def host_test_ids(not_run_path: Path) -> list[str]:
+    ids = sorted(test_id for test_id, (kind, _) in read_not_run(not_run_path).items()
+                 if kind == "logic_host")
+    if not ids:
+        raise ManifestError(f"not-run list names no logic_host test: {not_run_path}")
+    return ids
+
+
+def host_filter(not_run_path: Path) -> str:
+    """The anchored, escaped `swift test --filter` regular expression for exactly the host tests."""
+    pattern = shard_filter(host_test_ids(not_run_path))
+    try:
+        re.compile(pattern)
+    except re.error as error:
+        raise ManifestError(f"host filter is not a regular expression: {error}") from error
+    return pattern
+
+
+def verify_host(not_run_path: Path, xunit_directory: Path) -> None:
+    """Every logic_host test is in the run's xUnit output, executed, and passed.
+
+    A skip is a failure here: this is the one place the body of such a test runs, so a test that
+    did not execute is absence reported as success. A testcase that is not on the list also fails,
+    which is how a filter that matched a similarly named test would show.
+    """
+    wanted = set(host_test_ids(not_run_path))
+    index = _expected_xunit_index(wanted)
+    problems: list[str] = []
+    seen: set[str] = set()
+    for classname, name, failed, was_skipped in _xunit_cases(xunit_directory):
+        resolved = index.get((classname, name))
+        if resolved is None:
+            problems.append(f"ran a test that is not a host test: {classname}/{name}")
+        elif resolved in seen:
+            problems.append(f"ran twice: {resolved}")
+        else:
+            seen.add(resolved)
+            if failed:
+                problems.append(f"failed: {resolved}")
+            elif was_skipped:
+                problems.append(f"skipped on the Logic host, which counts as a failure: {resolved}")
+    for test_id in sorted(wanted - seen):
+        problems.append(f"missing from the results: {test_id}")
+    if problems:
+        raise ManifestError("host tests did not all execute and pass: " + "; ".join(problems))
+
+
+def verify_not_run_in_inventory(inventory_path: Path, not_run_path: Path) -> None:
+    """Every not-run entry names a test that exists, so a misspelt ID cannot hide a test."""
+    inventory = set(_read(inventory_path, label="test inventory"))
+    unknown = sorted(set(read_not_run(not_run_path)) - inventory)
+    if unknown:
+        raise ManifestError(f"not-run list names tests absent from the inventory: {unknown[:3]}")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -208,10 +331,19 @@ def _parser() -> argparse.ArgumentParser:
     xunit.add_argument("--expected", type=Path, required=True)
     xunit.add_argument("--xunit-directory", type=Path, required=True)
     xunit.add_argument("--actual", type=Path, required=True)
+    xunit.add_argument("--not-run", type=Path, required=True)
 
     union = subparsers.add_parser("verify-union")
     union.add_argument("--inventory", type=Path, required=True)
     union.add_argument("--shard", type=Path, action="append", required=True)
+    union.add_argument("--not-run", type=Path, required=True)
+
+    host_filter_command = subparsers.add_parser("host-filter")
+    host_filter_command.add_argument("--not-run", type=Path, required=True)
+
+    host = subparsers.add_parser("verify-host")
+    host.add_argument("--not-run", type=Path, required=True)
+    host.add_argument("--xunit-directory", type=Path, required=True)
     return parser
 
 
@@ -221,9 +353,14 @@ def main() -> int:
         if args.command == "partition":
             partition_manifest(args.inventory, args.shards, args.output_directory)
         elif args.command == "verify-xunit":
-            verify_xunit(args.expected, args.xunit_directory, args.actual)
+            verify_xunit(args.expected, args.xunit_directory, args.actual, args.not_run)
+        elif args.command == "host-filter":
+            print(host_filter(args.not_run))
+        elif args.command == "verify-host":
+            verify_host(args.not_run, args.xunit_directory)
         else:
             verify_union(args.inventory, args.shard)
+            verify_not_run_in_inventory(args.inventory, args.not_run)
     except ManifestError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
