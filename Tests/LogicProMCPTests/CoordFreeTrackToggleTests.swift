@@ -2119,4 +2119,166 @@ struct CoordFreeTrackToggleTests {
         #expect(result.isSuccess, "\(result.message)")
         #expect(try #require(boolValue(f, checkbox)))
     }
+
+    // MARK: - Issue #1604: focus left on a track-name field after a click
+
+    /// What Logic 13 (7801, ko-KR) read after the header name was focused: the focus is an
+    /// AXTextField that is the child of the name AXTextField (its AXDescription is the committed
+    /// name), selecting the whole name; the name sits in a layout-item row of the header group,
+    /// inside scroll and split groups, inside the Tracks group.
+    private struct NameClickFocus {
+        let field: AXUIElement
+        let tracksGroup: AXUIElement
+        let headerGroup: AXUIElement
+    }
+
+    private func focusTrackNameField(
+        _ f: ToggleFixture, typed: String = "오디오 2", committed: String = "오디오 2",
+        underHeaderGroupDirectly: Bool = false
+    ) -> NameClickFocus {
+        let b = f.builder
+        let window = b.element(9001)
+        let tracksGroup = b.element(9800), split = b.element(9801), headerGroup = b.element(9802)
+        let row = b.element(9803), name = b.element(9804), field = b.element(9805)
+        b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+        for group in [tracksGroup, headerGroup] { b.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String) }
+        b.setAttribute(split, kAXRoleAttribute as String, kAXSplitGroupRole as String)
+        b.setAttribute(row, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        for text in [name, field] { b.setAttribute(text, kAXRoleAttribute as String, kAXTextFieldRole as String) }
+        b.setAttribute(name, kAXDescriptionAttribute as String, committed)
+        b.setAttribute(field, kAXValueAttribute as String, typed)
+        b.setAttributeSettable(field, kAXValueAttribute as String, true)
+        b.setAttributeSettable(field, kAXSelectedTextRangeAttribute as String, true)
+        b.setChildren(window, [f.builder.element(9002), f.builder.element(9003), tracksGroup])
+        b.setChildren(tracksGroup, [split])
+        b.setChildren(split, [headerGroup])
+        b.setChildren(headerGroup, [row])
+        if underHeaderGroupDirectly {
+            b.setChildren(headerGroup, [row, field])
+        }
+        b.setChildren(row, [name])
+        b.setChildren(name, underHeaderGroupDirectly ? [] : [field])
+        b.setChildren(field, [])
+        b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, field)
+        return NameClickFocus(field: field, tracksGroup: tracksGroup, headerGroup: headerGroup)
+    }
+
+    private func focusIs(_ f: ToggleFixture, _ element: AXUIElement) -> Bool {
+        guard let focused = f.builder.attributeValue(f.app, kAXFocusedUIElementAttribute as String) else { return false }
+        return CFEqual(focused as CFTypeRef, element)
+    }
+
+    @Test("after a name click, the toggle moves focus to the Tracks group, verifies it, then posts the key",
+          arguments: [
+            ("track.set_mute", "keyboard-mute"), ("track.set_solo", "keyboard-solo"),
+          ])
+    func toggleLeavesAnUnchangedNameFieldThenPostsTheKey(operation: String, action: String) async throws {
+        let f = makeToggleFixture()
+        let name = focusTrackNameField(f)
+        let key = KeyMouseRecorder()
+        let control = operation == "track.set_mute" ? f.mute[0] : f.solo[0]
+        var focusAtPost: AXUIElement?
+        key.onKeyEvent = { _ in
+            focusAtPost = (f.builder.attributeValue(f.app, kAXFocusedUIElementAttribute as String) as AnyObject?)
+                .map { $0 as! AXUIElement }
+            f.builder.setAttribute(control, kAXValueAttribute as String, 1)
+        }
+        let channel = makeChannel(f, keyRuntime: key.runtime(), setAttribute: { element, attribute, _ in
+            if attribute == kAXFocusedAttribute as String, element == name.tracksGroup {
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, name.tracksGroup)
+            }
+            return true
+        })
+
+        let result = await channel.execute(operation: operation, params: ["index": "0", "enabled": "true"])
+
+        #expect(result.isSuccess, "\(result.message)")
+        let obj = try #require(object(result.message))
+        #expect(obj["state"] as? String == "A")
+        #expect(obj["action"] as? String == action)
+        #expect(try #require(boolValue(f, control)))
+        #expect(key.keyEvents.count == 1)
+        let at = try #require(focusAtPost)
+        #expect(CFEqual(at, name.tracksGroup))
+        #expect(key.mouseEvents.isEmpty)
+    }
+
+    @Test("after a name click, arm leaves the unchanged name field and only then posts its chord")
+    func armLeavesAnUnchangedNameFieldThenPostsTheChord() async throws {
+        let f = makeToggleFixture()
+        let name = focusTrackNameField(f)
+        let key = KeyMouseRecorder()
+        var focusAtPost: AXUIElement?
+        key.onFlaggedKey = { _, _ in
+            focusAtPost = (f.builder.attributeValue(f.app, kAXFocusedUIElementAttribute as String) as AnyObject?)
+                .map { $0 as! AXUIElement }
+            f.builder.setAttribute(f.arm[0], kAXValueAttribute as String, 1)
+        }
+        let channel = makeChannel(f, keyRuntime: key.runtime(), setAttribute: { element, attribute, _ in
+            if attribute == kAXFocusedAttribute as String, element == name.tracksGroup {
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, name.tracksGroup)
+            }
+            return true
+        })
+
+        let result = await channel.execute(operation: "track.set_arm", params: ["index": "0", "enabled": "true"])
+
+        #expect(result.isSuccess, "\(result.message)")
+        #expect(try #require(boolValue(f, f.arm[0])))
+        #expect(key.flaggedKeyEvents.count == 1)
+        #expect(key.keyEvents.isEmpty)
+        #expect(CFEqual(try #require(focusAtPost), name.tracksGroup))
+    }
+
+    @Test("a name field with pending text is never left: refused, focus untouched, no key",
+          arguments: ["track.set_mute", "track.set_solo", "track.set_arm"])
+    func toggleKeepsAPendingNameEditor(operation: String) async throws {
+        let f = makeToggleFixture()
+        let name = focusTrackNameField(f, typed: "Pending1604")
+        let key = KeyMouseRecorder()
+        let channel = makeChannel(f, keyRuntime: key.runtime())
+
+        let result = await channel.execute(operation: operation, params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = try #require(object(result.message))
+        #expect(obj["error"] as? String == "unsafe_focus_for_synthetic_key")
+        #expect(obj["focus_guard_stage"] as? String == "before_actuation")
+        #expect(f.builder.setCalls.isEmpty)
+        #expect(f.builder.actionCalls.isEmpty)
+        #expect(key.keyEvents.isEmpty && key.flaggedKeyEvents.isEmpty)
+        #expect(focusIs(f, name.field))
+    }
+
+    @Test("an editor outside the name-field shape (rename menu) is never left")
+    func toggleKeepsARenameMenuEditor() async throws {
+        let f = makeToggleFixture()
+        let name = focusTrackNameField(f, underHeaderGroupDirectly: true)
+        let key = KeyMouseRecorder()
+        let channel = makeChannel(f, keyRuntime: key.runtime())
+
+        let result = await channel.execute(operation: "track.set_mute", params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        #expect(f.builder.setCalls.isEmpty)
+        #expect(key.keyEvents.isEmpty)
+        #expect(focusIs(f, name.field))
+    }
+
+    @Test("when focus does not land on the Tracks group the toggle refuses and posts no key")
+    func toggleRefusesWhenTheFocusMoveDoesNotLand() async throws {
+        let f = makeToggleFixture()
+        _ = focusTrackNameField(f)
+        let key = KeyMouseRecorder()
+        // The write reports success and Logic keeps the editor focused.
+        let channel = makeChannel(f, keyRuntime: key.runtime(), setAttribute: { _, _, _ in true })
+
+        let result = await channel.execute(operation: "track.set_mute", params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = try #require(object(result.message))
+        #expect(obj["error"] as? String == "unsafe_focus_for_synthetic_key")
+        #expect(key.keyEvents.isEmpty)
+        #expect(f.builder.actionCalls.isEmpty)
+    }
 }
