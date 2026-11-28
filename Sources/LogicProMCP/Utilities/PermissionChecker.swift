@@ -137,6 +137,9 @@ enum PermissionChecker {
         // "denied" for an infrastructure failure — a false-RED the doctor must not emit.
         let runSystemEventsAutomationProbe: @Sendable () -> CheckState
         let postEventPreflight: @Sendable () -> Bool
+        // #1596: the process TCC actually evaluates. nil = not measured; the
+        // report then names no principal rather than guess one.
+        let responsiblePrincipal: @Sendable () -> TCCResponsibility.Principal?
 
         /// `runAutomationProbeState` defaults to lifting the two-state
         /// `runAutomationProbe` into a CheckState, so existing 4-argument
@@ -148,13 +151,15 @@ enum PermissionChecker {
             runAutomationProbe: @escaping @Sendable () -> Bool,
             runSystemEventsAutomationProbe: @escaping @Sendable () -> CheckState,
             runAutomationProbeState: (@Sendable () -> CheckState)? = nil,
-            postEventPreflight: @escaping @Sendable () -> Bool = { false }
+            postEventPreflight: @escaping @Sendable () -> Bool = { false },
+            responsiblePrincipal: @escaping @Sendable () -> TCCResponsibility.Principal? = { nil }
         ) {
             self.checkAccessibility = checkAccessibility
             self.isLogicProRunning = isLogicProRunning
             self.runAutomationProbe = runAutomationProbe
             self.runSystemEventsAutomationProbe = runSystemEventsAutomationProbe
             self.postEventPreflight = postEventPreflight
+            self.responsiblePrincipal = responsiblePrincipal
             self.runAutomationProbeState = runAutomationProbeState ?? {
                 runAutomationProbe() ? .granted : .notGranted
             }
@@ -175,7 +180,8 @@ enum PermissionChecker {
             runAutomationProbeState: {
                 nonPromptingAutomationState(bundleID: LogicProTarget.current.bundleID)
             },
-            postEventPreflight: { CGPreflightPostEventAccess() }
+            postEventPreflight: { CGPreflightPostEventAccess() },
+            responsiblePrincipal: { TCCResponsibility.currentPrincipal() }
         )
     }
 
@@ -184,6 +190,10 @@ enum PermissionChecker {
         let automationState: CheckState
         let systemEventsAutomationState: CheckState
         let postEventAccessState: CheckState
+        /// The process these states were measured for (#1596). A launcher that
+        /// disclaims responsibility, as some MCP clients do for stdio servers, makes
+        /// this binary its own principal, so grants on the launcher app do not apply.
+        var principal: TCCResponsibility.Principal?
 
         init(
             accessibility: Bool,
@@ -264,6 +274,9 @@ enum PermissionChecker {
             }
             lines.append("Automation (System Events): \(systemEventsAutomationState.summaryLabel)")
             lines.append("PostEvent (CGEvent): \(postEventAccessState.summaryLabel)")
+            if let principal {
+                lines.append(principal.summaryLine)
+            }
             if !allGranted {
                 lines.append(
                     "Outcome: terminal; unavailable permissions were reported without requesting "
@@ -328,12 +341,14 @@ enum PermissionChecker {
     }
 
     static func check(runtime: Runtime) -> PermissionStatus {
-        PermissionStatus(
+        var status = PermissionStatus(
             accessibilityState: checkAccessibilityState(runtime: runtime),
             automationState: checkAutomationState(runtime: runtime),
             systemEventsAutomationState: checkSystemEventsAutomationState(runtime: runtime),
             postEventAccessState: runtime.postEventPreflight() ? .granted : .notGranted
         )
+        status.principal = runtime.responsiblePrincipal()
+        return status
     }
 
     private static func runAutomationProbeViaShell() -> CheckState {

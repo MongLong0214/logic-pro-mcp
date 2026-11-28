@@ -59,7 +59,7 @@ private func doctorV3Runtime(
     runtime.keyCommandsPresetStaged = { true }
     runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
-    runtime.tccCrossContextProbe = { .granted("service=accessibility;principal_hint=Terminal;state=granted") }
+    runtime.tccCrossContextProbe = { .recorded("recognised_entries=1;unrecognised_entries=0;service=accessibility;principal_hint=Terminal") }
     runtime.blockingDialogInfo = { nil }
     runtime.fileExistsAtPath = exists
     runtime.isRegularFile = regular
@@ -228,17 +228,19 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
     #expect(fallback.context == "terminal")
 }
 
-@Test func testDoctorV3TCCDeniedWarnsAndRedacts() {
+// #1596: a database row is historical context. A denied row records nothing about the measured
+// principal, so it neither warns as a host denial nor carries an authorization state.
+@Test func testDoctorV3TCCDeniedRowIsHistoryWithoutStateOrName() {
     let rows = [
         SetupDoctor.TCCRow(
             service: "kTCCServiceAppleEvents",
-            client: "/Users/example/Claude.app",
+            client: "/Users/example/Zed.app",
             authValue: 0,
             indirectObjectIdentifier: "com.apple.logic10"
         )
     ]
     let result = SetupDoctor.mapTCCQueryOutcome(.rows(rows))
-    #expect(result == .denied("service=appleevents:logic10;principal_hint=Claude.app;state=denied"))
+    #expect(result == .recorded("recognised_entries=1;unrecognised_entries=0;service=appleevents:logic-pro;principal_hint=Zed.app"))
 }
 
 @Test func testDoctorV3TCCRecognizesAgentAndEditorPrincipals() {
@@ -274,7 +276,7 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
     let findings = SetupDoctor.tccFindings(rows)
     #expect(findings.count == cases.count)
     for item in cases {
-        #expect(findings.contains("service=accessibility;principal_hint=\(item.principalHint);state=granted"))
+        #expect(findings.contains("service=accessibility;principal_hint=\(item.principalHint)"))
     }
     #expect(findings.allSatisfy { !$0.contains("/Users/example") })
     #expect(findings.allSatisfy { !$0.contains("authorized") })
@@ -287,8 +289,16 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
         authValue: 1,
         indirectObjectIdentifier: ""
     )
-    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([unknown])) == .skipped(reason: .principalNotFound))
+    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([unknown])) == .recorded("recognised_entries=1;unrecognised_entries=0;service=post_event;principal_hint=com.apple.Terminal"))
     #expect(SetupDoctor.mapTCCQueryOutcome(.rows([])) == .skipped(reason: .principalNotFound))
+    // #1596 counter-example: an unrelated client that merely contains the product name is not a host.
+    let lookalike = SetupDoctor.TCCRow(
+        service: "kTCCServiceAccessibility",
+        client: "com.example.logicpromcp.sample",
+        authValue: 2,
+        indirectObjectIdentifier: ""
+    )
+    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([lookalike])) == .skipped(reason: .principalNotFound))
     #expect(SetupDoctor.mapTCCQueryOutcome(.queryUnavailable) == .skipped(reason: .tccQueryUnavailable))
     #expect(SetupDoctor.mapTCCQueryOutcome(.schemaMismatch) == .skipped(reason: .tccSchemaMismatch))
     #expect(SetupDoctor.mapTCCQueryOutcome(.fullDiskAccessUnavailable) == .skipped(reason: .fullDiskAccessUnavailable))
