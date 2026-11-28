@@ -2150,7 +2150,13 @@ extension AccessibilityChannel {
             }
             if let known = mixerSelectionByHeader[index] { appendUnique(known) }
             requestedCandidates.forEach(appendUnique)
-            strips.filter({ !CFEqual($0, precedingChild) }).forEach(appendUnique)
+            // A strip this request already observed as another held header's
+            // selected child is the least likely relationship for this header.
+            // Order only: there is still one write, and only the verified
+            // header/selected-child transition below can make a pair.
+            let claimed = mixerSelectionByHeader.filter { $0.key != index }.map(\.value)
+            strips.filter({ strip in !claimed.contains(where: { CFEqual($0, strip) }) }).forEach(appendUnique)
+            strips.forEach(appendUnique)
             guard let candidate = candidates.first else { return false }
             // Preserve both existing callback bookends, but run the former
             // action-boundary callback before the final native custody proof.
@@ -2178,10 +2184,31 @@ extension AccessibilityChannel {
                 if case .observed(let child) = selectedChildRead() { selectedChild = child }
                 else { selectedChild = nil }
                 if let selectedIndex, let selectedChild, CFEqual(selectedChild, candidate) {
+                    // Logic 13 publishes the selected child before the header
+                    // selection (measured on 7801: the header followed the child
+                    // by up to 46 ms). The preceding exact header with the new
+                    // child is therefore a transition in flight, not a different
+                    // held header. Retaining it as custody would let the header
+                    // land under an expectation that no longer matches and leave
+                    // the selection moved. Wait inside the same bounded settlement.
+                    if selectedIndex == expectedIndex, selectedIndex != index,
+                       attempt < Self.selectionSettlementDelays.count {
+                        do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
+                        continue
+                    }
                     guard let focus: AXUIElement = AXHelpers.getAttribute(app,
                             kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                           CFEqual(focus, candidate) || (originalRailFocus.map({ CFEqual($0, focus) }) == true),
-                          let afterViewport = observedCurrentViewport() else { return false }
+                          let afterViewport = observedCurrentViewport() else {
+                        // Logic 13 can publish this child before its focus or a
+                        // rebuilt viewport settles. Leaving here would drop the
+                        // cleanup custody of a selection that already moved.
+                        if attempt < Self.selectionSettlementDelays.count {
+                            do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
+                            continue
+                        }
+                        return false
+                    }
                     // Even a false acknowledgement, or a transition to another
                     // exact held header, may have changed Logic. Retain that
                     // state only as temporary cleanup custody so observe() can
@@ -2198,6 +2225,15 @@ extension AccessibilityChannel {
                         return true
                     }
                     return false
+                }
+                // Header selection and the selected child settle on different
+                // host turns: no exclusive header yet, or the requested header
+                // with the preceding child, is a transition still in flight.
+                let inFlight = selectedIndex == nil
+                    || (selectedIndex == index && selectedChild.map({ CFEqual($0, precedingChild) }) != false)
+                if inFlight, attempt < Self.selectionSettlementDelays.count {
+                    do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
+                    continue
                 }
                 // A successful no-op or a transition to a different exact
                 // header is not permission to try unrelated strips.

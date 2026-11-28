@@ -1,0 +1,153 @@
+{
+  "schema": 3,
+  "id": "2026-11-29-logic13-association-coverage",
+  "date": "2026-11-29",
+  "subject": "Logic 13 inspect_session association coverage: the Mixer write lands in two parts (selected child, then header), a header-only sample leaves the selection moved, and the Event List scrolls with track selection",
+  "question": "On Logic 13 with the List Editors pane closed and the Mixer in Tracks view, how long does a Mixer AXSelectedChildren write take to land, in what order do the selected child and the header selection change, and what decides whether inspect_session leaves the user's selection restored? Does changing the track selection scroll the Event List or the Marker List?",
+  "verdict": "partial",
+  "issues": [
+    965,
+    1640
+  ],
+  "surface": "mixer.channel_strips",
+  "host": {
+    "app": "Logic Pro",
+    "version": "13.0",
+    "build": "7801",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "swift Scripts/observations/ax-mixer-write-latency.swift A13.logicx 20 light",
+    "expected": "Run on a fresh copy of a four-track project named A13.logicx that is the front document in Logic 13 (Tracks view, track 3 selected, List Editors closed). It writes the main Mixer's AXSelectedChildren with each other track's strip and back, prints each write-to-landing time of the selected child and the header, and ends with {\"final\":\"restored\"}. Every landing is under 130 ms and the header follows the selected child by at most 50 ms; a landing near or above the product's 930 ms settlement, or a header ahead of its child, disproves the record. The inspect_session restoration trials and the Event List scroll measurement in this record were run by hand, as the method states.",
+    "cost": "A disposable project copy; no save; about 30 s. Aborts before any write unless the front document's path contains the given substring."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+SelectionAssociation.swift:HeldSelectionAssociation.selectThroughHeldMixer",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+SelectionAssociation.swift:HeldSelectionAssociation.viewport"
+  ],
+  "evidence": [
+    "evidence/2026-11-29-logic13-association-coverage.samples.json"
+  ],
+  "method": "Fixture QualFixtureR11 copied with ditto for every trial (never opened from the source), opened through the product on Logic 13.0 build 7801, Mixer switched to Tracks view and the List Editors pane closed through the control-bar checkbox unless stated; the front document was checked to be the copy before every write; every copy was closed without saving. Latency: a separate Accessibility process wrote the main Mixer's AXSelectedChildren with another track's strip and polled the header rows and the Mixer's selected child (a write to each non-original track in turn, then the original written back) 220 times under four conditions (idle host 40 writes, a whole-window scrollbar census between polls 60, 12 busy-loop processes 60, four concurrent whole-window AX walkers 60). Rail: 6 writes of a header into the rail's AXSelectedChildren polled for 6 s each. Product: a temporary buffered trace build (not shipped) of the candidate ordering-and-settle patch ran 31 inspect_session trials and recorded each Mixer write, each loop reading and each exit; one run left custody under the wrong header. The repaired product ran 20 fresh-copy trials (Tracks view, List Editors closed), 3 in All view, 3 with the Mixer hidden, 3 with List Editors open, 2 with a Stereo send created and removed, and one 60-run soak (a fresh product process for each run on one open copy); before and after each run the header selection and the Mixer's selected child were read by a separate process. Lists: with the Marker List holding 25 markers (created through the product) and with the Event List holding a 70-note region recorded through the virtual MIDI port, the pane scrollbar was set to 0.5 and the selection was moved through every track and back by Mixer writes, reading the scrollbar's AXValue and AXEnabled after each move. The Tempo and Signature lists hold one row and their scrollbars stay disabled.",
+  "observations": [
+    {
+      "what": "Mixer AXSelectedChildren write to selected child and header, 220 writes under four load conditions",
+      "write_to_selected_child_ms": {
+        "min": 19.2,
+        "p50": 58.5,
+        "p90": 95.0,
+        "p99": 122.8,
+        "max": 127.2
+      },
+      "write_to_header_selected_ms": {
+        "min": 24.9,
+        "p50": 60.8,
+        "p90": 102.9,
+        "p99": 122.8,
+        "max": 127.2
+      },
+      "landing_after_the_product_930_ms_settlement": 0,
+      "product_settlement_ms": 930,
+      "slowest_landing_ms_rounded": 127
+    },
+    {
+      "what": "header selection minus selected-child landing, 220 writes",
+      "min_ms": 0.0,
+      "p50_ms": 0.0,
+      "p90_ms": 6.3,
+      "max_ms": 45.9,
+      "header_landed_before_child": 0,
+      "child_landed_more_than_1ms_first": 33,
+      "max_ms_rounded": 46
+    },
+    {
+      "what": "rail AXSelectedChildren write, 6 writes polled 6 s each",
+      "landed": 0
+    },
+    {
+      "what": "candidate patch, 31 traced inspect_session trials, 180 Mixer writes",
+      "new_child_read_under_old_header": 1,
+      "that_run_ui_effects": "association_restoration_unverified, not_restored",
+      "that_run_selection_at_the_end": "original (late check)",
+      "other_runs": "partial, restored",
+      "unrestored_runs_reported_for_the_unrepaired_candidate": "4 of 23 Tracks-view runs (diagnosis of 2026-11-28)"
+    },
+    {
+      "what": "repaired product, Tracks view, List Editors closed, fresh copy per trial",
+      "trials": 20,
+      "associations": "partial / association_population_not_observed with 4 rows, 20 of 20",
+      "product_restoration": "restored 20 of 20",
+      "independent_selection_before_equals_after": "20 of 20 (header 2, Mixer child 2)"
+    },
+    {
+      "what": "repaired product, 60 inspect_session runs on one open copy, new process each",
+      "partial": 60,
+      "product_restoration_restored": 60,
+      "independent_selection_restored": 60
+    },
+    {
+      "what": "repaired product, All view, 3 trials",
+      "associations": "unstable / live_population_moved",
+      "reason": "association_selection_unverified",
+      "restoration": "restored 3 of 3",
+      "independent_selection_restored": 3
+    },
+    {
+      "what": "repaired product, Mixer hidden, 3 trials",
+      "associations": "unavailable / no_observed_association_evidence",
+      "restoration": "restored 3 of 3",
+      "independent_selection_restored": 3
+    },
+    {
+      "what": "repaired product, List Editors open, 3 trials",
+      "associations": "unavailable / no_observed_association_evidence",
+      "ui_effects_restoration": "not_applicable",
+      "selection_changed": 0
+    },
+    {
+      "what": "Stereo send, 2 trials, set_send_output_verified then logic://mixer then get_send_destination_verified then removal",
+      "create": "State A",
+      "independent_logic_mixer_read": "slot 1 occupied, destination display the stereo output",
+      "get_send_destination_verified": "State A",
+      "removal": "State B readback_unavailable",
+      "next_logic_mixer_read": "slot 0 observed_empty only"
+    },
+    {
+      "what": "Event List scrollbar, 70-note region on the selected track, scrolled to 0.5, selection moved through the three other tracks and back",
+      "while_another_track_selected": "AXEnabled 0, AXValue 0.5",
+      "after_return_to_the_owning_track": "AXEnabled 1, AXValue 0",
+      "initial_value_before_scrolling": 0.973154
+    },
+    {
+      "what": "Marker List scrollbar, 25 markers, scrolled to 0.5, 8 selection moves through all four tracks",
+      "value_after_each_move": 0.5
+    },
+    {
+      "what": "Event List with the fixture's own events, Tempo and Signature lists",
+      "scrollbar": "AXEnabled 0 throughout; the content does not overflow, so no scroll could be observed"
+    },
+    {
+      "what": "unit tests",
+      "child_first_wait_removed": "fails, writes [1] instead of [1,2,3,0] and headers left on a challenge",
+      "unclaimed_ordering_removed": "fails, 0 pairs instead of 4",
+      "settlement_waits_removed": "fails for header-first and for focus-late landings",
+      "all_changes_present": "pass"
+    }
+  ],
+  "conclusion": "On this host a Mixer selected-child write lands within 127 ms (220 writes) and the header selection follows the selected child by 0 to 46 ms; the product's 930 ms settlement is about seven times the slowest landing. The selected child lands before the header, so a sample that reads the header and then the child can see the new child under the old header (1 of 180 Mixer writes in the traced product, and in 33 of 220 independent polls the child led by more than 1 ms). The candidate retained custody under the old header, the header then landed under a different expectation, and the run reported not_restored; that is the failure the candidate showed in 4 of 23 trials. Waiting for the header while the old header holds the new child, together with ordering unclaimed strips first and settling a header-first or focus-late landing, produced partial coverage with the selection restored in 20 of 20 fresh-copy trials and 60 of 60 soak runs. The rail write is acknowledged and never lands (6 of 6, 6 s). Changing the track selection changes the Event List's scroll position (0.5 became 0, and the list became disabled while a track with no events was selected), so the List Editors scrollbars were not excluded from the viewport census and coverage stays unavailable while List Editors is open. The Marker List did not scroll with the selection.",
+  "limits": [
+    "One Logic 13.0 build 7801 host, ko-KR only, one four-track fixture; Logic 12 and other locales were not measured.",
+    "The latency was measured by a separate process polling at about 0.2 ms to 30 ms; a landing between two polls is attributed to the later poll. No write landed later than 127 ms, but the product's own reads add Logic main-thread work that the independent polling does not reproduce exactly.",
+    "The race was observed once in 180 traced writes; the unit test reproduces its interleaving but a live trial cannot force it, so the live trials show that restoration holds, not that the race is absent.",
+    "The Event List was measured on one 70-note region recorded into one track. The Tempo and Signature lists could not overflow on this fixture, so their scroll behaviour was not measured. Whether the Event List scroll reset restores to the original position through the existing viewport restore was not tested because the open pane's scrollbar still stops the association before any write.",
+    "All view stays unstable (a header and strip pairing is refused there) and the Mixer-hidden case stays unavailable; the repair does not change them.",
+    "Projects with stacks, hidden tracks, shared channel strips or auxes were not measured.",
+    "The Stereo send test used a single audio strip and ordinal 0 of an empty slot list."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime Accessibility write timing and scroll behaviour. It adds no Apple label vocabulary and claims no string-corpus value."
+  }
+}

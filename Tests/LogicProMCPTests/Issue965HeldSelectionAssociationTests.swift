@@ -13378,6 +13378,178 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    /// Logic 13.0 (7801), Mixer in Tracks view: the rail setter is acknowledged
+    /// and inert, and writing strip N as the Mixer's selected child selects
+    /// header N. Before this ordering the third challenge re-tried strip 0, which
+    /// was already header 0's strip, and the whole collection was refused.
+    private func configureTracksViewMixerOrder(_ f: Fixture, headerForStrip: @escaping @Sendable (Int) -> Int?) {
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[0]])
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[0])
+        f.mixerSelection = { candidate in
+            guard let stripIndex = f.strips.firstIndex(where: { CFEqual($0, candidate) }),
+                  let headerIndex = headerForStrip(stripIndex) else { return false }
+            for (index, header) in f.headers.enumerated() {
+                f.builder.setAttribute(header, kAXSelectedAttribute as String, index == headerIndex)
+            }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            return true
+        }
+    }
+
+    private func selectedHeaders(_ f: Fixture) -> [Bool?] {
+        f.headers.map { f.builder.attributeValue($0, kAXSelectedAttribute as String) as? Bool }
+    }
+
+    @Test("Logic 13 Tracks-view Mixer fallback challenges unclaimed strips before strips already paired")
+    func mixerFallbackPrefersStripsNotAlreadyObservedForAnotherHeader() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        configureTracksViewMixerOrder(f) { $0 }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            #expect(f.selections == [1], "The inert rail setter is proven once, then not retried")
+            let written = f.mixerSelectionWrites.map { write in f.strips.firstIndex { CFEqual($0, write) } ?? -1 }
+            #expect(written == [1, 2, 3, 0], "One write per challenge, then the exact original inverse")
+            #expect(pairs.count == 4)
+            for index in f.headers.indices {
+                #expect(pairs.filter { CFEqual($0.track.header, f.headers[index]) && CFEqual($0.strip.strip, f.strips[index]) }.count == 1)
+            }
+            #expect(association.effects.reason == nil)
+            #expect(association.effects.restoration == "restored")
+            #expect(selectedHeaders(f) == [true, false, false, false])
+        }
+    }
+
+    /// The Mixer write lands in two host turns: `first` immediately, the rest of
+    /// header/child/focus after `delay`. Logic 13 was observed to leave the
+    /// selection on a challenge header when the loop read the first turn alone.
+    private func configureTwoTurnMixerLanding(_ f: Fixture, headerFirst: Bool) {
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[0]])
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[0])
+        f.mixerSelection = { candidate in
+            guard let stripIndex = f.strips.firstIndex(where: { CFEqual($0, candidate) }) else { return false }
+            func selectHeader() {
+                for (index, header) in f.headers.enumerated() {
+                    f.builder.setAttribute(header, kAXSelectedAttribute as String, index == stripIndex)
+                }
+            }
+            if headerFirst { selectHeader() } else {
+                selectHeader()
+                f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            }
+            Task.detached {
+                try? await Task.sleep(for: .milliseconds(50))
+                f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            }
+            return true
+        }
+    }
+
+    @Test("A Mixer challenge whose header lands before its selected child settles instead of dropping custody",
+          arguments: [true, false])
+    func mixerFallbackSettlesATwoTurnLanding(headerFirst: Bool) async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        configureTwoTurnMixerLanding(f, headerFirst: headerFirst)
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            let written = f.mixerSelectionWrites.map { write in f.strips.firstIndex { CFEqual($0, write) } ?? -1 }
+            #expect(written == [1, 2, 3, 0], "Settling adds no write")
+            #expect(pairs.count == 4)
+            #expect(association.effects.reason == nil)
+            #expect(association.effects.restoration == "restored")
+            #expect(selectedHeaders(f) == [true, false, false, false])
+        }
+    }
+
+    /// Measured on Logic 13.0 (7801): the Mixer's selected child and focus land
+    /// first, the header selection follows by up to 46 ms. A reader that samples
+    /// the header and then the child can see the new child under the old header.
+    private func configureChildFirstLanding(_ f: Fixture, headerLag: Duration) {
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[0]])
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[0])
+        f.mixerSelection = { candidate in
+            guard let stripIndex = f.strips.firstIndex(where: { CFEqual($0, candidate) }) else { return false }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            Task.detached {
+                try? await Task.sleep(for: headerLag)
+                for (index, header) in f.headers.enumerated() {
+                    f.builder.setAttribute(header, kAXSelectedAttribute as String, index == stripIndex)
+                }
+            }
+            return true
+        }
+    }
+
+    @Test("A Mixer challenge whose selected child lands before its header keeps custody and restores the original")
+    func mixerFallbackSettlesAChildThatLandsBeforeItsHeader() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        configureChildFirstLanding(f, headerLag: .milliseconds(60))
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            // Let any write that is still in flight land before the final readback.
+            try await Task.sleep(for: .milliseconds(200))
+            let written = f.mixerSelectionWrites.map { write in f.strips.firstIndex { CFEqual($0, write) } ?? -1 }
+            #expect(written == [1, 2, 3, 0], "Settling adds no write")
+            #expect(pairs.count == 4)
+            #expect(association.effects.reason == nil)
+            #expect(association.effects.restoration == "restored")
+            #expect(selectedHeaders(f) == [true, false, false, false], "The original selection is back after every late landing")
+        }
+    }
+
+    @Test("An unclaimed Mixer candidate landing on an already paired header still refuses every pair")
+    func mixerFallbackOrderingDoesNotTurnAnOrdinalIntoAPair() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        // Strip 3 selects header 1, which strip 1 already selected (for example a
+        // second track on one channel strip); header 3 has no strip of its own.
+        configureTracksViewMixerOrder(f) { $0 == 3 ? 1 : $0 }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            let written = f.mixerSelectionWrites.map { write in f.strips.firstIndex { CFEqual($0, write) } ?? -1 }
+            #expect(written == [1, 2, 3, 0], "The refused challenge makes exactly one write, then the exact original inverse")
+            #expect(pairs.isEmpty)
+            #expect(association.effects.reason == "association_selection_unverified")
+            #expect(association.effects.restoration == "restored")
+            #expect(selectedHeaders(f) == [true, false, false, false])
+        }
+    }
+
     @Test("An explicitly requested held Mixer strip is challenged before unrelated held strips")
     func mixerSelectedChildrenPrioritizesTheRequestedPeer() async throws {
         let f = try Fixture(withViewport: true, fourTracks: true)

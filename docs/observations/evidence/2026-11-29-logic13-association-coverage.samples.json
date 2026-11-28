@@ -1,0 +1,2688 @@
+{
+ "child_first_exposure_in_product_traces": {
+  "diagnostic_build": "temporary buffered trace (not shipped); 31 inspect_session runs, 180 Mixer writes",
+  "observations_of_new_child_under_old_header": 1,
+  "outcome_in_that_run": "custody retained under the old header, header then landed, ui_effects restoration not_restored (selection was back at the original by the late-check)",
+  "run": "t5"
+ },
+ "host": "Logic Pro 13.0 build 7801, ko-KR, macOS 26.3; fixture QualFixtureR11 copied with ditto per trial, closed without saving",
+ "latency_by_condition": {
+  "m-burn-1": {
+   "child_landed_first_by_more_than_1ms": 19,
+   "condition": "12 busy-loop processes on 12 cores",
+   "header_landed_first": 0,
+   "header_minus_child_ms": {
+    "max": 45.9,
+    "min": 0.0,
+    "n": 60,
+    "p50": 0.3,
+    "p90": 20.4,
+    "p99": 44.2
+   },
+   "write_to_header_selected_ms": {
+    "max": 105.5,
+    "min": 29.6,
+    "n": 60,
+    "p50": 60.8,
+    "p90": 85.4,
+    "p99": 101.2
+   },
+   "write_to_selected_child_ms": {
+    "max": 87.3,
+    "min": 29.3,
+    "n": 60,
+    "p50": 55.9,
+    "p90": 76.7,
+    "p99": 85.4
+   },
+   "writes": 60
+  },
+  "m-ham-1": {
+   "child_landed_first_by_more_than_1ms": 11,
+   "condition": "4 concurrent full-window AX walkers",
+   "header_landed_first": 0,
+   "header_minus_child_ms": {
+    "max": 13.2,
+    "min": 0.0,
+    "n": 60,
+    "p50": 0.4,
+    "p90": 1.4,
+    "p99": 10.8
+   },
+   "write_to_header_selected_ms": {
+    "max": 123.9,
+    "min": 28.5,
+    "n": 60,
+    "p50": 53.1,
+    "p90": 70.4,
+    "p99": 74.2
+   },
+   "write_to_selected_child_ms": {
+    "max": 123.2,
+    "min": 19.2,
+    "n": 60,
+    "p50": 53.1,
+    "p90": 69.7,
+    "p99": 73.2
+   },
+   "writes": 60
+  },
+  "m-light-1": {
+   "child_landed_first_by_more_than_1ms": 2,
+   "condition": "idle host, 1 ms polls",
+   "header_landed_first": 0,
+   "header_minus_child_ms": {
+    "max": 39.9,
+    "min": 0.0,
+    "n": 40,
+    "p50": 0.0,
+    "p90": 0.5,
+    "p99": 39.9
+   },
+   "write_to_header_selected_ms": {
+    "max": 87.7,
+    "min": 24.9,
+    "n": 40,
+    "p50": 48.7,
+    "p90": 70.6,
+    "p99": 87.7
+   },
+   "write_to_selected_child_ms": {
+    "max": 81.4,
+    "min": 24.5,
+    "n": 40,
+    "p50": 47.8,
+    "p90": 68.8,
+    "p99": 81.4
+   },
+   "writes": 40
+  },
+  "m-load-1": {
+   "child_landed_first_by_more_than_1ms": 1,
+   "condition": "full-window census between polls",
+   "header_landed_first": 0,
+   "header_minus_child_ms": {
+    "max": 25.6,
+    "min": 0.0,
+    "n": 60,
+    "p50": 0.0,
+    "p90": 0.0,
+    "p99": 0.0
+   },
+   "write_to_header_selected_ms": {
+    "max": 127.2,
+    "min": 51.3,
+    "n": 60,
+    "p50": 85.0,
+    "p90": 118.2,
+    "p99": 122.8
+   },
+   "write_to_selected_child_ms": {
+    "max": 127.2,
+    "min": 51.3,
+    "n": 60,
+    "p50": 83.8,
+    "p90": 118.2,
+    "p99": 122.8
+   },
+   "writes": 60
+  }
+ },
+ "latency_pooled": {
+  "header_minus_child_ms": {
+   "max": 45.9,
+   "min": 0.0,
+   "n": 220,
+   "p50": 0.0,
+   "p90": 6.3,
+   "p99": 43.5
+  },
+  "write_to_header_selected_ms": {
+   "max": 127.2,
+   "min": 24.9,
+   "n": 220,
+   "p50": 60.8,
+   "p90": 102.9,
+   "p99": 122.8
+  },
+  "write_to_selected_child_ms": {
+   "max": 127.2,
+   "min": 19.2,
+   "n": 220,
+   "p50": 58.5,
+   "p90": 95.0,
+   "p99": 122.8
+  },
+  "writes": 220
+ },
+ "list_scroll": {
+  "le2": [
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-initial",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-tab:이벤트",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-scrolled:이벤트",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:0",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:1",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:3",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:2",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:0",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:3",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:1",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:2",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-tab:마커",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-scrolled:마커",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:마커:0",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:마커:1",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:마커:3",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:마커:2",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:마커:0",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:마커:3",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:마커:1",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     },
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:마커:2",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-tab:템포",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-scrolled:템포",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:0",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:1",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:3",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:2",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:0",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:3",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:1",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:2",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-tab:조표 및 박자표",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-scrolled:조표 및 박자표",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:0",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:1",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:3",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:2",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:0",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:3",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:1",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:2",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   }
+  ],
+  "le3": [
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "1",
+      "value": "0.973154"
+     }
+    ],
+    "step": "lists-initial",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "1",
+      "value": "0.973154"
+     }
+    ],
+    "step": "lists-after-tab:이벤트",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "1",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-scrolled:이벤트",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:이벤트:0",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:이벤트:1",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0.5"
+     }
+    ],
+    "step": "lists-after-select:이벤트:3",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "1",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:2",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:0",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:3",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:1",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "1",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:이벤트:2",
+    "tab": [
+     "이벤트"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-tab:마커",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-scrolled:마커",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:마커:0",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:마커:1",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:마커:3",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:마커:2",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:마커:0",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:마커:3",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:마커:1",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:마커:2",
+    "tab": [
+     "마커"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-tab:템포",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-scrolled:템포",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:0",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:1",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:3",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:2",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:0",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:3",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:1",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:템포:2",
+    "tab": [
+     "템포"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-tab:조표 및 박자표",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-scrolled:조표 및 박자표",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:0",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:1",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:3",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:2",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:0",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:3",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:1",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   },
+   {
+    "pane_scrollbars": [
+     {
+      "enabled": "0",
+      "value": "0"
+     }
+    ],
+    "step": "lists-after-select:조표 및 박자표:2",
+    "tab": [
+     "조표 및 박자표"
+    ]
+   }
+  ]
+ },
+ "race_trace_t5": [
+  "      0.0 observe begin originalIndex=2 headers=4 strips=6",
+  "     68.6 S rail write idx=0 accepted=true",
+  "     72.8 S a0 idx=0 changed=false accepted=true",
+  "    118.3 S a1 idx=0 changed=false accepted=true",
+  "    155.5 S a2 idx=0 changed=false accepted=true",
+  "    200.0 S a3 idx=0 changed=false accepted=true",
+  "    337.7 S a4 idx=0 changed=false accepted=true",
+  "    603.3 S a5 idx=0 changed=false accepted=true",
+  "   1122.2 S a6 idx=0 changed=false accepted=true",
+  "   1122.3 M enter idx=0 cand=0 preceding=2 expectedIndex=2",
+  "   1187.5 M write cand=0 accepted=true",
+  "   1198.5 M a0 hdr=Optional(2) child=2",
+  "   1317.1 M a1 hdr=Optional(0) child=0",
+  "   1371.3 observe challenge=0 advanced=true strip=0 preceding=2 expectedIndex=0",
+  "   1419.1 M enter idx=1 cand=1 preceding=0 expectedIndex=0",
+  "   1456.2 M write cand=1 accepted=true",
+  "   1461.0 M a0 hdr=Optional(0) child=0",
+  "   1519.1 M a1 hdr=Optional(1) child=1",
+  "   1615.6 observe challenge=1 advanced=true strip=1 preceding=0 expectedIndex=1",
+  "   1679.2 M enter idx=3 cand=3 preceding=1 expectedIndex=1",
+  "   1728.7 M write cand=3 accepted=true",
+  "   1736.5 M a0 hdr=Optional(1) child=1",
+  "   1805.4 M a1 hdr=Optional(3) child=3",
+  "   1881.3 observe challenge=3 advanced=true strip=3 preceding=1 expectedIndex=3",
+  "   1881.7 observe post-loop expectedIndex=3 selectionsVerified=true observed=3 hdrNow=Optional(3)",
+  "   1941.1 M enter idx=2 cand=2 preceding=3 expectedIndex=3",
+  "   2001.0 M write cand=2 accepted=true",
+  "   2061.2 M a0 hdr=Optional(3) child=2",
+  "   2120.8 M exit false @2215 lost=true",
+  "   2157.3 observe end reason=Optional(\"association_restoration_unverified\") restoration=not_restored expectedIndex=3 lost=true attempted=[\"track_selection\", \"mixer_selection\"] changed=[\"mixer_selection\"]",
+  "   2159.2 late-check +0 hdr=Optional(2) child=2 (original 2)",
+  "   2471.2 late-check +300 hdr=Optional(2) child=2 (original 2)",
+  "   3177.5 late-check +700 hdr=Optional(2) child=2 (original 2)",
+  "   4688.8 late-check +1500 hdr=Optional(2) child=2 (original 2)"
+ ],
+ "rail_write_inertness": [
+  {
+   "landed_within_6000ms": false,
+   "target": 0
+  },
+  {
+   "landed_within_6000ms": false,
+   "target": 1
+  },
+  {
+   "landed_within_6000ms": false,
+   "target": 3
+  },
+  {
+   "landed_within_6000ms": false,
+   "target": 0
+  },
+  {
+   "landed_within_6000ms": false,
+   "target": 1
+  },
+  {
+   "landed_within_6000ms": false,
+   "target": 3
+  }
+ ],
+ "soak_same_open_fixture_new_process_each": {
+  "coverage": {
+   "partial": 60
+  },
+  "each": [
+   {
+    "cov": "partial",
+    "elapsed_s": 5.16,
+    "i": 0,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.19,
+    "i": 1,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.21,
+    "i": 2,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.26,
+    "i": 3,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.21,
+    "i": 4,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.13,
+    "i": 5,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.19,
+    "i": 6,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.28,
+    "i": 7,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.35,
+    "i": 8,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.44,
+    "i": 9,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.33,
+    "i": 10,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.32,
+    "i": 11,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.47,
+    "i": 12,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.26,
+    "i": 13,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.31,
+    "i": 14,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.19,
+    "i": 15,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.3,
+    "i": 16,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.22,
+    "i": 17,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.31,
+    "i": 18,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.43,
+    "i": 19,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.38,
+    "i": 20,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.4,
+    "i": 21,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.21,
+    "i": 22,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.28,
+    "i": 23,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.22,
+    "i": 24,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.29,
+    "i": 25,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.24,
+    "i": 26,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.3,
+    "i": 27,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.44,
+    "i": 28,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.65,
+    "i": 29,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.6,
+    "i": 30,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.62,
+    "i": 31,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.3,
+    "i": 32,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.33,
+    "i": 33,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.24,
+    "i": 34,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.17,
+    "i": 35,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.17,
+    "i": 36,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.19,
+    "i": 37,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.27,
+    "i": 38,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.37,
+    "i": 39,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.33,
+    "i": 40,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.31,
+    "i": 41,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.28,
+    "i": 42,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.24,
+    "i": 43,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.22,
+    "i": 44,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.27,
+    "i": 45,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.17,
+    "i": 46,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.25,
+    "i": 47,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.27,
+    "i": 48,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.29,
+    "i": 49,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.36,
+    "i": 50,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.31,
+    "i": 51,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.28,
+    "i": 52,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.23,
+    "i": 53,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.25,
+    "i": 54,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.34,
+    "i": 55,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.3,
+    "i": 56,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.21,
+    "i": 57,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.2,
+    "i": 58,
+    "independent_restored": true,
+    "restoration": "restored"
+   },
+   {
+    "cov": "partial",
+    "elapsed_s": 5.22,
+    "i": 59,
+    "independent_restored": true,
+    "restoration": "restored"
+   }
+  ],
+  "independent_selection_restored": 60,
+  "inspect_session_runs": 60,
+  "product_restoration": {
+   "restored": 60
+  }
+ },
+ "trials": [
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a1",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a2",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a3",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a4",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a5",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a6",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a7",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a8",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a9",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a10",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a11",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a12",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a13",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a14",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a15",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a16",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a17",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a18",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a19",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "trial": "a20",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     3
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     3
+    ]
+   ],
+   "cov": "unstable",
+   "reasons": [
+    "live_population_moved"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "b1",
+   "ui": [
+    "association_selection_unverified",
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     3
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     3
+    ]
+   ],
+   "cov": "unstable",
+   "reasons": [
+    "live_population_moved"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "b2",
+   "ui": [
+    "association_selection_unverified",
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     3
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     3
+    ]
+   ],
+   "cov": "unstable",
+   "reasons": [
+    "live_population_moved"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "b3",
+   "ui": [
+    "association_selection_unverified",
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     0
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     0
+    ]
+   ],
+   "cov": "unavailable",
+   "reasons": [
+    "no_observed_association_evidence"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "c1",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     0
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     0
+    ]
+   ],
+   "cov": "unavailable",
+   "reasons": [
+    "no_observed_association_evidence"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "c2",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     0
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     0
+    ]
+   ],
+   "cov": "unavailable",
+   "reasons": [
+    "no_observed_association_evidence"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "c3",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "unavailable",
+   "reasons": [
+    "no_observed_association_evidence"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "d1",
+   "ui": [
+    null,
+    "not_applicable"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "unavailable",
+   "reasons": [
+    "no_observed_association_evidence"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "d2",
+   "ui": [
+    null,
+    "not_applicable"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "unavailable",
+   "reasons": [
+    "no_observed_association_evidence"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 0,
+   "trial": "d3",
+   "ui": [
+    null,
+    "not_applicable"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "send-create": "A",
+   "send-readback": "A",
+   "send-remove": "B",
+   "trial": "s1",
+   "ui": [
+    null,
+    "restored"
+   ]
+  },
+  {
+   "after": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "before": [
+    [
+     2
+    ],
+    [
+     2
+    ]
+   ],
+   "cov": "partial",
+   "reasons": [
+    "association_population_not_observed"
+   ],
+   "restored": {
+    "headers": true,
+    "mixer": true
+   },
+   "rows": 4,
+   "send-create": "A",
+   "send-readback": "A",
+   "send-remove": "B",
+   "trial": "s2",
+   "ui": [
+    null,
+    "restored"
+   ]
+  }
+ ],
+ "unit_tests_without_each_change": {
+  "child_first_wait_removed": "mixerFallbackSettlesAChildThatLandsBeforeItsHeader FAILED 5 expectations: writes [1] instead of [1,2,3,0]; pairs 0; reason set; restoration not restored; headers left on a challenge",
+  "settlement_waits_removed": "mixerFallbackSettlesATwoTurnLanding FAILED 5 expectations for each of headerFirst true and false",
+  "unclaimed_ordering_removed": "mixerFallbackPrefersStripsNotAlreadyObservedForAnotherHeader FAILED 7 expectations: writes [1,0] instead of [1,2,3,0]; pairs 0 instead of 4",
+  "with_all_changes": "the same 4 tests pass"
+ }
+}
