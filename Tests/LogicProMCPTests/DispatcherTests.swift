@@ -5093,3 +5093,38 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(operations.filter { $0 == "transport.get_state" }.count == 13)
     #expect(operations.dropFirst(2).allSatisfy { $0 == "transport.get_state" })
 }
+
+@Test func testIssue1602AlertUpRefusalNamesAlertRoleButtonsAndNextStep() throws {
+    let info = AXLogicProElements.BlockingDialogInfo(
+        title: "", role: "AXSystemDialog", owningWindow: "Demo", buttonTitles: ["A", "B"],
+        recoveryAction: "")
+    let object = try #require(parseDispatcherObject(dispatcherText(
+        blockingLogicDialogResult(operation: "transport.play", info: info))))
+    #expect(object["error"] as? String == "unsupported_state")
+    #expect(object["alert_covering_logic"] as? Bool == true)
+    #expect(object["dialog_button_count"] as? Int == 2)
+    #expect(object["dialog_role"] as? String == "AXSystemDialog")
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.contains("alert is covering Logic"))
+    #expect(hint.contains("AXSystemDialog") && hint.contains("2 button"))
+    #expect((object["next_step"] as? String)?.contains("send this call again") == true)
+}
+
+@Test func testIssue1602AlertGoneNextTransportWriteIsNotRefused() async {
+    // Same handler, no restart: the guard is evaluated per call. Alert up -> refused;
+    // alert gone (including a prior refusal having happened) -> the write proceeds.
+    final class Flag: @unchecked Sendable { var up = true }
+    let flag = Flag()
+    let router = ChannelRouter()
+    let cache = StateCache()
+    let up = await TransportDispatcher.handle(
+        command: "play", params: [:], router: router, cache: cache,
+        sleep: { _ in }, dialogPresent: { flag.up })
+    #expect(up.isError == true)
+    #expect(dispatcherText(up).contains("preflight_blocking_dialog"))
+    flag.up = false
+    let after = await TransportDispatcher.handle(
+        command: "play", params: [:], router: router, cache: cache,
+        sleep: { _ in }, dialogPresent: { flag.up })
+    #expect(!dispatcherText(after).contains("preflight_blocking_dialog"))
+}
