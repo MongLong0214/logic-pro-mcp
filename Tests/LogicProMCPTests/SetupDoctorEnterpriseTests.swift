@@ -962,16 +962,16 @@ private struct FrozenV2Report: Codable {
 // the JSON report nor the verbose text.
 @Test func test1596TCCDatabaseClientNamesNeverReachDoctorJSONOrVerboseOutput() throws {
     let privateClients = [
-        "com.synthetic.review-token-9f3a.logicpromcp",
-        "com.synthetic.review-token-9f3a.claude",
-        "/Users/someone/clients/acme/Synthetic-9f3a-terminal.app",
+        "com.zq-private.review-token-9f3a.logicpromcp",
+        "com.zq-private.review-token-9f3a.claude",
+        "/Users/someone/clients/acme/Zqprivate-9f3a-terminal.app",
         "/Users/someone/clients/acme/review-token-9f3a-iterm",
     ]
     for authValue in [0, 2] {
         let rows = privateClients.map {
             SetupDoctor.TCCRow(service: "kTCCServiceAccessibility", client: $0, authValue: authValue, indirectObjectIdentifier: "")
         } + [
-            SetupDoctor.TCCRow(service: "kTCCServiceAppleEvents", client: "com.apple.Terminal", authValue: authValue, indirectObjectIdentifier: "com.synthetic.review-token-9f3a"),
+            SetupDoctor.TCCRow(service: "kTCCServiceAppleEvents", client: "com.apple.Terminal", authValue: authValue, indirectObjectIdentifier: "com.zq-private.review-token-9f3a"),
         ]
         var runtime = enterpriseRuntime()
         let probe = SetupDoctor.mapTCCQueryOutcome(.rows(rows))
@@ -983,7 +983,7 @@ private struct FrozenV2Report: Codable {
         let json = encodeJSON(report)
         let verbose = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
         for output in [json, verbose] {
-            for fragment in ["synthetic", "Synthetic", "review-token", "9f3a", "someone", "acme", "/Users"] {
+            for fragment in ["zq-private", "Zqprivate", "review-token", "9f3a", "someone", "acme", "/Users"] {
                 #expect(!output.contains(fragment), "\(fragment) in doctor output")
             }
             #expect(output.contains("principal_hint=another application"))
