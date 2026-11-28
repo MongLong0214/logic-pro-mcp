@@ -2119,4 +2119,165 @@ struct CoordFreeTrackToggleTests {
         #expect(result.isSuccess, "\(result.message)")
         #expect(try #require(boolValue(f, checkbox)))
     }
+
+    // MARK: - Focus waits are polls, not sleeps
+
+    private final class SleepLog: @unchecked Sendable {
+        var calls: [useconds_t] = []
+        var onSleep: ((Int) -> Void)?
+        var total: Int { calls.reduce(0) { $0 + Int($1) } }
+        func sleep(_ micros: useconds_t) {
+            calls.append(micros)
+            onSleep?(calls.count)
+        }
+    }
+
+    private final class ReadCounter: @unchecked Sendable { var reads = 0 }
+
+    /// A fixture whose app answers an AXFocusedWindow, so the key window reads as present.
+    private func makeKeyWindowFixture(withWindow: Bool = true) -> (ToggleFixture, AXUIElement, AXLogicProElements.Runtime) {
+        let f = makeToggleFixture()
+        let window = f.builder.element(9500)
+        if withWindow { f.builder.setAttribute(f.app, kAXFocusedWindowAttribute as String, window) }
+        let logic = f.builder.makeLogicRuntime(appElement: f.app, setAttributeHandler: nil, performActionHandler: nil)
+        return (f, window, logic)
+    }
+
+    @Test("key-window wait exits after two reads when the window and focus already hold")
+    func keyWindowWaitExitsEarlyWhenConditionAlreadyHolds() {
+        let (_, _, logic) = makeKeyWindowFixture()
+        let log = SleepLog()
+        let ready = AccessibilityChannel.awaitLogicKeyWindowReady(
+            runtime: logic, processRuntime: noopProcessRuntime(), sleepMicros: log.sleep)
+        #expect(ready)
+        #expect(log.calls == [AccessibilityChannel.logicFrontmostPollIntervalMicros])
+    }
+
+    @Test("key-window wait keeps polling until the window appears, within the old bound")
+    func keyWindowWaitWaitsUntilConditionHolds() {
+        let (f, window, logic) = makeKeyWindowFixture(withWindow: false)
+        let log = SleepLog()
+        log.onSleep = { n in
+            if n == 3 { f.builder.setAttribute(f.app, kAXFocusedWindowAttribute as String, window) }
+        }
+        let ready = AccessibilityChannel.awaitLogicKeyWindowReady(
+            runtime: logic, processRuntime: noopProcessRuntime(), sleepMicros: log.sleep)
+        #expect(ready)
+        #expect(log.calls.count == 4)
+        #expect(log.total < Int(AccessibilityChannel.logicKeyWindowSettleMicros))
+    }
+
+    @Test("key-window wait spends exactly the old 800 ms and reports not-ready when the window never comes")
+    func keyWindowWaitIsBoundedByTheOldSettle() {
+        let (_, _, logic) = makeKeyWindowFixture(withWindow: false)
+        let log = SleepLog()
+        let ready = AccessibilityChannel.awaitLogicKeyWindowReady(
+            runtime: logic, processRuntime: noopProcessRuntime(), sleepMicros: log.sleep)
+        #expect(!ready)
+        #expect(log.total == Int(AccessibilityChannel.logicKeyWindowSettleMicros))
+    }
+
+    @Test("key-window wait is never satisfied by a focused text field")
+    func keyWindowWaitRefusesATextFieldFocus() {
+        let (f, _, logic) = makeKeyWindowFixture()
+        let field = f.builder.element(9501)
+        f.builder.setAttribute(field, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, field)
+        let log = SleepLog()
+        let ready = AccessibilityChannel.awaitLogicKeyWindowReady(
+            runtime: logic, processRuntime: noopProcessRuntime(), sleepMicros: log.sleep)
+        #expect(!ready)
+        #expect(log.total == Int(AccessibilityChannel.logicKeyWindowSettleMicros))
+    }
+
+    @Test("frontmost + key-window gate costs two poll steps when Logic is already ready")
+    func exclusiveSelectionGateIsCheapWhenAlreadyFrontmost() {
+        let (_, _, logic) = makeKeyWindowFixture()
+        let log = SleepLog()
+        let refusal = AccessibilityChannel.confirmExclusiveSelectionRefusal(
+            index: 0, runtime: logic, processRuntime: noopProcessRuntime(), sleepMicros: log.sleep)
+        #expect(refusal == nil)
+        #expect(log.total <= 3 * Int(AccessibilityChannel.logicFrontmostPollIntervalMicros))
+    }
+
+    @Test("frontmost gate waits through not-frontmost reads and then proceeds")
+    func exclusiveSelectionGateWaitsForFrontmost() {
+        let (_, _, logic) = makeKeyWindowFixture()
+        let frontmost = FrontmostProbe(falseReads: 5)
+        let log = SleepLog()
+        let refusal = AccessibilityChannel.confirmExclusiveSelectionRefusal(
+            index: 0, runtime: logic,
+            processRuntime: noopProcessRuntime(logicIsFrontmost: { frontmost.read() }),
+            sleepMicros: log.sleep)
+        #expect(refusal == nil)
+        #expect(log.calls.count >= 6)
+    }
+
+    @Test("frontmost gate refuses logic_not_frontmost after the old two-second bound, never earlier")
+    func exclusiveSelectionGateRefusesAtTheOldBound() {
+        let (_, _, logic) = makeKeyWindowFixture()
+        let log = SleepLog()
+        let refusal = AccessibilityChannel.confirmExclusiveSelectionRefusal(
+            index: 0, runtime: logic,
+            processRuntime: noopProcessRuntime(logicIsFrontmost: { false }), sleepMicros: log.sleep)
+        #expect(refusal?.error == .logicNotFrontmost)
+        #expect(log.total == Int(AccessibilityChannel.logicFrontmostStabilityTimeoutMicros))
+    }
+
+    @Test("awaitLogicFrontmost exits at once when already frontmost, waits when not, and gives up at the bound")
+    func selectFrontmostWaitContract() async {
+        let already = await AccessibilityChannel.awaitLogicFrontmost(
+            processRuntime: noopProcessRuntime(), bound: .milliseconds(150), step: .milliseconds(10))
+        #expect(already)
+        let late = FrontmostProbe(falseReads: 4)
+        let eventually = await AccessibilityChannel.awaitLogicFrontmost(
+            processRuntime: noopProcessRuntime(logicIsFrontmost: { late.read() }),
+            bound: .milliseconds(150), step: .milliseconds(10))
+        #expect(eventually)
+        #expect(late.checks == 6)
+        let never = await AccessibilityChannel.awaitLogicFrontmost(
+            processRuntime: noopProcessRuntime(logicIsFrontmost: { false }),
+            bound: .milliseconds(30), step: .milliseconds(10))
+        #expect(!never)
+    }
+
+    @Test("rename field wait: exits after two text-editing reads, waits until they come, and gives up at 150 ms")
+    func renameFieldFocusWaitContract() {
+        let (_, _, logic) = makeKeyWindowFixture()
+        let editing = AccessibilityChannel.LogicKeyboardFocus.textEditing(role: "AXTextField", byInsertionPoint: false)
+        let quiet = AccessibilityChannel.LogicKeyboardFocus.notTextEditing
+
+        let early = SleepLog()
+        #expect(AccessibilityChannel.awaitRenameFieldFocus(
+            runtime: logic, focus: { editing }, sleepMicros: early.sleep))
+        #expect(early.calls == [10_000])
+
+        let late = SleepLog()
+        let counter = ReadCounter()
+        #expect(AccessibilityChannel.awaitRenameFieldFocus(
+            runtime: logic,
+            focus: { counter.reads += 1; return counter.reads > 4 ? editing : quiet },
+            sleepMicros: late.sleep))
+        #expect(late.calls.count == 5)
+
+        let never = SleepLog()
+        #expect(!AccessibilityChannel.awaitRenameFieldFocus(
+            runtime: logic, focus: { quiet }, sleepMicros: never.sleep))
+        #expect(never.total == 150_000)
+    }
+
+    @Test("raised-window wait: exits after two reads when focused, gives up at 50 ms when not")
+    func raisedWindowWaitContract() {
+        let (f, window, logic) = makeKeyWindowFixture()
+        let focused = SleepLog()
+        #expect(AccessibilityChannel.awaitTrackWindowFocused(
+            window: window, runtime: logic, sleepMicros: focused.sleep))
+        #expect(focused.calls == [10_000])
+
+        let other = f.builder.element(9502)
+        let unfocused = SleepLog()
+        #expect(!AccessibilityChannel.awaitTrackWindowFocused(
+            window: other, runtime: logic, sleepMicros: unfocused.sleep))
+        #expect(unfocused.total == 50_000)
+    }
 }

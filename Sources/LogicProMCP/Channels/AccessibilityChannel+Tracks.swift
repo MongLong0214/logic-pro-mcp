@@ -2069,7 +2069,7 @@ extension AccessibilityChannel {
         // land, then go through the AX-native selection ladder (ADR-001: no
         // coordinate fallback — fail closed if every AX step is rejected).
         _ = processRuntime.activateLogicPro()
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        _ = await awaitLogicFrontmost(processRuntime: processRuntime)
         var writeAttempted = false
         let outcome = AXLogicProElements.selectTrackOutcome(
             at: index,
@@ -2456,10 +2456,61 @@ extension AccessibilityChannel {
     /// AXPress on the track-header Solo checkbox is a live no-op on Logic 12.3.
     static let trackSoloKeyCode: CGKeyCode = 1
 
-    static let logicFrontmostPollIntervalMicros: useconds_t = 100_000
-    static let logicFrontmostStabilityPollCount = 4
+    /// Frontmost and key-window conditions are polled this far apart and accepted on this many
+    /// consecutive positive reads. The bounds below are the fixed waits these polls replaced.
+    static let logicFrontmostPollIntervalMicros: useconds_t = 10_000
+    static let logicFrontmostStabilityPollCount = 2
     static let logicFrontmostStabilityTimeoutMicros: useconds_t = 2_000_000
     static let logicKeyWindowSettleMicros: useconds_t = 800_000
+    /// Polls until Logic's key window and keyboard focus are readable and safe, bounded by
+    /// `logicKeyWindowSettleMicros`. The condition is: Logic frontmost, an `AXFocusedWindow`
+    /// present, and the focused element reading as no text editor, on two consecutive polls.
+    /// Returns whether it was observed. It never decides whether a key may be posted: a false
+    /// return only means the bound was spent, and the caller's own gates (exclusive selection,
+    /// frontmost, `syntheticKeyFocusRefusal`) still run, so every refusal is unchanged.
+    @discardableResult
+    static func awaitLogicKeyWindowReady(
+        runtime: AXLogicProElements.Runtime,
+        processRuntime: ProcessUtils.Runtime,
+        sleepMicros: (useconds_t) -> Void
+    ) -> Bool {
+        func ready() -> Bool {
+            guard processRuntime.logicIsFrontmost(),
+                  let app = AXLogicProElements.appRoot(runtime: runtime),
+                  let _: AXUIElement = AXHelpers.getAttribute(
+                    app, kAXFocusedWindowAttribute, runtime: runtime.ax)
+            else { return false }
+            return readLogicKeyboardFocus(runtime: runtime).readsAsNoEditor
+        }
+        var consecutive = 0
+        var elapsed: useconds_t = 0
+        while true {
+            consecutive = ready() ? consecutive + 1 : 0
+            if consecutive >= logicFrontmostStabilityPollCount { return true }
+            if elapsed >= logicKeyWindowSettleMicros { return false }
+            sleepMicros(logicFrontmostPollIntervalMicros)
+            elapsed += logicFrontmostPollIntervalMicros
+        }
+    }
+
+    /// Async twin used before an AX selection: polls frontmost on two consecutive reads, bounded
+    /// by `bound`. A Logic already in front costs two reads and one poll step.
+    static func awaitLogicFrontmost(
+        processRuntime: ProcessUtils.Runtime,
+        bound: Duration = .milliseconds(150),
+        step: Duration = .milliseconds(10)
+    ) async -> Bool {
+        var consecutive = 0
+        var elapsed: Duration = .zero
+        while true {
+            consecutive = processRuntime.logicIsFrontmost() ? consecutive + 1 : 0
+            if consecutive >= logicFrontmostStabilityPollCount { return true }
+            if elapsed >= bound { return false }
+            try? await Task.sleep(for: step)
+            elapsed += step
+        }
+    }
+
     static let syntheticKeyRetryAttempts = 3
     static let syntheticKeyRetryPollMs = 600
     static let syntheticKeyRetrySettleMicros: useconds_t = 200_000
@@ -2979,23 +3030,25 @@ extension AccessibilityChannel {
     ) -> RungRefusal? {
         _ = ProcessUtils.activateLogicPro(runtime: processRuntime)
 
+        // Frontmost is observed, not slept for: two consecutive positive reads, one poll step
+        // apart, with the old two-second ceiling. A Logic that is already in front costs two
+        // reads. Once it is, the key window and keyboard focus are polled for (still bounded by
+        // the old 800 ms), and the key is only ever posted after the checks below succeed.
         var stablePolls = 0
         var elapsedMicros: useconds_t = 0
         var frontmostSettled = false
         while elapsedMicros < logicFrontmostStabilityTimeoutMicros {
             stablePolls = processRuntime.logicIsFrontmost() ? stablePolls + 1 : 0
-            sleepMicros(logicFrontmostPollIntervalMicros)
-            elapsedMicros += logicFrontmostPollIntervalMicros
-            if stablePolls == logicFrontmostStabilityPollCount {
-                guard processRuntime.logicIsFrontmost() else {
-                    stablePolls = 0
-                    continue
-                }
-                sleepMicros(logicKeyWindowSettleMicros)
+            if stablePolls >= logicFrontmostStabilityPollCount {
+                _ = awaitLogicKeyWindowReady(
+                    runtime: runtime, processRuntime: processRuntime, sleepMicros: sleepMicros
+                )
                 frontmostSettled = processRuntime.logicIsFrontmost()
                 if frontmostSettled { break }
                 stablePolls = 0
             }
+            sleepMicros(logicFrontmostPollIntervalMicros)
+            elapsedMicros += logicFrontmostPollIntervalMicros
         }
         guard frontmostSettled else { return logicNotFrontmostRefusal(index: index) }
         guard confirmExclusiveSelection(index: index, runtime: runtime) else {
@@ -3461,7 +3514,7 @@ extension AccessibilityChannel {
             ))
         }
 
-        usleep(150_000)
+        awaitRenameFieldFocus(runtime: runtime)
         let typing = typeRenameName(
             truncatedName,
             focus: { readLogicKeyboardFocus(runtime: runtime) },
@@ -4003,6 +4056,29 @@ extension AccessibilityChannel {
         ))
     }
 
+    /// Polls for the rename field to take the keyboard focus after the menu item, bounded by the
+    /// 150 ms this replaced. It observes only; `typeRenameName` still reads the focus before the
+    /// first character and before every one after it, and refuses when it is not a text editor.
+    @discardableResult
+    static func awaitRenameFieldFocus(
+        runtime: AXLogicProElements.Runtime,
+        bound: useconds_t = 150_000,
+        step: useconds_t = 10_000,
+        focus: (() -> LogicKeyboardFocus)? = nil,
+        sleepMicros: (useconds_t) -> Void = { usleep($0) }
+    ) -> Bool {
+        let read = focus ?? { readLogicKeyboardFocus(runtime: runtime) }
+        var consecutive = 0
+        var elapsed: useconds_t = 0
+        while true {
+            if case .textEditing = read() { consecutive += 1 } else { consecutive = 0 }
+            if consecutive >= 2 { return true }
+            if elapsed >= bound { return false }
+            sleepMicros(step)
+            elapsed += step
+        }
+    }
+
     private static func raiseTrackWindowForRename(
         index: Int,
         runtime: AXLogicProElements.Runtime = .production
@@ -4013,7 +4089,37 @@ extension AccessibilityChannel {
             return
         }
         _ = AXHelpers.performAction(window, kAXRaiseAction, runtime: runtime.ax)
-        usleep(50_000)
+        // Wait for the raise to be observable, not for 50 ms: the track's window is Logic's
+        // focused window on two consecutive reads, bounded by the old 50 ms. A window that is
+        // already focused costs two reads; one that never becomes focused costs the old 50 ms and
+        // the rename goes on exactly as before (its own focus gates still refuse).
+        awaitTrackWindowFocused(window: window, runtime: runtime)
+    }
+
+    @discardableResult
+    static func awaitTrackWindowFocused(
+        window: AXUIElement,
+        runtime: AXLogicProElements.Runtime,
+        bound: useconds_t = 50_000,
+        step: useconds_t = 10_000,
+        sleepMicros: (useconds_t) -> Void = { usleep($0) }
+    ) -> Bool {
+        func focused() -> Bool {
+            guard let app = AXLogicProElements.appRoot(runtime: runtime),
+                  let current: AXUIElement = AXHelpers.getAttribute(
+                    app, kAXFocusedWindowAttribute, runtime: runtime.ax)
+            else { return false }
+            return CFEqual(current, window)
+        }
+        var consecutive = 0
+        var elapsed: useconds_t = 0
+        while true {
+            consecutive = focused() ? consecutive + 1 : 0
+            if consecutive >= 2 { return true }
+            if elapsed >= bound { return false }
+            sleepMicros(step)
+            elapsed += step
+        }
     }
 
     private static func selectTrackForRename(
