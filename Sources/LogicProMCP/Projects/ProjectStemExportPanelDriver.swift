@@ -93,6 +93,12 @@ enum ProjectStemExportPanelDriver {
         /// primitive. A refusal names the failed component so `finish()` can
         /// still cancel a partially navigated panel.
         func selectDestinationBrowserElement(at path: String) -> DestinationSelection
+        /// List view only. Its destination popup names the directory being
+        /// browsed, never the selected folder, so the leaf-name witness cannot
+        /// confirm a destination there; the export lands in the selected row.
+        /// True only when exactly one row of the browser outline is selected and
+        /// its AXURL is this exact path. False in every other view or state.
+        func listViewSelectionConfirms(_ path: String) -> Bool
         /// Reads the current per-track popup value; it does not infer enablement
         /// from the control merely existing.
         func oneFilePerTrackIsActive() -> Bool
@@ -224,8 +230,10 @@ enum ProjectStemExportPanelDriver {
         // `selectDestinationBrowserElement` is what proves the path; this popup
         // check is a second, weaker witness kept only to catch a panel that moved
         // somewhere else entirely.
-        guard let afterDestination = surface.destinationPopupValue(),
-              destinationDisplay(afterDestination, confirms: destination) else {
+        let popupConfirms = surface.destinationPopupValue().map {
+            destinationDisplay($0, confirms: destination)
+        } ?? false
+        guard popupConfirms || surface.listViewSelectionConfirms(destination) else {
             return finish(.refused("stem_destination_not_confirmed_after_browser_selection"))
         }
         guard surface.oneFilePerTrackIsActive() else {
@@ -526,6 +534,26 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
             }
         }
         return .selected
+    }
+
+    func listViewSelectionConfirms(_ path: String) -> Bool {
+        guard let panel = exportPanel(),
+              case let .success(fields) = browserPathFields(in: panel) else { return false }
+        let outlines = fields.compactMap { field in
+            ancestor(of: field.element, role: kAXRowRole as String, maxDepth: 4).flatMap {
+                ancestor(of: $0, role: kAXOutlineRole as String, maxDepth: 2)
+            }
+        }
+        guard let outline = outlines.first,
+              outlines.allSatisfy({ CFEqual($0, outline) }),
+              case let .success(selected) = AXHelpers.getAXUIElementArrayRead(
+                  outline, kAXSelectedRowsAttribute as String, runtime: runtime.ax
+              ),
+              case let .elements(rows) = selected, rows.count == 1,
+              case let .success(rowFields) = browserPathFields(in: rows[0], maxDepth: 4) else {
+            return false
+        }
+        return rowFields.map(\.path) == [path]
     }
 
     func oneFilePerTrackIsActive() -> Bool {
@@ -1051,6 +1079,13 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
         }
     }
 
+    private struct SelectionTarget {
+        let container: AXUIElement
+        let item: AXUIElement
+        let attribute: String
+        let discloses: Bool
+    }
+
     private func selectListedComponent(
         at path: String,
         named component: String,
@@ -1067,29 +1102,54 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
             let failure = entries.isEmpty ? "not_listed" : "ambiguous"
             return .refused("stem_destination_component_\(failure):\(component)")
         }
-        guard let group = ancestor(of: entry, role: kAXGroupRole as String, maxDepth: 8) else {
+        // Column view: AXTextField > AXGroup > AXList. List view (measured on
+        // Logic Pro 13.0): AXTextField > AXCell > AXRow > AXOutline, where the
+        // outline is the browser itself.
+        let target: SelectionTarget
+        if let row = ancestor(of: entry, role: kAXRowRole as String, maxDepth: 4),
+           let outline = ancestor(of: row, role: kAXOutlineRole as String, maxDepth: 2) {
+            target = SelectionTarget(
+                container: outline, item: row,
+                attribute: kAXSelectedRowsAttribute as String, discloses: true
+            )
+        } else if let group = ancestor(of: entry, role: kAXGroupRole as String, maxDepth: 8) {
+            guard let list = ancestor(of: group, role: kAXListRole as String, maxDepth: 8) else {
+                return .refused("stem_destination_component_list_unresolved:\(component)")
+            }
+            target = SelectionTarget(
+                container: list, item: group,
+                attribute: kAXSelectedChildrenAttribute as String, discloses: false
+            )
+        } else {
             return .refused("stem_destination_component_group_unresolved:\(component)")
         }
-        guard let list = ancestor(of: group, role: kAXListRole as String, maxDepth: 8) else {
-            return .refused("stem_destination_component_list_unresolved:\(component)")
-        }
+        let list = target.container
 
-        // A successful AXSelectedChildren write is not navigation evidence; only
-        // the selection readback or the child column below establishes it.
-        _ = AXHelpers.setAttribute(
-            list,
-            kAXSelectedChildrenAttribute as String,
-            [group] as CFArray,
-            runtime: runtime.ax
-        )
         let listingExpectation = directoryListing(path)
         guard listingExpectation != .unavailable else {
             return .refused("readback_unavailable: stem_destination_component_directory_unreadable:\(component)")
         }
+        if target.discloses, listingExpectation == .hasEntries {
+            // A list-view row only reveals its children when disclosed, and the
+            // next component is found among them.
+            _ = AXHelpers.setAttribute(
+                target.item, kAXDisclosingAttribute as String, true as CFBoolean,
+                runtime: runtime.ax
+            )
+        }
+        // A successful selection write is not navigation evidence; only the
+        // selection readback or the child entries below establish it.
+        _ = AXHelpers.setAttribute(
+            target.container,
+            target.attribute,
+            [target.item] as CFArray,
+            runtime: runtime.ax
+        )
         switch waitsForSelection(
             of: path,
             in: list,
             panel: panel,
+            attribute: target.attribute,
             requireObservedNavigation: listingExpectation == .hasEntries
         ) {
         case .confirmed:
@@ -1141,13 +1201,14 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
         of path: String,
         in list: AXUIElement?,
         panel: AXUIElement,
+        attribute: String,
         requireObservedNavigation: Bool
     ) -> NavigationConfirmation {
         guard let list else { return .notConfirmed }
         let started = navigationNowNanos()
         var sawReadFailure = false
         while true {
-            switch selectionReadsBack(path, in: list) {
+            switch selectionReadsBack(path, in: list, attribute: attribute) {
             case .failure:
                 sawReadFailure = true
             case let .success(selectionMatches):
@@ -1234,11 +1295,12 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
     /// the write says only that the write was accepted.
     private func selectionReadsBack(
         _ path: String,
-        in list: AXUIElement
+        in list: AXUIElement,
+        attribute: String = kAXSelectedChildrenAttribute as String
     ) -> Result<Bool, PanelReadFailure> {
         let selected: [AXUIElement]
         switch AXHelpers.getAXUIElementArrayRead(
-            list, kAXSelectedChildrenAttribute as String, runtime: runtime.ax
+            list, attribute, runtime: runtime.ax
         ) {
         case .failure, .success(.malformed):
             return .failure(.unavailable)
@@ -1353,6 +1415,10 @@ final class AXSurface: ProjectStemExportPanelDriver.Surface, @unchecked Sendable
         directory == "/" || path == directory || path.hasPrefix(directory + "/")
     }
 
+}
+
+extension ProjectStemExportPanelDriver.Surface {
+    func listViewSelectionConfirms(_ path: String) -> Bool { false }
 }
 
 extension ProjectStemExportPanelDriver {
