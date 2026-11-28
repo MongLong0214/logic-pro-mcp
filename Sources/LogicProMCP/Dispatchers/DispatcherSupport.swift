@@ -249,8 +249,17 @@ func blockingLogicDialogResult(
         let terminalOutcome = "none: the pre-write guard actuated no dialog control and inferred no cleanup authority"
         extras["recovery_action"] = terminalOutcome
         let label = info.title.isEmpty ? info.role : info.title
-        hint = "Refusing \(operation): a blocking Logic dialog/sheet was observed at the pre-write "
-            + "guard (\(label)). This refusal actuated no dialog control and terminated before any write."
+        // #1602: name the cause. An alert is covering Logic; say its role and how many buttons it
+        // has (no localized title needed), and say what the caller can do. The guard reads the
+        // window list live on every call, so nothing is cached: once the alert is gone the next
+        // call is not refused and no server restart is needed.
+        extras["alert_covering_logic"] = true
+        extras["dialog_button_count"] = info.buttonTitles.count
+        extras["next_step"] = "Clear the alert in Logic (it is not cleared by this server), then "
+            + "send this call again. No server restart is needed; the guard re-reads the screen on every call."
+        hint = "Refusing \(operation): an alert is covering Logic (role \(info.role), "
+            + "\(info.buttonTitles.count) button(s)\(info.title.isEmpty ? "" : ", \"\(label)\""))"
+            + " and no write was attempted. See next_step. This refusal actuated no dialog control."
     }
     return toolTextResult(
         HonestContract.encodeStateC(error: .unsupportedState, hint: hint, extras: extras),
