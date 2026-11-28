@@ -73,11 +73,11 @@ import Testing
     let stage = try #require(gate.range(of: "cp \"$CANDIDATE\" .build/release/LogicProMCP"))
     let logic = try #require(gate.range(of: "if ! pgrep -xq \"Logic Pro\"; then"))
     let permission = try #require(gate.range(of: ".build/release/LogicProMCP --check-permissions"))
-    let releaseLoop = try #require(gate.range(of: "for live_test in ${release_live_tests[@]+\"${release_live_tests[@]}\"}; do",
+    let releaseLoop = try #require(gate.range(of: "run_live_lane release\n",
                                               range: permission.upperBound..<gate.endIndex))
     let debugExecutable = try #require(gate.range(of: "if [ ! -x .build/debug/LogicProMCP ]; then",
                                                   range: releaseLoop.upperBound..<gate.endIndex))
-    let debugLoop = try #require(gate.range(of: "for live_test in ${debug_live_tests[@]+\"${debug_live_tests[@]}\"}; do",
+    let debugLoop = try #require(gate.range(of: "run_live_lane debug\n",
                                             range: debugExecutable.upperBound..<gate.endIndex))
     #expect(!gate.contains("\nswift test --no-parallel\n"),
             "the general suite runs in hosted CI; the Logic host runs only the live tests")
@@ -90,9 +90,15 @@ import Testing
     #expect(releaseLoop.lowerBound < debugExecutable.lowerBound)
     #expect(debugExecutable.lowerBound < debugLoop.lowerBound)
     #expect(debugLoop.lowerBound < finalHash.lowerBound)
-    #expect(gate.contains("realReleaseBinaryExecutesEveryOperationWithIndependentReadback"))
-    #expect(gate.contains("runnerIgnoresPartialStateFaultEnvOnRealServer"))
-    #expect(gate.contains("runnerRejectsPartialStateObservedFromRealServer"))
+    // The live tests are the data file's `live` entries, each owned by a lane; the script names none.
+    let notRun = try scriptContents("Tests/not-run-on-hosted.json")
+    for (name, lane) in [("realReleaseBinaryExecutesEveryOperationWithIndependentReadback", "release"),
+                         ("runnerIgnoresPartialStateFaultEnvOnRealServer", "release"),
+                         ("runnerRejectsPartialStateObservedFromRealServer", "debug")] {
+        let entry = try #require(notRun.split(separator: "\n").first { $0.contains("QualificationRunnerTests/\(name)()") })
+        #expect(entry.contains("\"class\": \"live\", \"lane\": \"\(lane)\""))
+        #expect(!gate.contains(name))
+    }
     #expect(gate.contains("trap verify_candidate_bytes EXIT"))
     #expect(gate.contains("trap 'exit 130' INT"))
     #expect(gate.contains("trap 'exit 143' TERM"))

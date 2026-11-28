@@ -238,10 +238,14 @@ with open(sys.argv[5], "w", encoding="utf-8") as output:
 PY
 }
 
-# A fork pull request run has an empty `pull_requests` array. Resolve its identity through the
+# A fork pull request run has an empty `pull_requests` array. Its identity is resolved through the
 # trusted API: exactly one open PR for the run head SHA whose base is this repository's main.
-resolve_run_pull_request() {
+# The API call (lookup_fork_pull_request) and the use of its answer (apply_fork_pull_request) are
+# separate so the final liveness read can come AFTER the call and still see the identity: the read
+# is then the last API call before the success POST on every branch.
+lookup_fork_pull_request() {
   local run_file="$1" head_query
+  rm -f "$work/resolved-pulls.json"
   head_query="$(python3 - "$run_file" <<'PY'
 import json, sys, urllib.parse
 run = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -255,7 +259,7 @@ PY
 )"
   [ -n "$head_query" ] || return 0
   trusted_api GET "repos/$REPO/pulls?$head_query" > "$work/pulls.json"
-  python3 - "$run_file" "$work/pulls.json" "$REPO" <<'PY'
+  python3 - "$run_file" "$work/pulls.json" "$REPO" "$work/resolved-pulls.json" <<'PY'
 import json, sys
 run = json.load(open(sys.argv[1], encoding="utf-8"))
 pulls = json.load(open(sys.argv[2], encoding="utf-8"))
@@ -274,14 +278,28 @@ matches = [
 if len(matches) != 1:
     raise SystemExit(
         f"native CI qualification requires exactly one open main pull request for the run head, found {len(matches)}")
-run["pull_requests"] = matches
-with open(sys.argv[1], "w", encoding="utf-8") as output:
-    json.dump(run, output)
+with open(sys.argv[4], "w", encoding="utf-8") as output:
+    json.dump(matches, output)
+PY
+}
+# No API call: put the resolved identity into a run response that has an empty `pull_requests`.
+apply_fork_pull_request() {
+  local run_file="$1"
+  [ -f "$work/resolved-pulls.json" ] || return 0
+  python3 - "$run_file" "$work/resolved-pulls.json" <<'PY'
+import json, sys
+run = json.load(open(sys.argv[1], encoding="utf-8"))
+if not run.get("pull_requests"):
+    run["pull_requests"] = json.load(open(sys.argv[2], encoding="utf-8"))
+    with open(sys.argv[1], "w", encoding="utf-8") as output:
+        json.dump(run, output)
 PY
 }
 
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run.json"
-resolve_run_pull_request "$work/run.json"
+cp "$work/run.json" "$work/run-raw.json"
+lookup_fork_pull_request "$work/run-raw.json"
+apply_fork_pull_request "$work/run.json"
 validate_run "$work/run.json" "$work/run-attempt.txt"
 
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
@@ -441,13 +459,15 @@ fetch_run_jobs
 test "$(select_artifact_attempt "$work/jobs.json")" = "$artifact_attempt"
 validate_artifacts "$work/artifacts-success.json" "$artifact_attempt" "$work/artifact-success.json"
 cmp -s "$work/artifact.json" "$work/artifact-success.json"
-# Liveness is judged LAST: after the final artifact and job API call and immediately before the
-# success POST, so a run cancelled while those calls were made is seen. What remains is the gap
+# Liveness is judged LAST: after the final artifact, job and fork pull request calls and
+# immediately before the success POST, so a run cancelled while those calls were made is seen. The
+# fork identity is looked up first and applied to the final read without another call. What remains is the gap
 # between this read and the POST. It fails safe: the status names this attempt's URL, a dead
 # attempt has no consumer (the consumer accepts only the current attempt's status and every re-run
 # is a new attempt), so a success that lands in that gap can never be used.
+lookup_fork_pull_request "$work/run-raw.json"
 trusted_api GET "repos/$REPO/actions/runs/$RUN_ID" > "$work/run-success.json"
-resolve_run_pull_request "$work/run-success.json"
+apply_fork_pull_request "$work/run-success.json"
 validate_run "$work/run-success.json" "$work/run-success-attempt.txt" "$run_attempt" final \
   || { validate_status="$?"; [ "$validate_status" -ne 75 ] || run_ended=1; exit "$validate_status"; }
 post_status success "$receipt"

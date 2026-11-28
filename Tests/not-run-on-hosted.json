@@ -3,9 +3,9 @@
     {"id": "LogicProMCPTests.Issue965HeldSelectionAssociationTests/nativeMixerScrollToRetainsItsObservedOwners()", "class": "operator", "reason": "needs an operator-supplied project in LOGIC_MCP_NATIVE_MIXER_RECOVERY_PROJECT; no automatic lane runs it"},
     {"id": "LogicProMCPTests.LibraryDiskScannerTests/installedLibraryEmitsOnlyPanelCategories()", "class": "logic_host", "reason": "reads the installed Logic Pro factory Library"},
     {"id": "LogicProMCPTests.LibraryDiskScannerTests/scanLocalFactoryLibraryReportsFullCoverage()", "class": "logic_host", "reason": "scans the installed Logic Pro factory Library"},
-    {"id": "LogicProMCPTests.QualificationRunnerTests/realReleaseBinaryExecutesEveryOperationWithIndependentReadback()", "class": "live", "reason": "drives Logic with LOGIC_PRO_MCP_RUN_LIVE_QA=1; release-qualify.sh runs it"},
-    {"id": "LogicProMCPTests.QualificationRunnerTests/runnerIgnoresPartialStateFaultEnvOnRealServer()", "class": "live", "reason": "drives Logic with LOGIC_PRO_MCP_RUN_LIVE_QA=1; release-qualify.sh runs it"},
-    {"id": "LogicProMCPTests.QualificationRunnerTests/runnerRejectsPartialStateObservedFromRealServer()", "class": "live", "reason": "drives Logic with LOGIC_PRO_MCP_RUN_LIVE_QA=1; release-qualify.sh runs it"},
+    {"id": "LogicProMCPTests.QualificationRunnerTests/realReleaseBinaryExecutesEveryOperationWithIndependentReadback()", "class": "live", "lane": "release", "reason": "drives Logic with LOGIC_PRO_MCP_RUN_LIVE_QA=1; release-qualify.sh runs it"},
+    {"id": "LogicProMCPTests.QualificationRunnerTests/runnerIgnoresPartialStateFaultEnvOnRealServer()", "class": "live", "lane": "release", "reason": "drives Logic with LOGIC_PRO_MCP_RUN_LIVE_QA=1; release-qualify.sh runs it"},
+    {"id": "LogicProMCPTests.QualificationRunnerTests/runnerRejectsPartialStateObservedFromRealServer()", "class": "live", "lane": "debug", "reason": "drives Logic with LOGIC_PRO_MCP_RUN_LIVE_QA=1; release-qualify.sh runs it"},
     {"id": "LogicProMCPTests.StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()", "class": "logic_host", "reason": "compares the factory-settings folders of the installed Logic Pro"},
     {"id": "LogicProMCPTests.testProcessUtilsBundleURLResolvesWithoutAppKitRunloop()", "class": "logic_host", "reason": "resolves the installed Logic Pro bundle"},
     {"id": "LogicProMCPTests.testProcessUtilsLogicProVersionResolvesOffMain()", "class": "logic_host", "reason": "reads the installed Logic Pro version"}

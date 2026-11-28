@@ -172,7 +172,7 @@ class UnionTests(ManifestFixture):
         subprocess.run([sys.executable, script, "partition", "--inventory", str(inventory),
                         "--shards", "3", "--output-directory", str(out)], check=True)
         listed = self.write("not-run.json", json.dumps({"tests": [
-            {"id": "S/a()", "class": "live", "reason": "fixture"}]}))
+            {"id": "S/a()", "class": "live", "lane": "release", "reason": "fixture"}]}))
         shard_args = [arg for index in range(3)
                       for arg in ("--shard", str(manifest.shard_manifest_path(out, index)))]
         shard_args += ["--not-run", str(listed)]
@@ -186,8 +186,14 @@ class UnionTests(ManifestFixture):
 
 
 def not_run_document(*rows):
-    return json.dumps({"tests": [
-        {"id": test_id, "class": kind, "reason": "fixture"} for test_id, kind in rows]})
+    """Rows are (id, class) or (id, "live", lane); a live row without a lane gets "release"."""
+    tests = []
+    for row in rows:
+        entry = {"id": row[0], "class": row[1], "reason": "fixture"}
+        if row[1] == "live":
+            entry["lane"] = row[2] if len(row) > 2 else "release"
+        tests.append(entry)
+    return json.dumps({"tests": tests})
 
 
 class XUnitFixture(ManifestFixture):
@@ -367,9 +373,11 @@ class HostedNotRunRuleTests(XUnitFixture):
                                   self.root / f"actual-{kind}.txt",
                                   not_run=[(f"{self.SUITE}/gated()", kind)])
 
-    def test_a_logic_host_or_live_entry_that_is_not_skipped_is_stale(self):
+    def test_an_entry_of_any_class_that_is_not_skipped_is_stale(self):
+        # The reviewer's relabel: a test that runs on the hosted lane is called `operator`, which
+        # would exempt it from the Logic host as well. It was never skipped, so the entry is stale.
         self.xunit(self.RAN + self.SKIPPED)
-        for kind in ("logic_host", "live"):
+        for kind in manifest.NOT_RUN_CLASSES:
             with self.subTest(kind=kind):
                 with self.assertRaisesRegex(manifest.ManifestError, "stale.*ran"):
                     self.verify_xunit(self.expected("ran", "gated"), self.root / "xunit",
@@ -400,9 +408,17 @@ class HostedNotRunRuleTests(XUnitFixture):
             "extra key": json.dumps({"tests": [], "more": 1}),
             "unknown class": not_run_document((f"{self.SUITE}/gated()", "somewhere")),
             "duplicate": not_run_document((f"{self.SUITE}/gated()", "live"), (f"{self.SUITE}/gated()", "live")),
-            "blank reason": json.dumps({"tests": [{"id": "a", "class": "live", "reason": " "}]}),
-            "multiline reason": json.dumps({"tests": [{"id": "a", "class": "live", "reason": "a\nb"}]}),
-            "missing reason": json.dumps({"tests": [{"id": "a", "class": "live"}]}),
+            "blank reason": json.dumps({"tests": [
+                {"id": "a", "class": "live", "lane": "release", "reason": " "}]}),
+            "multiline reason": json.dumps({"tests": [
+                {"id": "a", "class": "live", "lane": "release", "reason": "a\nb"}]}),
+            "missing reason": json.dumps({"tests": [{"id": "a", "class": "live", "lane": "release"}]}),
+            "live with no owning lane": json.dumps({"tests": [
+                {"id": "a", "class": "live", "reason": "r"}]}),
+            "live with an unknown lane": json.dumps({"tests": [
+                {"id": "a", "class": "live", "lane": "nowhere", "reason": "r"}]}),
+            "lane on a class that has none": json.dumps({"tests": [
+                {"id": "a", "class": "operator", "lane": "release", "reason": "r"}]}),
         }
         for label, text in bad.items():
             with self.subTest(label):
@@ -417,12 +433,120 @@ class HostedNotRunRuleTests(XUnitFixture):
         listed = self.write("ok.json", not_run_document((f"{self.SUITE}/ran()", "logic_host")))
         manifest.verify_not_run_in_inventory(inventory, listed)
 
-    def test_the_checked_in_list_is_well_formed_and_names_real_tests(self):
+    def test_the_checked_in_list_is_well_formed_and_names_these_exact_tests(self):
+        # Identities, not counts: swapping one test for another keeps every count, so the exempted
+        # tests are named here, and a change to this set is a visible change to review.
         path = Path(__file__).resolve().parents[1] / "Tests" / "not-run-on-hosted.json"
         entries = manifest.read_not_run(path)
-        counts = {kind: sum(1 for k, _ in entries.values() if k == kind) for kind in manifest.NOT_RUN_CLASSES}
-        self.assertEqual(counts, {"logic_host": 5, "live": 3, "operator": 1})
-        self.assertEqual(len(manifest.host_test_ids(path)), 5)
+        listed = {test_id: (entry.kind, entry.lane) for test_id, entry in entries.items()}
+        self.assertEqual(listed, {
+            "LogicProMCPTests.Issue965HeldSelectionAssociationTests/nativeMixerScrollToRetainsItsObservedOwners()":
+                ("operator", None),
+            "LogicProMCPTests.LibraryDiskScannerTests/installedLibraryEmitsOnlyPanelCategories()":
+                ("logic_host", None),
+            "LogicProMCPTests.LibraryDiskScannerTests/scanLocalFactoryLibraryReportsFullCoverage()":
+                ("logic_host", None),
+            "LogicProMCPTests.QualificationRunnerTests/realReleaseBinaryExecutesEveryOperationWithIndependentReadback()":
+                ("live", "release"),
+            "LogicProMCPTests.QualificationRunnerTests/runnerIgnoresPartialStateFaultEnvOnRealServer()":
+                ("live", "release"),
+            "LogicProMCPTests.QualificationRunnerTests/runnerRejectsPartialStateObservedFromRealServer()":
+                ("live", "debug"),
+            "LogicProMCPTests.StockPluginFactoryPresetTests/hostFactorySettingsFoldersAreAccountedFor()":
+                ("logic_host", None),
+            "LogicProMCPTests.testProcessUtilsBundleURLResolvesWithoutAppKitRunloop()":
+                ("logic_host", None),
+            "LogicProMCPTests.testProcessUtilsLogicProVersionResolvesOffMain()":
+                ("logic_host", None),
+        })
+        self.assertEqual(
+            {test_id for test_id, entry in entries.items() if entry.kind == "operator"},
+            set(manifest.BOOTSTRAP_OPERATOR_IDS))
+
+
+class TrustedOperatorTests(ManifestFixture):
+    """HOST-04: an `operator` exemption exists only where the trusted copy already has it."""
+
+    VERSION = "LogicProMCPTests.testProcessUtilsLogicProVersionResolvesOffMain()"
+    OWNED = "LogicProMCPTests.Operator/needsProject()"
+    PLAIN = "LogicProMCPTests.Suite/plain()"
+
+    def verify(self, candidate_rows, trusted_rows):
+        candidate = self.write("candidate.json", not_run_document(*candidate_rows))
+        trusted = self.root / "trusted.json"
+        if trusted_rows is not None:
+            trusted.write_text(not_run_document(*trusted_rows), encoding="utf-8")
+        manifest.verify_trusted_operator(candidate, trusted)
+
+    def test_an_operator_entry_the_trusted_copy_has_is_accepted(self):
+        self.verify([(self.OWNED, "operator"), (self.VERSION, "logic_host")],
+                    [(self.OWNED, "operator"), (self.VERSION, "logic_host")])
+
+    def test_dropping_an_operator_entry_is_accepted(self):
+        self.verify([(self.VERSION, "logic_host")], [(self.OWNED, "operator")])
+
+    def test_a_new_operator_entry_is_refused(self):
+        with self.assertRaisesRegex(manifest.ManifestError, "trusted not-run list does not have.*needsProject"):
+            self.verify([(self.OWNED, "operator")], [(self.VERSION, "logic_host")])
+
+    def test_the_reviewers_count_preserving_swap_is_refused_on_both_sides(self):
+        # Trusted: one operator test and a logic_host version check. The candidate swaps which
+        # test is the operator one: the class counts are unchanged.
+        trusted = [(self.OWNED, "operator"), (self.VERSION, "logic_host")]
+        swapped = [(self.OWNED, "logic_host"), (self.VERSION, "operator")]
+        self.assertEqual(sorted(kind for _, kind in swapped), sorted(kind for _, kind in trusted))
+        # Native side: the trusted copy has no operator entry for the version check.
+        with self.assertRaisesRegex(manifest.ManifestError, "does not have.*testProcessUtils"):
+            self.verify(swapped, trusted)
+        # Hosted side: the version check is not skipped there, so calling it operator is stale.
+        directory = self.root / "xunit"
+        directory.mkdir()
+        (directory / "results.xml").write_text(
+            "<testsuites><testsuite>"
+            + testcase(self.VERSION) + testcase(self.OWNED, "<skipped />")
+            + "</testsuite></testsuites>", encoding="utf-8")
+        expected = self.write("expected.txt", "".join(f"{entry}\n" for entry in sorted((self.OWNED, self.VERSION))))
+        listed = self.write("swapped.json", not_run_document(*swapped))
+        with self.assertRaisesRegex(manifest.ManifestError, "stale.*testProcessUtils"):
+            manifest.verify_xunit(expected, directory, self.root / "actual.txt", listed)
+
+    def test_a_logic_host_entry_relabelled_operator_is_refused_by_the_trusted_copy(self):
+        # Hosted cannot tell: the test is skipped there under either label. Only the trusted copy can.
+        with self.assertRaisesRegex(manifest.ManifestError, "does not have"):
+            self.verify([(self.VERSION, "operator")], [(self.VERSION, "logic_host")])
+
+    def test_without_a_trusted_copy_only_the_built_in_operator_id_is_accepted(self):
+        bootstrap = sorted(manifest.BOOTSTRAP_OPERATOR_IDS)
+        self.verify([(test_id, "operator") for test_id in bootstrap] + [(self.PLAIN, "logic_host")], None)
+        self.verify([(self.PLAIN, "logic_host")], None)
+        with self.assertRaisesRegex(manifest.ManifestError, "does not have"):
+            self.verify([(self.OWNED, "operator")], None)
+        with self.assertRaisesRegex(manifest.ManifestError, "does not have.*needsProject"):
+            self.verify([(test_id, "operator") for test_id in bootstrap] + [(self.OWNED, "operator")], None)
+
+    def test_a_present_trusted_copy_replaces_the_built_in_id(self):
+        bootstrap = sorted(manifest.BOOTSTRAP_OPERATOR_IDS)
+        with self.assertRaisesRegex(manifest.ManifestError, "does not have"):
+            self.verify([(test_id, "operator") for test_id in bootstrap], [(self.PLAIN, "logic_host")])
+
+    def test_an_unreadable_trusted_copy_fails_closed(self):
+        self.write("trusted.json", "{")
+        candidate = self.write("candidate.json", not_run_document((self.OWNED, "operator")))
+        with self.assertRaisesRegex(manifest.ManifestError, "cannot read not-run list"):
+            manifest.verify_trusted_operator(candidate, self.root / "trusted.json")
+
+    def test_command_line_exit_codes(self):
+        candidate = self.write("candidate.json", not_run_document((self.OWNED, "operator")))
+        trusted = self.write("trusted.json", not_run_document((self.OWNED, "operator")))
+        command = [sys.executable, str(SCRIPT), "verify-trusted", "--not-run", str(candidate),
+                   "--trusted"]
+        self.assertEqual(subprocess.run([*command, str(trusted)], capture_output=True).returncode, 0)
+        other = self.write("other.json", not_run_document((self.PLAIN, "logic_host")))
+        refused = subprocess.run([*command, str(other)], capture_output=True, text=True)
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("does not have", refused.stderr)
+        absent = subprocess.run([*command, str(self.root / "absent.json")], capture_output=True, text=True)
+        self.assertEqual(absent.returncode, 1)
 
 
 HOST = ("LogicProMCPTests.LibraryDiskScannerTests/installedLibraryEmitsOnlyPanelCategories()",
@@ -518,6 +642,216 @@ class HostRunTests(ManifestFixture):
             self.verify()
 
 
+LIVE_RELEASE = ("LogicProMCPTests.QualificationRunnerTests/releaseOne()",
+                "LogicProMCPTests.QualificationRunnerTests/releaseTwo()")
+LIVE_DEBUG = "LogicProMCPTests.QualificationRunnerTests/debugOne()"
+
+
+class LiveRunTests(ManifestFixture):
+    """HOST-04(b): each live ID is selected by its exact ID and judged from its own xUnit output."""
+
+    def setUp(self):
+        super().setUp()
+        self.listed = self.write("not-run.json", not_run_document(
+            (LIVE_RELEASE[0], "live", "release"), (LIVE_RELEASE[1], "live", "release"),
+            (LIVE_DEBUG, "live", "debug"), (HOST[0], "logic_host"),
+            ("LogicProMCPTests.Other/operator()", "operator")))
+        self.directory = self.root / "xunit"
+        self.directory.mkdir()
+
+    def results(self, *cases):
+        (self.directory / "results.xml").write_text(
+            "<testsuites><testsuite>" + "".join(cases) + "</testsuite></testsuites>", encoding="utf-8")
+
+    def verify(self, only, lane="release"):
+        manifest.verify_host(self.listed, self.directory, "live", lane, only)
+
+    def test_lanes_select_their_own_ids(self):
+        self.assertEqual(manifest.listed_ids(self.listed, "live", "release"), sorted(LIVE_RELEASE))
+        self.assertEqual(manifest.listed_ids(self.listed, "live", "debug"), [LIVE_DEBUG])
+        self.assertEqual(manifest.listed_ids(self.listed, "live"), sorted(LIVE_RELEASE + (LIVE_DEBUG,)))
+        self.assertEqual(manifest.listed_ids(self.listed, "live", "debug", LIVE_DEBUG), [LIVE_DEBUG])
+        with self.assertRaisesRegex(manifest.ManifestError, "not a live test"):
+            manifest.listed_ids(self.listed, "live", "debug", LIVE_RELEASE[0])
+        with self.assertRaisesRegex(manifest.ManifestError, "not a live test"):
+            manifest.listed_ids(self.listed, "live", None, HOST[0])
+
+    def test_the_filter_selects_exactly_one_live_id(self):
+        pattern = re.compile(manifest.host_filter(self.listed, "live", "release", LIVE_RELEASE[0]))
+        self.assertTrue(pattern.search(LIVE_RELEASE[0] + "/File.swift:1:2"))
+        for other in (LIVE_RELEASE[1], LIVE_DEBUG, LIVE_RELEASE[0].replace("releaseOne", "releaseOne2"),
+                      LIVE_RELEASE[0].replace("releaseOne", "retestReleaseOne")):
+            self.assertIsNone(pattern.search(other), other)
+
+    def test_an_executed_and_passed_live_test_is_accepted(self):
+        self.results(testcase(LIVE_RELEASE[0]))
+        self.verify(LIVE_RELEASE[0])
+
+    def test_a_live_test_that_reports_a_skip_fails(self):
+        # The reviewer's replay: the live test skips and the process still exits 0.
+        self.results(testcase(LIVE_RELEASE[0], "<skipped>Logic is not driven</skipped>"))
+        with self.assertRaisesRegex(manifest.ManifestError, "skipped on the Logic host.*releaseOne"):
+            self.verify(LIVE_RELEASE[0])
+
+    def test_a_missing_failed_or_extra_live_test_fails(self):
+        self.results()
+        with self.assertRaisesRegex(manifest.ManifestError, "missing from the results.*releaseOne"):
+            self.verify(LIVE_RELEASE[0])
+        self.results(testcase(LIVE_RELEASE[0], "<failure />"))
+        with self.assertRaisesRegex(manifest.ManifestError, "failed: .*releaseOne"):
+            self.verify(LIVE_RELEASE[0])
+        self.results(testcase(LIVE_RELEASE[0]), testcase(LIVE_RELEASE[1]))
+        with self.assertRaisesRegex(manifest.ManifestError, "not a live test: .*releaseTwo"):
+            self.verify(LIVE_RELEASE[0])
+        self.results(testcase(LIVE_RELEASE[0].replace("releaseOne", "retestReleaseOne")))
+        with self.assertRaisesRegex(manifest.ManifestError, "missing from the results.*releaseOne"):
+            self.verify(LIVE_RELEASE[0])
+
+    def test_a_live_id_with_no_owning_lane_fails_validation(self):
+        unowned = self.write("unowned.json", json.dumps({"tests": [
+            {"id": LIVE_RELEASE[0], "class": "live", "reason": "fixture"}]}))
+        for call in (lambda: manifest.read_not_run(unowned),
+                     lambda: manifest.listed_ids(unowned, "live", "release"),
+                     lambda: manifest.verify_host(unowned, self.directory, "live", "release")):
+            with self.assertRaisesRegex(manifest.ManifestError, "no owning lane"):
+                call()
+        result = subprocess.run([sys.executable, str(SCRIPT), "list-ids", "--not-run", str(unowned),
+                                 "--class", "live", "--lane", "release"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no owning lane", result.stderr)
+
+    def test_command_line_lists_ids_and_requires_some_live_test(self):
+        listing = subprocess.run([sys.executable, str(SCRIPT), "list-ids", "--not-run", str(self.listed),
+                                  "--class", "live", "--lane", "debug"],
+                                 capture_output=True, text=True, check=True)
+        self.assertEqual(listing.stdout.split("\n"), [LIVE_DEBUG, ""])
+        none = self.write("none.json", not_run_document((HOST[0], "logic_host")))
+        empty = subprocess.run([sys.executable, str(SCRIPT), "list-ids", "--not-run", str(none),
+                                "--class", "live"], capture_output=True, text=True)
+        self.assertEqual(empty.returncode, 1)
+        quiet = subprocess.run([sys.executable, str(SCRIPT), "list-ids", "--not-run", str(none),
+                                "--class", "live", "--lane", "debug"], capture_output=True, text=True)
+        self.assertEqual((quiet.returncode, quiet.stdout), (0, ""))
+
+
+FAKE_LIVE_SWIFT = r"""#!/bin/bash
+# Stands in for `swift test` in a live lane: records the filter of each process and writes the
+# xUnit file for the one test it selected. FAKE_OUTCOME is the testcase child ("" passes).
+printf '%s\n' "$*" >> "$FAKE_LOG"
+filter=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --xunit-output) xunit="$2" ;;
+        --filter) filter="$2" ;;
+    esac
+    shift
+done
+id="$(python3 - "$filter" "$FAKE_IDS" <<'PY'
+import re, sys
+for test_id in sys.argv[2].split("|"):
+    if re.search(sys.argv[1], test_id + "/File.swift:1:2"):
+        print(test_id)
+PY
+)"
+head="${id%/*}"; name="${id##*/}"
+printf '<testsuites><testsuite><testcase classname="%s" name="%s">%s</testcase></testsuite></testsuites>' \
+    "$head" "$name" "$FAKE_OUTCOME" > "$xunit"
+exit "${FAKE_EXIT:-0}"
+"""
+
+
+class LiveLaneScriptTests(ManifestFixture):
+    """The run_live_lane function of Scripts/release-qualify.sh, extracted and run with a stand-in swift."""
+
+    GATE = Path(__file__).with_name("release-qualify.sh")
+
+    def run_lane(self, lane, outcome="", exit_code=0, rows=None):
+        text = self.GATE.read_text(encoding="utf-8")
+        function = text[text.index("run_live_lane() {"):]
+        function = function[:function.index("\n}\n") + 3]
+        listed = self.write("not-run.json", not_run_document(*(rows or (
+            (LIVE_RELEASE[0], "live", "release"), (LIVE_RELEASE[1], "live", "release"),
+            (LIVE_DEBUG, "live", "debug")))))
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        swift = bin_dir / "swift"
+        swift.write_text(FAKE_LIVE_SWIFT, encoding="utf-8")
+        swift.chmod(0o755)
+        work = self.root / "work"
+        work.mkdir(exist_ok=True)
+        harness = f"""set -euo pipefail
+cd {work}
+HELPER={SCRIPT}
+NOT_RUN={listed}
+verify_candidate_bytes() {{ echo bytes-checked >> "$FAKE_LOG"; }}
+{function}
+run_live_lane {lane}
+echo LANE_DONE
+"""
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", FAKE_LOG=str(self.root / "log.txt"),
+                   FAKE_IDS="|".join(LIVE_RELEASE + (LIVE_DEBUG,)), FAKE_OUTCOME=outcome,
+                   FAKE_EXIT=str(exit_code))
+        result = subprocess.run(["/bin/bash", "-c", harness], env=env, text=True, capture_output=True, check=False)
+        log = (self.root / "log.txt").read_text().splitlines() if (self.root / "log.txt").exists() else []
+        return result, log
+
+    def test_each_test_of_a_lane_runs_in_its_own_process_by_exact_id(self):
+        result, log = self.run_lane("release")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("LANE_DONE", result.stdout)
+        processes = [line for line in log if line != "bytes-checked"]
+        self.assertEqual(len(processes), 2, log)
+        for line in processes:
+            self.assertIn("--no-parallel", line)
+            self.assertIn("--xunit-output", line)
+        self.assertEqual(sum(1 for line in log if line == "bytes-checked"), 2)
+        self.assertIn("releaseOne", processes[0])
+        self.assertNotIn("releaseTwo", processes[0])
+        self.assertIn("releaseTwo", processes[1])
+        self.setUp_clean()
+        debug, log = self.run_lane("debug")
+        self.assertEqual(debug.returncode, 0, debug.stderr)
+        self.assertEqual(len([line for line in log if line != "bytes-checked"]), 1)
+
+    def test_a_live_test_that_reports_a_skip_fails_the_step_although_the_process_exits_zero(self):
+        for lane in ("release", "debug"):
+            with self.subTest(lane=lane):
+                self.setUp_clean()
+                result, _ = self.run_lane(lane, outcome="<skipped>not driven</skipped>")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("LANE_DONE", result.stdout)
+                self.assertIn("skipped on the Logic host", result.stderr)
+
+    def test_a_live_test_that_fails_or_whose_process_fails_fails_the_step(self):
+        failed, _ = self.run_lane("release", outcome="<failure />")
+        self.assertNotEqual(failed.returncode, 0)
+        self.setUp_clean()
+        crashed, _ = self.run_lane("release", exit_code=3)
+        self.assertEqual(crashed.returncode, 3)
+        self.assertNotIn("LANE_DONE", crashed.stdout)
+
+    def test_a_live_id_with_no_owning_lane_fails_the_step_before_any_process_runs(self):
+        result, log = self.run_lane("release", rows=((LIVE_RELEASE[0], "logic_host"), ))
+        self.assertEqual(log, [])
+        unowned = self.root / "unowned.json"
+        unowned.write_text(json.dumps({"tests": [
+            {"id": LIVE_RELEASE[0], "class": "live", "reason": "fixture"}]}), encoding="utf-8")
+        text = self.GATE.read_text(encoding="utf-8")
+        function = text[text.index("run_live_lane() {"):]
+        function = function[:function.index("\n}\n") + 3]
+        harness = f"set -euo pipefail\nHELPER={SCRIPT}\nNOT_RUN={unowned}\n{function}\nrun_live_lane release\necho LANE_DONE\n"
+        failed = subprocess.run(["/bin/bash", "-c", harness], text=True, capture_output=True, check=False)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("no owning lane", failed.stderr)
+        self.assertNotIn("LANE_DONE", failed.stdout)
+
+    def setUp_clean(self):
+        for name in ("log.txt",):
+            path = self.root / name
+            if path.exists():
+                path.unlink()
+
+
 FAKE_SWIFT = r"""#!/bin/bash
 # Stands in for `swift test`: records its arguments, prints console lines in the renderings that
 # defeated the old line counter, and writes the xUnit file named by --xunit-output from $FAKE_XUNIT.
@@ -537,7 +871,7 @@ class HostScriptTests(ManifestFixture):
 
     SCRIPT = Path(__file__).with_name("host-tests.sh")
 
-    def run_script(self, cases, exit_code=0):
+    def run_script(self, cases, exit_code=0, output=None, extra_env=None):
         listed = self.write("not-run.json", not_run_document(
             *[(test_id, "logic_host") for test_id in HOST]))
         xunit = self.write("fake.xml", "<testsuites><testsuite>" + "".join(cases) + "</testsuite></testsuites>")
@@ -547,8 +881,8 @@ class HostScriptTests(ManifestFixture):
         swift.write_text(FAKE_SWIFT, encoding="utf-8")
         swift.chmod(0o755)
         env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", FAKE_XUNIT=str(xunit),
-                   FAKE_ARGS=str(self.root / "args.txt"), FAKE_EXIT=str(exit_code))
-        return subprocess.run(["/bin/bash", str(self.SCRIPT), str(listed), str(self.root / "out")],
+                   FAKE_ARGS=str(self.root / "args.txt"), FAKE_EXIT=str(exit_code), **(extra_env or {}))
+        return subprocess.run(["/bin/bash", str(self.SCRIPT), str(listed), str(output or self.root / "out")],
                               env=env, text=True, capture_output=True, check=False)
 
     def test_all_executed_passes_whatever_the_console_looks_like(self):
@@ -581,6 +915,62 @@ class HostScriptTests(ManifestFixture):
     def test_a_failing_swift_exit_fails_even_when_the_results_pass(self):
         result = self.run_script([testcase(test_id) for test_id in HOST], exit_code=1)
         self.assertEqual(result.returncode, 1)
+
+    def existing_directory(self):
+        existing = self.root / "precious"
+        (existing / "nested").mkdir(parents=True)
+        (existing / "keep.txt").write_text("keep", encoding="utf-8")
+        (existing / "nested" / "deep.txt").write_text("deep", encoding="utf-8")
+        return existing
+
+    @staticmethod
+    def snapshot(directory):
+        return sorted((str(path.relative_to(directory)), path.read_bytes() if path.is_file() else None)
+                      for path in directory.rglob("*"))
+
+    def test_an_existing_non_empty_directory_is_never_deleted_or_overwritten(self):
+        existing = self.existing_directory()
+        before = self.snapshot(existing)
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        # A stand-in `rm` that fails loudly: the script has no business deleting anything.
+        rm = bin_dir / "rm"
+        rm.write_text("#!/bin/bash\necho \"rm called: $*\" >> \"$FAKE_RM_LOG\"\nexit 99\n", encoding="utf-8")
+        rm.chmod(0o755)
+        result = self.run_script([testcase(test_id) for test_id in HOST], output=existing,
+                                 extra_env={"FAKE_RM_LOG": str(self.root / "rm.log")})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.root / "rm.log").exists())
+        after = self.snapshot(existing)
+        self.assertTrue(all(entry in after for entry in before), (before, after))
+        fresh = [path for path in existing.iterdir() if path.name not in ("keep.txt", "nested")]
+        self.assertEqual(len(fresh), 1)
+        self.assertTrue((fresh[0] / "results.xml").is_file())
+        self.assertEqual((existing / "keep.txt").read_text(), "keep")
+
+    def test_two_runs_under_one_parent_use_two_fresh_directories(self):
+        parent = self.root / "runs"
+        for _ in range(2):
+            result = self.run_script([testcase(test_id) for test_id in HOST], output=parent)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(list(parent.iterdir())), 2)
+
+    def test_an_unusable_list_is_refused_before_the_filesystem_is_touched(self):
+        existing = self.existing_directory()
+        before = self.snapshot(existing)
+        broken = self.write("broken.json", "{")
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        swift = bin_dir / "swift"
+        swift.write_text(FAKE_SWIFT, encoding="utf-8")
+        swift.chmod(0o755)
+        for target in (existing, self.root / "never-created"):
+            result = subprocess.run(["/bin/bash", str(self.SCRIPT), str(broken), str(target)],
+                                    env=dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}"),
+                                    text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.snapshot(existing), before)
+        self.assertFalse((self.root / "never-created").exists())
 
 
 if __name__ == "__main__":

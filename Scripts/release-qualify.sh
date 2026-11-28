@@ -11,9 +11,13 @@
 # A missing process or permission still stops before testing; no live success is
 # inferred. The general suite is not re-run here: hosted CI runs every test of the same
 # candidate (the union of every test-shards shard), and each test it reports as not run must be named
-# in Tests/not-run-on-hosted.json. This Mac is the only place the `logic_host` ones execute, so after
-# the live tests it runs exactly those, by full test ID, from the CANDIDATE's list, and fails unless
-# every one is present in the run's xUnit output, executed and passed (Scripts/host-tests.sh).
+# in Tests/not-run-on-hosted.json. This Mac is where those tests execute. The live ones are
+# selected from that file's `live` entries (each names its lane, release or debug), one fresh test
+# process per test, by exact anchored ID, and the `logic_host` ones run afterwards the same way
+# (Scripts/host-tests.sh). For every one of them the xUnit output of the run must show the test
+# present, executed and unfailed, so a test that reports itself as not run fails the step. The `operator`
+# entries exempt a test from running, so they come from the trusted checkout's copy of the file:
+# a candidate cannot add one.
 #
 # Release entrypoints consume staged final artifacts; this runner does not publish.
 # The release contract tests cover the build-before-live ordering without replacing the runtime.
@@ -49,32 +53,17 @@ python3 Scripts/check-policy-literals-against-canon.py
 python3 Scripts/check-labelsets-are-derived.py
 python3 Scripts/locale_labels.py --check
 
-release_live_tests=(
-    "realReleaseBinaryExecutesEveryOperationWithIndependentReadback"
-    "runnerIgnoresPartialStateFaultEnvOnRealServer"
-)
-debug_live_tests=(
-    "runnerRejectsPartialStateObservedFromRealServer"
-)
+HELPER="$TRUSTED_ROOT/Scripts/ci-test-shard-manifest.py"
+NOT_RUN=Tests/not-run-on-hosted.json
+# An `operator` entry runs the test nowhere, so a candidate may carry only the ones the trusted
+# copy of the file already has. Before the file first reaches main there is no trusted copy and the
+# helper accepts exactly its one built-in ID (BOOTSTRAP_OPERATOR_IDS) and nothing else.
+python3 "$HELPER" verify-trusted --not-run "$NOT_RUN" --trusted "$TRUSTED_ROOT/$NOT_RUN"
+# The live tests are the file's `live` entries: no list of names lives in this script.
+python3 "$HELPER" list-ids --not-run "$NOT_RUN" --class live > /dev/null
 test_inventory="$(swift test list)"
-for live_test in ${release_live_tests[@]+"${release_live_tests[@]}"} ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
-    # A test method lists as `Module.Suite/name()`, a free function as `Module.name()`.
-    match_count="$(
-        printf '%s\n' "$test_inventory" | awk -v method="/${live_test}()" -v free="." -v name="${live_test}()" '
-            {
-                n = length(name)
-                if (length($0) >= length(method) && substr($0, length($0) - length(method) + 1) == method) matches += 1
-                else if (length($0) > n && substr($0, length($0) - n + 1) == name \
-                         && substr($0, length($0) - n, 1) == free) matches += 1
-            }
-            END { print matches + 0 }
-        '
-    )"
-    if [[ "$match_count" -ne 1 ]]; then
-        echo "Error: live qualification filter '$live_test' matched $match_count tests; expected exactly one." >&2
-        exit 1
-    fi
-done
+# Each listed ID must name exactly one listed test before any live test executes.
+printf '%s\n' "$test_inventory" | python3 "$HELPER" verify-inventory --inventory /dev/stdin --not-run "$NOT_RUN"
 
 mkdir -p .build/release
 rm -f .build/release/LogicProMCP
@@ -103,18 +92,36 @@ if ! .build/release/LogicProMCP --check-permissions; then
     echo "Error: the release binary lacks a macOS permission the live qualification needs; the lines above name it (#985)." >&2
     exit 1
 fi
-for live_test in ${release_live_tests[@]+"${release_live_tests[@]}"}; do
-    LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
-    verify_candidate_bytes
-done
+# One live lane: each test of the lane in a fresh process, selected by its exact anchored ID, and
+# judged from that process's xUnit output (present, executed, unfailed), whatever the exit status.
+run_live_lane() {
+    local lane="$1" ids id results filter live_status
+    ids="$(python3 "$HELPER" list-ids --not-run "$NOT_RUN" --class live --lane "$lane")"
+    if [ -z "$ids" ]; then
+        return 0
+    fi
+    mkdir -p .build/live-tests
+    while IFS= read -r id; do
+        results="$(mktemp -d ".build/live-tests/$lane.XXXXXX")"
+        filter="$(python3 "$HELPER" host-filter --not-run "$NOT_RUN" --class live --lane "$lane" --id "$id")"
+        live_status=0
+        LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --xunit-output "$results/results.xml" \
+            --filter "$filter" || live_status=$?
+        python3 "$HELPER" verify-host --not-run "$NOT_RUN" --class live --lane "$lane" --id "$id" \
+            --xunit-directory "$results"
+        if [ "$live_status" -ne 0 ]; then
+            echo "Error: the live test $id exited $live_status." >&2
+            exit "$live_status"
+        fi
+        verify_candidate_bytes
+    done <<< "$ids"
+}
+run_live_lane release
 if [ ! -x .build/debug/LogicProMCP ]; then
     echo "Error: the debug LogicProMCP executable required by the fault-negative live test is missing." >&2
     exit 1
 fi
-for live_test in ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
-    LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
-    verify_candidate_bytes
-done
+run_live_lane debug
 # The logic_host tests need Logic installed, not Logic driven, so they carry no
 # LOGIC_PRO_MCP_RUN_LIVE_QA. The qualifier is the trusted script; the list is the candidate's, so a
 # pull request that adds such a test is enforced by its own native run. A test that did not execute

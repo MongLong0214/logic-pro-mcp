@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import sys
+from typing import NamedTuple, Optional
 import xml.etree.ElementTree as ET
 
 
@@ -153,17 +154,35 @@ def _expected_xunit_index(expected: set[str]) -> dict[tuple[str, str], str]:
 # Every test the hosted shards are expected to report as not run, by full test ID, in
 # Tests/not-run-on-hosted.json. The classes say where each one DOES execute:
 #   logic_host  the Logic host's native qualification (Scripts/host-tests.sh), which must pass it
-#   live        the live loops of Scripts/release-qualify.sh
-#   operator    nowhere automatic; it needs an operator-supplied project
+#   live        a live loop of Scripts/release-qualify.sh, named by the entry's `lane`
+#   operator    nowhere automatic; it needs an operator-supplied project. This class exempts a test
+#               from running, so the qualifier accepts an operator entry only when its own trusted
+#               copy of this file has it too (verify_trusted_operator)
 # The rule is enforced from what the test run reported, never from how a condition is spelled in
 # the sources: a closure `.enabled { }`, a suite-level trait or a condition behind a constant all
 # surface as a skipped testcase in the xUnit output.
 NOT_RUN_CLASSES = ("logic_host", "live", "operator")
-MUST_BE_SKIPPED_ON_HOSTED = ("logic_host", "live")
+# The two live loops differ in the executable they stage: `release` runs against the release
+# candidate, `debug` against the debug build (the fault-negative test). Every live entry names one.
+LIVE_LANES = ("release", "debug")
+
+# The one operator entry that exists before the first copy of this file reaches protected main.
+# While the trusted checkout has no copy (the file's first appearance on main), exactly this ID is
+# accepted as an operator entry, by ID and nothing else. Once the file is on main the trusted copy
+# decides, and this set is never consulted.
+BOOTSTRAP_OPERATOR_IDS = frozenset({
+    "LogicProMCPTests.Issue965HeldSelectionAssociationTests/nativeMixerScrollToRetainsItsObservedOwners()",
+})
 
 
-def read_not_run(path: Path) -> dict[str, tuple[str, str]]:
-    """The not-run list as {full test ID: (class, reason)}."""
+class NotRunEntry(NamedTuple):
+    kind: str
+    reason: str
+    lane: Optional[str]
+
+
+def read_not_run(path: Path) -> dict[str, NotRunEntry]:
+    """The not-run list as {full test ID: NotRunEntry}."""
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
@@ -171,11 +190,13 @@ def read_not_run(path: Path) -> dict[str, tuple[str, str]]:
     if not isinstance(document, dict) or set(document) != {"tests"} \
             or not isinstance(document["tests"], list):
         raise ManifestError(f'not-run list must be {{"tests": [...]}}: {path}')
-    entries: dict[str, tuple[str, str]] = {}
+    entries: dict[str, NotRunEntry] = {}
     for row in document["tests"]:
-        if not isinstance(row, dict) or set(row) != {"id", "class", "reason"} \
-                or not all(isinstance(row[key], str) for key in row):
-            raise ManifestError(f"not-run entry needs exactly string id, class and reason: {row!r}")
+        if not isinstance(row, dict) or not {"id", "class", "reason"} <= set(row) \
+                or not set(row) <= {"id", "class", "reason", "lane"} \
+                or not all(isinstance(value, str) for value in row.values()):
+            raise ManifestError(
+                f"not-run entry needs string id, class and reason (and lane for live): {row!r}")
         test_id, kind, reason = row["id"], row["class"], row["reason"]
         if not test_id or test_id != test_id.strip() or "\n" in test_id:
             raise ManifestError(f"not-run entry has a blank or padded id: {test_id!r}")
@@ -183,9 +204,16 @@ def read_not_run(path: Path) -> dict[str, tuple[str, str]]:
             raise ManifestError(f"not-run entry {test_id!r} has class {kind!r}; expected {NOT_RUN_CLASSES}")
         if not reason.strip() or "\n" in reason:
             raise ManifestError(f"not-run entry {test_id!r} needs a one-line reason")
+        lane = row.get("lane")
+        if kind == "live":
+            if lane not in LIVE_LANES:
+                raise ManifestError(
+                    f"live entry {test_id!r} has no owning lane; lane must be one of {LIVE_LANES}")
+        elif lane is not None:
+            raise ManifestError(f"only live entries take a lane: {test_id!r} is {kind}")
         if test_id in entries:
             raise ManifestError(f"not-run list names {test_id!r} twice")
-        entries[test_id] = (kind, reason)
+        entries[test_id] = NotRunEntry(kind, reason, lane)
     return entries
 
 
@@ -253,27 +281,45 @@ def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path,
         raise ManifestError(
             f"xUnit testcase was skipped but is not in the not-run list; run it here or list it "
             f"with the lane that runs it: {unlisted[:3]}")
-    # ... and a listed test that did run here is a stale entry that would let the list rot.
-    stale = sorted(test_id for test_id, (kind, _) in not_run.items()
-                   if kind in MUST_BE_SKIPPED_ON_HOSTED and test_id in expected
-                   and test_id not in skipped)
+    # ... and a listed test that did run here is a stale entry that would let the list rot. This
+    # holds for every class: an `operator` or `live` entry on a test that is not skipped is a
+    # claim that it runs nowhere hosted when it does, or a label that exempts a test that was
+    # never gated.
+    stale = sorted(test_id for test_id, entry in not_run.items()
+                   if test_id in expected and test_id not in skipped)
     if stale:
         raise ManifestError(
             f"not-run list entry was not skipped on the hosted run, so the entry is stale: {stale[:3]}")
     _write_new(actual_path, sorted(actual))
 
 
-def host_test_ids(not_run_path: Path) -> list[str]:
-    ids = sorted(test_id for test_id, (kind, _) in read_not_run(not_run_path).items()
-                 if kind == "logic_host")
-    if not ids:
-        raise ManifestError(f"not-run list names no logic_host test: {not_run_path}")
+def listed_ids(not_run_path: Path, kind: str = "logic_host", lane: Optional[str] = None,
+               only: Optional[str] = None) -> list[str]:
+    """The IDs of one class (and live lane) from the list, or just `only` when it is one of them."""
+    ids = sorted(test_id for test_id, entry in read_not_run(not_run_path).items()
+                 if entry.kind == kind and (lane is None or entry.lane == lane))
+    if only is not None:
+        if only not in ids:
+            raise ManifestError(f"{only!r} is not a {kind} test of the not-run list: {not_run_path}")
+        ids = [only]
     return ids
 
 
-def host_filter(not_run_path: Path) -> str:
-    """The anchored, escaped `swift test --filter` regular expression for exactly the host tests."""
-    pattern = shard_filter(host_test_ids(not_run_path))
+def _required_ids(not_run_path: Path, kind: str, lane: Optional[str], only: Optional[str]) -> list[str]:
+    ids = listed_ids(not_run_path, kind, lane, only)
+    if not ids:
+        raise ManifestError(f"not-run list names no {kind} test: {not_run_path}")
+    return ids
+
+
+def host_test_ids(not_run_path: Path) -> list[str]:
+    return _required_ids(not_run_path, "logic_host", None, None)
+
+
+def host_filter(not_run_path: Path, kind: str = "logic_host", lane: Optional[str] = None,
+                only: Optional[str] = None) -> str:
+    """The anchored, escaped `swift test --filter` regular expression for exactly those tests."""
+    pattern = shard_filter(_required_ids(not_run_path, kind, lane, only))
     try:
         re.compile(pattern)
     except re.error as error:
@@ -281,21 +327,24 @@ def host_filter(not_run_path: Path) -> str:
     return pattern
 
 
-def verify_host(not_run_path: Path, xunit_directory: Path) -> None:
-    """Every logic_host test is in the run's xUnit output, executed, and passed.
+def verify_host(not_run_path: Path, xunit_directory: Path, kind: str = "logic_host",
+                lane: Optional[str] = None, only: Optional[str] = None) -> None:
+    """Every selected test is in the run's xUnit output, executed, and passed.
 
-    A skip is a failure here: this is the one place the body of such a test runs, so a test that
-    did not execute is absence reported as success. A testcase that is not on the list also fails,
-    which is how a filter that matched a similarly named test would show.
+    The same judgement serves the Logic host's `logic_host` run and each `live` run (one test and
+    one process at a time). A skip is a failure here: this is the one place the body of such a
+    test runs, so a test that did not execute is absence reported as success. A testcase that is
+    not selected also fails, which is how a filter that matched a similarly named test would show.
     """
-    wanted = set(host_test_ids(not_run_path))
+    wanted = set(_required_ids(not_run_path, kind, lane, only))
+    label = "host" if kind == "logic_host" else kind
     index = _expected_xunit_index(wanted)
     problems: list[str] = []
     seen: set[str] = set()
     for classname, name, failed, was_skipped in _xunit_cases(xunit_directory):
         resolved = index.get((classname, name))
         if resolved is None:
-            problems.append(f"ran a test that is not a host test: {classname}/{name}")
+            problems.append(f"ran a test that is not a {label} test: {classname}/{name}")
         elif resolved in seen:
             problems.append(f"ran twice: {resolved}")
         else:
@@ -307,7 +356,33 @@ def verify_host(not_run_path: Path, xunit_directory: Path) -> None:
     for test_id in sorted(wanted - seen):
         problems.append(f"missing from the results: {test_id}")
     if problems:
-        raise ManifestError("host tests did not all execute and pass: " + "; ".join(problems))
+        raise ManifestError(f"{label} tests did not all execute and pass: " + "; ".join(problems))
+
+
+def verify_trusted_operator(not_run_path: Path, trusted_path: Path) -> None:
+    """Every operator entry of the candidate's list is also an operator entry of the trusted copy.
+
+    `operator` exempts a test from running anywhere, so it is not the candidate's to grant: a new
+    exemption lands on protected main through a maintainer change first, like a change to this
+    script. With no trusted copy (the file's first appearance on main) the rule fails closed
+    except for BOOTSTRAP_OPERATOR_IDS.
+    """
+    candidate = {test_id for test_id, entry in read_not_run(not_run_path).items()
+                 if entry.kind == "operator"}
+    try:
+        trusted_exists = trusted_path.exists()
+    except OSError as error:
+        raise ManifestError(f"cannot inspect the trusted not-run list {trusted_path}: {error}") from error
+    if trusted_exists:
+        allowed = {test_id for test_id, entry in read_not_run(trusted_path).items()
+                   if entry.kind == "operator"}
+    else:
+        allowed = set(BOOTSTRAP_OPERATOR_IDS)
+    unauthorized = sorted(candidate - allowed)
+    if unauthorized:
+        raise ManifestError(
+            "operator entries the trusted not-run list does not have; an exemption from running "
+            f"has to reach protected main first: {unauthorized[:3]}")
 
 
 def verify_not_run_in_inventory(inventory_path: Path, not_run_path: Path) -> None:
@@ -338,12 +413,30 @@ def _parser() -> argparse.ArgumentParser:
     union.add_argument("--shard", type=Path, action="append", required=True)
     union.add_argument("--not-run", type=Path, required=True)
 
+    def select(command: argparse.ArgumentParser) -> None:
+        command.add_argument("--not-run", type=Path, required=True)
+        command.add_argument("--class", dest="kind", choices=("logic_host", "live"),
+                             default="logic_host")
+        command.add_argument("--lane", choices=LIVE_LANES)
+        command.add_argument("--id", dest="only")
+
     host_filter_command = subparsers.add_parser("host-filter")
-    host_filter_command.add_argument("--not-run", type=Path, required=True)
+    select(host_filter_command)
 
     host = subparsers.add_parser("verify-host")
-    host.add_argument("--not-run", type=Path, required=True)
+    select(host)
     host.add_argument("--xunit-directory", type=Path, required=True)
+
+    list_ids = subparsers.add_parser("list-ids")
+    select(list_ids)
+
+    inventory = subparsers.add_parser("verify-inventory")
+    inventory.add_argument("--inventory", type=Path, required=True)
+    inventory.add_argument("--not-run", type=Path, required=True)
+
+    trusted = subparsers.add_parser("verify-trusted")
+    trusted.add_argument("--not-run", type=Path, required=True)
+    trusted.add_argument("--trusted", type=Path, required=True)
     return parser
 
 
@@ -355,9 +448,19 @@ def main() -> int:
         elif args.command == "verify-xunit":
             verify_xunit(args.expected, args.xunit_directory, args.actual, args.not_run)
         elif args.command == "host-filter":
-            print(host_filter(args.not_run))
+            print(host_filter(args.not_run, args.kind, args.lane, args.only))
         elif args.command == "verify-host":
-            verify_host(args.not_run, args.xunit_directory)
+            verify_host(args.not_run, args.xunit_directory, args.kind, args.lane, args.only)
+        elif args.command == "list-ids":
+            ids = listed_ids(args.not_run, args.kind, args.lane, args.only)
+            if args.lane is None and not ids:
+                raise ManifestError(f"not-run list names no {args.kind} test: {args.not_run}")
+            for test_id in ids:
+                print(test_id)
+        elif args.command == "verify-inventory":
+            verify_not_run_in_inventory(args.inventory, args.not_run)
+        elif args.command == "verify-trusted":
+            verify_trusted_operator(args.not_run, args.trusted)
         else:
             verify_union(args.inventory, args.shard)
             verify_not_run_in_inventory(args.inventory, args.not_run)
