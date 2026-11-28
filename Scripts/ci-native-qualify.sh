@@ -313,19 +313,24 @@ current = int(sys.argv[2])
 run_started = when(json.load(open(sys.argv[3], encoding="utf-8")).get("run_started_at"))
 jobs = [job for page in pages for job in page["jobs"] if job.get("name") == "release-build"]
 here = [job for job in jobs if job.get("run_attempt") == current]
-if len(here) != 1:
-    raise SystemExit(f"expected one release-build job for attempt {current}, found {len(here)}")
-if when(here[0].get("started_at")) >= run_started:
+if len(here) > 1:
+    raise SystemExit(f"expected at most one release-build job for attempt {current}, found {len(here)}")
+if here and when(here[0].get("started_at")) >= run_started:
     print(current)
     raise SystemExit(0)
-origin = [job["run_attempt"] for job in jobs
-          if isinstance(job.get("run_attempt"), int) and not isinstance(job["run_attempt"], bool)
-          and 0 < job["run_attempt"] < current and job.get("conclusion") == "success"
-          and job.get("started_at") == here[0].get("started_at")
-          and job.get("completed_at") == here[0].get("completed_at")]
+def earlier(job):
+    return (isinstance(job.get("run_attempt"), int) and not isinstance(job["run_attempt"], bool)
+            and 0 < job["run_attempt"] < current and job.get("conclusion") == "success")
+if here:
+    origin = [job["run_attempt"] for job in jobs if earlier(job)
+              and job.get("started_at") == here[0].get("started_at")
+              and job.get("completed_at") == here[0].get("completed_at")]
+else:
+    # No entry for this attempt: release-build did not run, so the latest earlier success is carried over.
+    origin = [job["run_attempt"] for job in jobs if earlier(job)]
 if not origin:
     raise SystemExit("carried-over release-build has no earlier successful attempt that ran it")
-print(min(origin))
+print(min(origin) if here else max(origin))
 PY
 }
 validate_artifacts() {
